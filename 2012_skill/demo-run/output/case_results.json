@@ -1,0 +1,52 @@
+{
+  "summary": {
+    "design_cases_total": 12,
+    "p0": 6,
+    "p1": 6,
+    "generated_cases": 2,
+    "py_compile_pass": 4,
+    "py_compile_fail": 0,
+    "pytest_collected": 2,
+    "pytest_passed": 0,
+    "pytest_env_issue": 2,
+    "pytest_failed_real": 0,
+    "env": {
+      "pytest": "9.1.0 (installed during verify)",
+      "httpx": "0.28.1 (installed during verify)",
+      "sut_running": false,
+      "a2a_base_url": "http://localhost:8080"
+    }
+  },
+  "generated": [
+    {
+      "case_id": "TC-A2A-001",
+      "test_file": "test_tc_a2a_msg_sync_001.py",
+      "status": "env_issue",
+      "py_compile": "ok",
+      "failure_type": "httpx.ConnectError [Errno 111] Connection refused",
+      "note": "no running SUT; httpx lazy import OK"
+    },
+    {
+      "case_id": "TC-A2A-005",
+      "test_file": "test_tc_a2a_parse_error_001.py",
+      "status": "env_issue",
+      "py_compile": "ok",
+      "failure_type": "httpx.ConnectError [Errno 111] Connection refused",
+      "note": "no running SUT; httpx lazy import OK"
+    }
+  ],
+  "design_cases": [
+    {"id": "TC-A2A-001", "priority": "P0", "type": "正向", "scene": "E2E_A2A_001"},
+    {"id": "TC-A2A-002", "priority": "P0", "type": "正向", "scene": "E2E_A2A_002"},
+    {"id": "TC-A2A-003", "priority": "P0", "type": "正向", "scene": "E2E_A2A_001"},
+    {"id": "TC-A2A-004", "priority": "P0", "type": "正向", "scene": "E2E_A2A_006"},
+    {"id": "TC-A2A-005", "priority": "P0", "type": "异常", "scene": "E2E_A2A_005"},
+    {"id": "TC-A2A-006", "priority": "P0", "type": "异常", "scene": "E2E_A2A_005"},
+    {"id": "TC-A2A-007", "priority": "P1", "type": "正向", "scene": "E2E_A2A_004"},
+    {"id": "TC-A2A-008", "priority": "P1", "type": "异常", "scene": "E2E_A2A_004"},
+    {"id": "TC-A2A-009", "priority": "P1", "type": "正向", "scene": "E2E_A2A_003"},
+    {"id": "TC-A2A-010", "priority": "P1", "type": "正向", "scene": "E2E_A2A_001"},
+    {"id": "TC-A2A-011", "priority": "P1", "type": "正向", "scene": "E2E_A2A_006"},
+    {"id": "TC-A2A-012", "priority": "P1", "type": "边界", "scene": "E2E_A2A_001"}
+  ]
+}

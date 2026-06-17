@@ -1,0 +1,9 @@
+{
+  "case_id": "TC-A2A-005",
+  "test_file": "test_tc_a2a_parse_error_001.py",
+  "status": "env_issue",
+  "py_compile": "ok",
+  "pytest_collected": true,
+  "failure_type": "httpx.ConnectError [Errno 111] Connection refused",
+  "note": "no running SUT at localhost:8080; httpx lazy-import OK; not a case defect"
+}

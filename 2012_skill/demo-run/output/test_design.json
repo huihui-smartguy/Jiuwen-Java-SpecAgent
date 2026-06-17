@@ -1,0 +1,242 @@
+[
+  {
+    "id": "TC-A2A-001",
+    "name": "SendMessage 同步阻塞返回 COMPLETED 完整 Task",
+    "type": "正向",
+    "priority": "P0",
+    "scene_ref": "E2E_A2A_001",
+    "feature_point": "FP-1 SendMessage 同步阻塞返回完整 Task",
+    "preconditions": ["runtime 已启动并就绪", "Accept: application/json"],
+    "steps": [
+      "构造 SendMessage 请求（params.message 含一条 text part），id=\"1\"",
+      "POST /a2a 阻塞获取响应",
+      "解析 JSON-RPC response 的 result(Task)"
+    ],
+    "expected": "result.status.state == \"COMPLETED\"（且 ∈ TERMINAL_STATES），响应 id 回带 == \"1\"，result.artifacts 为 list",
+    "oracle": {"type": "task_state", "assertion": "resp['result']['status']['state'] == 'COMPLETED' and resp['id'] == '1'"},
+    "assertion_plan": ["L2: task.status.state == COMPLETED 且落入 TERMINAL_STATES", "process: resp['id'] 回带 == 请求 id '1'"],
+    "traceability": {"requirement": "§2 核心场景 同步;§6 P0 门禁=是;§4 Task 状态流转 COMPLETED", "java_class": "A2aJsonRpcController.handleBlocking(SendMessageRequest)+A2aResultRouter.route(COMPLETED)", "scene": "E2E_A2A_001"},
+    "observability": "blackbox",
+    "candidate": true
+  },
+  {
+    "id": "TC-A2A-002",
+    "name": "SendStreamingMessage SSE 事件序列至终态 COMPLETED",
+    "type": "正向",
+    "priority": "P0",
+    "scene_ref": "E2E_A2A_002",
+    "feature_point": "FP-2 流式 SSE 推送至终态",
+    "preconditions": ["runtime 已启动", "Accept: text/event-stream"],
+    "steps": [
+      "构造 SendStreamingMessage 请求",
+      "POST /a2a 逐事件消费 SSE",
+      "收集事件 kind 序列与末事件 status.state"
+    ],
+    "expected": "事件序列首为 TaskAccepted，包含 ArtifactUpdate，末为 TaskStatusUpdate；末事件 result.status.state == COMPLETED；终态后流关闭",
+    "oracle": {"type": "sse_sequence", "assertion": "kinds[0]=='TaskAccepted' and 'ArtifactUpdate' in kinds and kinds[-1]=='TaskStatusUpdate' and last.status.state=='COMPLETED'"},
+    "assertion_plan": ["L2: 末事件 status.state == COMPLETED", "process: SSE 事件 kind 顺序 == SSE_EVENTS_ORDER 骨架"],
+    "traceability": {"requirement": "§2 流式场景;§4 SSE 流终端状态关闭;§6 P0", "java_class": "A2aJsonRpcController.handleStream(takeUntil isStreamTerminating)", "scene": "E2E_A2A_002"},
+    "observability": "blackbox",
+    "candidate": true
+  },
+  {
+    "id": "TC-A2A-003",
+    "name": "GetTask 查询同步生成的任务状态一致",
+    "type": "正向",
+    "priority": "P0",
+    "scene_ref": "E2E_A2A_001",
+    "feature_point": "FP-3 GetTask 查询任务状态",
+    "preconditions": ["先 SendMessage 得到 taskId"],
+    "steps": [
+      "SendMessage 获取 result.id 作为 taskId",
+      "GetTask(taskId)",
+      "比对返回 Task 的 id 与 status.state"
+    ],
+    "expected": "GetTask result.id == 之前 taskId，status.state ∈ TERMINAL_STATES 且与 SendMessage 终态一致",
+    "oracle": {"type": "id_echo", "assertion": "get_resp['result']['id'] == task_id and get_resp['result']['status']['state'] in TERMINAL_STATES"},
+    "assertion_plan": ["L2: status.state 落入 TERMINAL_STATES 且与原终态一致", "process: result.id 回显 == 原 taskId"],
+    "traceability": {"requirement": "§2 查询异步任务;§6 P0 门禁=是", "java_class": "A2aJsonRpcController.handleBlocking(GetTaskRequest)", "scene": "E2E_A2A_001"},
+    "observability": "blackbox",
+    "candidate": true
+  },
+  {
+    "id": "TC-A2A-004",
+    "name": "Agent Card 发现返回 capabilities/skills/endpoint",
+    "type": "正向",
+    "priority": "P0",
+    "scene_ref": "E2E_A2A_006",
+    "feature_point": "FP-10 Agent Card 发现",
+    "preconditions": ["runtime 已启动"],
+    "steps": [
+      "GET /.well-known/agent-card.json",
+      "解析 AgentCard JSON",
+      "校验关键字段存在与类型"
+    ],
+    "expected": "返回含 name(非空 str)、capabilities(dict)、skills(list)、url/endpoint(指向 /a2a) 字段",
+    "oracle": {"type": "agent_card", "assertion": "isinstance(card['name'],str) and isinstance(card['capabilities'],dict) and isinstance(card['skills'],list) and '/a2a' in (card.get('url') or card.get('endpoint') or '')"},
+    "assertion_plan": ["L2: name 为非空字符串、capabilities 为 dict、skills 为 list", "process: url/endpoint 含声明的 /a2a 端点路径"],
+    "traceability": {"requirement": "§2 发现 Agent 能力;§4 Agent Card 生成优先级;§6 P0", "java_class": "AgentCardController.agentCard", "scene": "E2E_A2A_006"},
+    "observability": "blackbox",
+    "candidate": true
+  },
+  {
+    "id": "TC-A2A-005",
+    "name": "JSON-RPC parse error 非法 JSON 体返回 -32700 且不创建 task",
+    "type": "异常",
+    "priority": "P0",
+    "scene_ref": "E2E_A2A_005",
+    "feature_point": "FP-8 JSON-RPC parse error",
+    "preconditions": ["runtime 已启动"],
+    "steps": [
+      "raw_post 一段非法 JSON 体（如 '{\"jsonrpc\":\"2.0\", BROKEN')，Accept: application/json",
+      "解析响应 body 的 error",
+      "校验错误码与 id 回带；可选二次 ListTasks 校验未新增 task"
+    ],
+    "expected": "error.code == -32700；响应回带 id 字段；不创建任何新 task",
+    "oracle": {"type": "error_code", "assertion": "body['error']['code'] == -32700 and 'id' in body"},
+    "assertion_plan": ["L2: error.code == ERR_PARSE(-32700)", "process: 响应回带 id 字段（错误也回带 id）"],
+    "traceability": {"requirement": "§4 JSON-RPC 解析 parse error;§6 P0 门禁=是;规则 error 携带原 id", "java_class": "A2aJsonRpcController.handle catch JsonProcessingException/JsonParseException -> JSON_PARSE", "scene": "E2E_A2A_005"},
+    "observability": "blackbox",
+    "candidate": true
+  },
+  {
+    "id": "TC-A2A-006",
+    "name": "未知 method 返回 -32601 且不创建 task",
+    "type": "异常",
+    "priority": "P0",
+    "scene_ref": "E2E_A2A_005",
+    "feature_point": "FP-9 method-not-found",
+    "preconditions": ["runtime 已启动"],
+    "steps": [
+      "raw_post 合法 JSON 但 method=\"NoSuchMethod\"，id=\"42\"",
+      "解析响应 error",
+      "校验错误码与 id 回带"
+    ],
+    "expected": "error.code == -32601；响应 id 回带 == \"42\"；不创建 task",
+    "oracle": {"type": "error_code", "assertion": "body['error']['code'] == -32601 and body['id'] == '42'"},
+    "assertion_plan": ["L2: error.code == ERR_METHOD_NOT_FOUND(-32601)", "process: id 回带 == 请求 id '42'"],
+    "traceability": {"requirement": "§4 方法分发 method-not-found;§6 P0 门禁=是;不创建 task", "java_class": "A2aJsonRpcController.handle catch MethodNotFoundJsonMappingException -> METHOD_NOT_FOUND", "scene": "E2E_A2A_005"},
+    "observability": "blackbox",
+    "candidate": true
+  },
+  {
+    "id": "TC-A2A-007",
+    "name": "CancelTask 对执行中任务取消返回 CANCELED",
+    "type": "正向",
+    "priority": "P1",
+    "scene_ref": "E2E_A2A_004",
+    "feature_point": "FP-4 执行中取消",
+    "preconditions": ["发起 SendStreamingMessage 使 task 进入 WORKING，取得 taskId"],
+    "steps": [
+      "SendStreamingMessage 启动流，从首事件取 taskId（WORKING 中）",
+      "CancelTask(taskId)",
+      "校验返回 Task 状态；SSE 流应关闭"
+    ],
+    "expected": "CancelTask result.status.state == \"CANCELED\"；后续 SSE 流关闭",
+    "oracle": {"type": "task_state", "assertion": "cancel_resp['result']['status']['state'] == 'CANCELED'"},
+    "assertion_plan": ["L2: status.state == CANCELED", "process: 取消后 SSE 流关闭（无更多非终态事件）"],
+    "traceability": {"requirement": "§2 取消正在执行的任务;§4 SSE 流关闭 CANCELED", "java_class": "A2aAgentExecutor.cancel -> emitter.cancel()", "scene": "E2E_A2A_004"},
+    "observability": "blackbox",
+    "candidate": true
+  },
+  {
+    "id": "TC-A2A-008",
+    "name": "CancelTask 对终态任务再取消返回标准错误（负向）",
+    "type": "异常",
+    "priority": "P1",
+    "scene_ref": "E2E_A2A_004",
+    "feature_point": "FP-5 对终态再取消报错",
+    "preconditions": ["先 SendMessage 得到已 COMPLETED 的 taskId"],
+    "steps": [
+      "SendMessage 得到终态 task 的 id",
+      "CancelTask(该终态 taskId)",
+      "校验返回为 JSON-RPC error"
+    ],
+    "expected": "返回 error 对象，error.code 为非空整数（标准错误码），且回带原 id；不会把终态翻回 CANCELED",
+    "oracle": {"type": "error_code", "assertion": "'error' in resp and isinstance(resp['error']['code'], int) and 'id' in resp"},
+    "assertion_plan": ["L2: 响应含 error 且 error.code 为整数错误码（非成功 result）", "process: error 回带原 request id"],
+    "traceability": {"requirement": "§3 接口说明 CancelTask: Task 已完成返回错误;§4 状态只允许向前流转", "java_class": "A2aJsonRpcController.handle catch A2AError -> errorResponse(id)", "scene": "E2E_A2A_004"},
+    "observability": "blackbox",
+    "candidate": true
+  },
+  {
+    "id": "TC-A2A-009",
+    "name": "SubscribeToTask 断线重连续订续收至终态",
+    "type": "正向",
+    "priority": "P1",
+    "scene_ref": "E2E_A2A_003",
+    "feature_point": "FP-6 断线重连续订",
+    "preconditions": ["SendStreamingMessage 启动流并中途断开，持有 taskId"],
+    "steps": [
+      "SendStreamingMessage 启动，读取若干事件后主动断开",
+      "用 taskId 调 SubscribeToTask 恢复 SSE",
+      "续收事件直至 TaskStatusUpdate 终态"
+    ],
+    "expected": "续订后能继续收到 ArtifactUpdate/TaskStatusUpdate，末事件 status.state ∈ TERMINAL_STATES（期望 COMPLETED），不丢终态事件",
+    "oracle": {"type": "sse_sequence", "assertion": "resumed[-1]['data']['result']['status']['state'] in TERMINAL_STATES"},
+    "assertion_plan": ["L2: 续订末事件 status.state 落入 TERMINAL_STATES", "process: 续订 SSE 事件中包含 TaskStatusUpdate 终事件"],
+    "traceability": {"requirement": "§2 断线重连后重新订阅;§3 SubscribeToTask 恢复订阅", "java_class": "A2aJsonRpcController.handleStream(SubscribeToTaskRequest, terminateOnInterrupt=false)", "scene": "E2E_A2A_003"},
+    "observability": "blackbox",
+    "candidate": true
+  },
+  {
+    "id": "TC-A2A-010",
+    "name": "ListTasks 返回数组且包含已生成 task",
+    "type": "正向",
+    "priority": "P1",
+    "scene_ref": "E2E_A2A_001",
+    "feature_point": "FP-7 ListTasks 列出任务",
+    "preconditions": ["先 SendMessage 生成一个 task，取得 taskId"],
+    "steps": [
+      "SendMessage 生成 task，记录 taskId",
+      "ListTasks()",
+      "在返回数组中查找该 taskId 与其 status.state"
+    ],
+    "expected": "result 为 list；存在元素 id == 之前 taskId；其 status.state 命中 TERMINAL_STATES（容错 TASK_STATE_ 前缀）",
+    "oracle": {"type": "task_state", "assertion": "any(t['id']==task_id for t in resp['result']) and normalized(state) in TERMINAL_STATES"},
+    "assertion_plan": ["L2: 目标 task 的 status.state 规约后落入 TERMINAL_STATES", "process: result 为数组且含目标 taskId（id 回显）"],
+    "traceability": {"requirement": "§2 列出任务列表;§3 ListTasks 返回 Task 数组", "java_class": "A2aJsonRpcController.handleBlocking(ListTasksRequest)", "scene": "E2E_A2A_001"},
+    "observability": "blackbox",
+    "candidate": true
+  },
+  {
+    "id": "TC-A2A-011",
+    "name": "发现即调用：用 Agent Card endpoint 回调 SendMessage 可达",
+    "type": "正向",
+    "priority": "P1",
+    "scene_ref": "E2E_A2A_006",
+    "feature_point": "FP-10 + FP-1 发现即调用",
+    "preconditions": ["runtime 已启动"],
+    "steps": [
+      "GET agent-card.json 读取声明的 endpoint(/a2a)",
+      "用该 endpoint 发起 SendMessage",
+      "校验返回 Task 可达且终态"
+    ],
+    "expected": "Card 声明 endpoint 含 /a2a；据此 SendMessage 返回 result.status.state ∈ TERMINAL_STATES（COMPLETED）",
+    "oracle": {"type": "agent_card", "assertion": "'/a2a' in endpoint and send_resp['result']['status']['state'] in TERMINAL_STATES"},
+    "assertion_plan": ["L2: 据 card endpoint 调用得到 status.state == COMPLETED", "process: Card.endpoint 与实际可达 /a2a 一致（发现-调用一致性）"],
+    "traceability": {"requirement": "§2 发现 Agent 能力;§3 agent-card endpoint=/a2a", "java_class": "AgentCardController.agentCard + A2aJsonRpcController.handleBlocking(SendMessage)", "scene": "E2E_A2A_006"},
+    "observability": "blackbox",
+    "candidate": true
+  },
+  {
+    "id": "TC-A2A-012",
+    "name": "GetTask 查询不存在 taskId 返回标准错误（边界）",
+    "type": "边界",
+    "priority": "P1",
+    "scene_ref": "E2E_A2A_001",
+    "feature_point": "FP-3 GetTask 边界（不存在 task）",
+    "preconditions": ["runtime 已启动"],
+    "steps": [
+      "GetTask(\"non-existent-task-id-xyz\")，id=\"7\"",
+      "解析响应",
+      "校验返回为 JSON-RPC error 且回带 id"
+    ],
+    "expected": "返回 error 对象（不是成功 result），error.code 为整数，回带 id == \"7\"",
+    "oracle": {"type": "error_code", "assertion": "'error' in resp and isinstance(resp['error']['code'], int) and resp['id'] == '7'"},
+    "assertion_plan": ["L2: 响应含 error 且 error.code 为整数（task 不存在不返回成功 result）", "process: error 回带原 request id '7'"],
+    "traceability": {"requirement": "§3 GetTask: taskId 必须存在，不存在返回错误", "java_class": "A2aJsonRpcController.handle catch A2AError -> errorResponse(id)", "scene": "E2E_A2A_001"},
+    "observability": "blackbox",
+    "candidate": true
+  }
+]
