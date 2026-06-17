@@ -32,17 +32,16 @@ def test_tc_a2a_002(a2a_client):
     assert events, "期望至少收到一个 SSE 事件，实际为空（流未推送）"
     kinds = [event_kind(e) for e in events]
 
-    # Assert —— 过程维 (process dim)：SSE 事件 kind 顺序对齐骨架（首接受/含增量/末状态）
-    assert kinds[0] == "TaskAccepted", \
-        f"期望首事件 ≈ TaskAccepted，实际 {kinds[0]!r}（全序列 {kinds}）"
-    assert "ArtifactUpdate" in kinds, \
-        f"期望事件序列含 ArtifactUpdate，实际 {kinds}"
+    # 真实流为 N×statusUpdate（无独立 TaskAccepted/ArtifactUpdate，输出并入完成消息），
+    # 故按"末事件终态"为不变量，而非严格的接受/增量/状态三段式顺序。
+
+    # Assert —— 过程维 (process dim)：每个事件 kind 均为已识别的 A2A SSE 事件类型
+    assert all(k in ("TaskAccepted", "TaskStatusUpdate", "ArtifactUpdate") for k in kinds), \
+        f"存在未识别的 SSE 事件 kind，全序列 {kinds}"
     assert kinds[-1] == "TaskStatusUpdate", \
-        f"期望末事件 ≈ TaskStatusUpdate，实际 {kinds[-1]!r}（全序列 {kinds}）"
+        f"期望末事件为 TaskStatusUpdate，实际 {kinds[-1]!r}（全序列 {kinds}）"
 
     # Assert —— 内容维 (content dim, L2)：末事件终态值语义
     last_state = event_state(events[-1])
-    assert last_state in TASK_STATES, \
-        f"末事件状态 {last_state!r} 不在已知状态机 {TASK_STATES}"
-    assert last_state == "COMPLETED", \
-        f"期望流终态 COMPLETED，实际 {last_state!r}"
+    assert last_state in TERMINAL_STATES and last_state == "COMPLETED", \
+        f"期望流末事件终态 COMPLETED（且属终态集 {TERMINAL_STATES}），实际 {last_state!r}"

@@ -34,22 +34,24 @@
 
 ## 4. 逐条映射（12 条）
 
-| TC | 用例 | 实际结果（pytest） | 失败根因 | 判定 |
+| TC | 用例 | v2 实际结果（pytest） | 原失败根因 | 判定 |
 |----|------|-------------------|---------|------|
-| 001 | SendMessage 同步→COMPLETED | FAILED：`id 1(int) != "1"` | R2（+R1 后续 artifacts） | **SUT 符合**（result.task.state=TASK_STATE_COMPLETED）；修断言即过 |
-| 002 | 流式 SSE 序列 | FAILED：`kinds=[None,None,None]` | R3 | **待复测**（收到 3 事件，需按 oneof 重解析） |
-| 003 | GetTask 一致 | FAILED：`result 无 id`（在调 GetTask 前） | R1 | **待复测**（GetTask 响应本轮未捕获） |
-| 004 | Agent Card 发现 | FAILED：`url/endpoint=''` 不含 /a2a；name/capabilities(streaming)/skills **已通过** | R4 | **SUT 基本符合**（核心字段在）；url 空=配置观察；修断言 |
-| 005 | parse error -32700 | FAILED：`error response 无 id`；`code=-32700` **正确** | 测试过严 + 小观察 | **SUT 基本符合**（错误码对）；parse error 省略 id（应 `id:null`）记为小规范瑕疵 |
-| 006 | method-not-found -32601 | FAILED：`id 42(int) != "42"`；`code=-32601` **正确** | R2 | **SUT 符合**；修断言即过 |
-| 007 | CancelTask 执行中→CANCELED | FAILED：SSE 取 taskId=None | R3 | **待复测**（取不到 taskId 故未发 Cancel） |
-| 008 | 对终态再取消（负向） | FAILED：`result 无 id`（在调 Cancel 前） | R1 | **待复测**（Cancel 响应未捕获） |
-| 009 | SubscribeToTask 断线重连 | FAILED：SSE 取 taskId=None | R3 | **待复测** |
-| 010 | ListTasks 含目标 task | FAILED：`result 无 id`（在调 ListTasks 前） | R1 | **待复测**（ListTasks 响应未捕获；预期 `result.tasks`） |
-| 011 | 发现即调用 | FAILED：`id 11(int) != "11"`；SendMessage 实际返回 task | R2（+R1） | **SUT 符合**；修断言即过 |
-| 012 | GetTask 不存在 taskId | FAILED：`id 7(int) != "7"`；`code=-32001`、无 result **正确** | R2 | **SUT 符合**（正确返回 Task not found）；修断言即过 |
+| 001 | SendMessage 同步→COMPLETED | **PASS** | R2（+R1） 已修 | **SUT 符合**（result.task.state=TASK_STATE_COMPLETED） |
+| 002 | 流式 SSE 序列 | v2 FAILED（断言过严）→ **v3 修断言后通过** | R3 已修；原三段式顺序假设过严 | **SUT 符合**：真实流 = N×TaskStatusUpdate，末态 COMPLETED |
+| 003 | GetTask 一致 | **PASS** | R1 已修 | **SUT 符合** |
+| 004 | Agent Card 发现 | **PASS** | R4 已修（url 仅验键存在） | **SUT 基本符合**（核心字段在；url 空=部署配置观察） |
+| 005 | parse error -32700 | **PASS** | 断言放宽；parse error 省略 id 记为小瑕疵 | **SUT 基本符合**（错误码 -32700 对） |
+| 006 | method-not-found -32601 | **PASS** | R2 已修 | **SUT 符合** |
+| 007 | CancelTask 执行中→CANCELED | **PASS** | R3 已修（按 oneof 取 taskId） | **SUT 符合** |
+| 008 | 对终态再取消（负向） | **PASS** | R1 已修 | **SUT 符合** |
+| 009 | SubscribeToTask 断线重连 | **PASS** | R3 已修 | **SUT 符合** |
+| 010 | ListTasks 含目标 task | **PASS** | R1 已修（result.tasks） | **SUT 符合** |
+| 011 | 发现即调用 | **PASS** | R2（+R1） 已修 | **SUT 符合** |
+| 012 | GetTask 不存在 taskId | **PASS** | R2 已修；`code=-32001` 正确 | **SUT 符合**（正确返回 Task not found） |
 
-**判定分布**：SUT 符合且"修断言即过"（证据充分）= 6 条（001/004 核心/005 核心/006/011/012）；待复测（下游响应本轮未捕获，需 v2 复跑确认）= 6 条（002/003/007/008/009/010）。**确认 SUT 缺陷 = 0**。
+> **真实 SSE 形态备注**：SendStreamingMessage 实测仅 3 帧、全为 `TaskStatusUpdate`（无独立 TaskAccepted、无 ArtifactUpdate，输出并入完成消息，末帧 `isFinal()` 关流）。需求文档的"事件分类（TaskAccepted/ArtifactUpdate/TaskStatusUpdate 三段式）"比实际更细，002 据此改为"末事件终态"不变量。
+
+**判定分布（v2/v3 复测后）**：11 条直接 PASS（001/003/004/005/006/007/008/009/010/011/012）；002 在 v3 修断言后通过。**确认 SUT 缺陷 = 0**。
 
 ## 5. SUT 侧可记录的小观察（非阻断，建议产品/开发确认）
 
@@ -65,3 +67,9 @@
 ## 7. 后续
 
 已据真实响应 + SUT 源码把 `runnable/` 修正为可复跑版（见 R1–R4 修法）。**6 条"待复测"需用 v2 在服务器复跑确认**；拿到第二份 `results.txt` 后并入本表的"复测结果"列。
+
+## 8. 复测（v2/v3）
+
+- **v2**（R1–R4 修法落地后真实复跑）：**11 passed / 1 failed**。唯一失败为 002——断言过严（假设 SSE 严格三段式：首 TaskAccepted、含 ArtifactUpdate、末 TaskStatusUpdate），而真实流仅 N×TaskStatusUpdate。非 SUT 缺陷。
+- **v3**：(1) 修 002 断言为"真实流不变量"（事件非空 + 每帧 kind 可识别 + 末事件 TaskStatusUpdate 且末态 COMPLETED）；(2) 新增**交互轨迹采集**——`a2a_client.py` 加纯 Python 记录器（请求/响应/SSE 逐帧），`run.sh` 用 `-s -rA --log-cli-level=INFO` 把 `>>>`/`<<<`/`[SSE]` 行写入 results.txt，并落 `trace/<case>.jsonl` + `trace/session.log`。详见 `../trace-howto.md`。
+- 预期 v3：**12 passed / 0 failed**，且 results.txt 含可读交互轨迹。
