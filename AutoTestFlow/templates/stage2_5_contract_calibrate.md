@@ -9,18 +9,18 @@
 
 ## 🎯 目标与背景
 
-历史教训（prior rounds）：测试参考对响应结构的臆测导致整批用例同错——
-- R1 Task 实际嵌套在 `result.task`（proto oneof），参考误以为 `result` 直接是 Task
-- R2 JSON-RPC `id` 服务端回 int，参考用 str 严格比较
-- R3 SSE 事件是 oneof（task / statusUpdate / artifactUpdate），state/taskId 路径随形态不同
-- R4 AgentCard.url 是服务基址且依赖部署配置，并非固定含 `/a2a`
+本阶段解决的根因：**测试参考对响应结构的臆测会导致整批用例同错**。常见臆测坑（通用归纳，具体协议示例见 examples/a2a/）：
+- 响应包装层数臆测错（顶层 result 是否再嵌套一层业务对象）
+- 请求标识 id 类型臆测错（服务端回 int，参考用 str 严格比较）
+- 流式/SSE 事件形态臆测错（事件是 oneof，state/标识路径随形态不同）
+- 自描述字段臆测错（某字段实为部署相关基址，并非固定值）
 
 本阶段产出 **`{output_dir}/contract.md`** 作为**唯一权威契约**：用真实响应（优先）+ 源码事实（兜底）确定每个响应形态，并区分 **spec-required（规约必然）** vs **deployment-config-dependent（部署配置相关）**。
 
 ## ⚠️ 核心约束
 
 - **不臆造任何响应形态**：每个字段形态必须有来源（真实样本 或 源码 evidence），否则标 `needs-runtime-verify`
-- A2A 仅为示例锚点，**不要硬编码 A2A**；按 SUT 实际协议/端点描述
+- **不要硬编码任何特定协议**；按 SUT 实际协议/端点描述（具体协议形态示例见 examples/a2a/）
 - 下游 stage3b/stage4 的每条断言 oracle 都将引用本文件的 specId，**契约错则全链路错**
 
 ---
@@ -41,7 +41,7 @@
 python3 {skill_dir}/scripts/probe_contract.py --base-url {sut_base_url} --output {output_dir}/.state/contract_samples.json
 ```
 
-- 探测覆盖：自描述端点（如 agent-card）、典型成功响应（含 result 包装）、流式/SSE 事件序列、典型错误响应（错误码）。
+- 探测覆盖：自描述端点（如能力/服务描述端点）、典型成功响应（含 result 包装）、流式/SSE 事件序列、典型错误响应（错误码）。
 - 脚本不可达/连接失败/超时 → 记 `probe_status=unreachable`，**进入第四步（静态兜底）**，不报错退出。
 - 探测成功 → Read `{output_dir}/.state/contract_samples.json`，记 `probe_status=reachable`。
 
@@ -49,14 +49,14 @@ python3 {skill_dir}/scripts/probe_contract.py --base-url {sut_base_url} --output
 
 将**真实样本**与**源码事实**逐项比对，以真实样本为准，源码用于解释字段语义：
 
-| 校准项 | 校准方法 | 历史坑 |
-|--------|---------|--------|
-| 响应包装 | 样本中 result 是否含 `task` 子对象 → 确定 Task 真实路径 | R1 |
-| id 类型 | 样本中响应 id 的 JSON 类型（int/str）；与请求 id 类型对比 | R2 |
-| 枚举命名 | 样本枚举值是否带前缀（如 `TASK_STATE_*`）→ 记录前缀与归一规则 | — |
-| 事件 oneof | 流式样本每帧的 oneof 字段名、state/taskId 实际所在路径、真实帧序列形态 | R3 |
-| 错误码 | 各错误场景实际返回的 code + message，error 是否回带 id | — |
-| 自描述字段 | 卡片/能力端点各字段实际值；url 等是否为空/基址 | R4 |
+| 校准项 | 校准方法 |
+|--------|---------|
+| 响应包装 | 样本中 result 是否再嵌套一层业务对象 → 确定业务对象的真实路径 |
+| id 类型 | 样本中响应 id 的 JSON 类型（int/str）；与请求 id 类型对比 |
+| 枚举命名 | 样本枚举值是否带前缀 → 记录实际前缀与归一规则 |
+| 事件 oneof | 流式样本每帧的 oneof 字段名、state/标识实际所在路径、真实帧序列形态 |
+| 错误码 | 各错误场景实际返回的 code + message，error 是否回带 id |
+| 自描述字段 | 能力/服务描述端点各字段实际值；哪些字段为空/为部署相关基址 |
 
 **一致性记录**：源码事实与真实样本不一致时，在契约中标注 `源码=X / 实测=Y`，以实测为准并提示可能的源码缺陷（供 stage5）。
 
@@ -77,18 +77,18 @@ Write `{output_dir}/contract.md`，结构如下（每个形态条目分配稳定
 > probe_status: reachable | unreachable    采集时间: {date}    base_url: {sut_base_url}
 
 ## 1. 响应包装（specId: SPEC-RESP-WRAP）
-- Task 真实路径：`result.task`（或 `result` 直接是 Task）
+- 业务对象真实路径：如 `result.<obj>` 嵌套 或 `result` 直接是业务对象
 - 来源：实测样本 / 源码:file:line / needs-runtime-verify
 
 ## 2. 请求标识 id 类型（specId: SPEC-ID-TYPE）
-- 响应回带类型：int / string；比较策略：类型容差（见 a2a_client.id_eq）
+- 响应回带类型：int / string；比较策略：类型容差（用 http_client 的 id 比较 helper，勿用严格 ==）
 
 ## 3. 状态/类型枚举（specId: SPEC-ENUM）
-- 前缀：TASK_STATE_* / ROLE_* …；归一规则：strip 前缀（见 normalize_state）
+- 实际前缀（如有）；归一规则：strip 前缀（用 normalize_state helper）
 
 ## 4. 流式/SSE 事件（specId: SPEC-SSE）
-- oneof 字段：task / statusUpdate / artifactUpdate
-- state 路径 / taskId 路径 / 终止标志；真实帧序列不变量
+- oneof 字段名（按实测填写）
+- state 路径 / 标识路径 / 终止标志；真实帧序列不变量
 
 ## 5. 错误码目录（specId: SPEC-ERR-{code}）
 | code | 含义 | 触发条件 | 是否回带 id |
@@ -99,8 +99,10 @@ Write `{output_dir}/contract.md`，结构如下（每个形态条目分配稳定
 ## 7. 字段权威性分级表（必填）
 | specId | 字段/形态 | spec-required | deployment-config-dependent | 来源 | needs-runtime-verify |
 |--------|----------|:---:|:---:|------|:---:|
-| SPEC-RESP-WRAP | result.task | ✅ | | 实测 | |
-| SPEC-CARD-URL | card.url | | ✅(base/部署配置) | 实测 | |
+| SPEC-RESP-WRAP | result.<obj> | ✅ | | 实测 | |
+| SPEC-CARD-URL | <自描述>.url | | ✅(base/部署配置) | 实测 | |
+
+> 上表 specId 为通用骨架；具体协议（如 A2A 的 result.task / TASK_STATE_* / SSE oneof / card.url）的填写示例见 examples/a2a/。
 ```
 
 **强制规则**：

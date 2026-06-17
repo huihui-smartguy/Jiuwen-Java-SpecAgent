@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# [A2A 示例特化] 本文件是通用黑盒模式（reference/http_client.py）针对 A2A/JSON-RPC 协议的特化示例。
 """黑盒 A2A 客户端 + 判据常量。
 
 严格对齐 framework_reference.md：仅暴露其列出的 A2aClient 方法与常量。
