@@ -4,50 +4,13 @@ from a2a_client import (
     TASK_STATES, TERMINAL_STATES,
     ERR_PARSE, ERR_METHOD_NOT_FOUND,
     SSE_EVENTS_ORDER,
-    normalize_state,
+    normalize_state, event_kind, event_state,
 )
 
 # Traceability:
 #   scene      : E2E_A2A_002
 #   requirement: requirement.md §2 流式场景 / §4 SSE 流终端状态关闭 / §6 P0 门禁=是
 #   java_class : A2aJsonRpcController.handleStream(takeUntil isStreamTerminating)
-
-
-def _event_result(ev):
-    """容差读取 SSE 事件的 JSON-RPC result 载荷。"""
-    data = ev.get("data") if isinstance(ev, dict) else None
-    if isinstance(data, dict):
-        return data.get("result", data)
-    return data
-
-
-def _event_kind(ev):
-    """跨字段容差读取事件 kind：kind / type / 由 taskStatusUpdate/artifactUpdate 等推断。"""
-    res = _event_result(ev)
-    if not isinstance(res, dict):
-        return None
-    for key in ("kind", "type", "eventType"):
-        val = res.get(key)
-        if isinstance(val, str) and val:
-            return val
-    # 结构化推断：依据载荷形状映射到骨架事件名
-    if "artifact" in res or "artifactUpdate" in res:
-        return "ArtifactUpdate"
-    if "taskStatusUpdate" in res:
-        return "TaskStatusUpdate"
-    if "status" in res:
-        # 末事件常携带 status.state
-        return "TaskStatusUpdate"
-    if res.get("accepted") or "task" in res:
-        return "TaskAccepted"
-    return None
-
-
-def _event_state(ev):
-    res = _event_result(ev)
-    if isinstance(res, dict) and isinstance(res.get("status"), dict):
-        return normalize_state(res["status"].get("state"))
-    return None
 
 
 @pytest.mark.a2a
@@ -67,7 +30,7 @@ def test_tc_a2a_002(a2a_client):
 
     # 结构存在性 (L1)
     assert events, "期望至少收到一个 SSE 事件，实际为空（流未推送）"
-    kinds = [_event_kind(e) for e in events]
+    kinds = [event_kind(e) for e in events]
 
     # Assert —— 过程维 (process dim)：SSE 事件 kind 顺序对齐骨架（首接受/含增量/末状态）
     assert kinds[0] == "TaskAccepted", \
@@ -78,7 +41,7 @@ def test_tc_a2a_002(a2a_client):
         f"期望末事件 ≈ TaskStatusUpdate，实际 {kinds[-1]!r}（全序列 {kinds}）"
 
     # Assert —— 内容维 (content dim, L2)：末事件终态值语义
-    last_state = _event_state(events[-1])
+    last_state = event_state(events[-1])
     assert last_state in TASK_STATES, \
         f"末事件状态 {last_state!r} 不在已知状态机 {TASK_STATES}"
     assert last_state == "COMPLETED", \

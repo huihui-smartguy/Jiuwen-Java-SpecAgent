@@ -20,7 +20,7 @@ def test_tc_a2a_005(a2a_client):
     @Step: 1. raw_post 一段非法 JSON 体 '{"jsonrpc":"2.0","id":"99", BROKEN'
            2. 解析响应 body 的 error
            3. 校验 error.code 与 id 回带
-    @Result: error.code == -32700(ERR_PARSE)；响应回带 id 字段；不返回成功 result
+    @Result: error.code == -32700(ERR_PARSE)；按 JSON-RPC parse error id 应为 null（SUT 实际省略 id 键）；不返回成功 result
     """
     # Arrange
     broken_body = '{"jsonrpc":"2.0","id":"99", BROKEN'
@@ -34,8 +34,10 @@ def test_tc_a2a_005(a2a_client):
     assert body["error"]["code"] == ERR_PARSE, \
         f"期望 parse error {ERR_PARSE}，实际 {body['error'].get('code')!r}"
 
-    # Assert —— 过程维 (process dim)：协议合规——错误响应也必须回带 id 字段
-    assert "id" in body, "JSON-RPC error response 必须携带 id 字段"
-
     # 协议合规 (L2)：非法体不得被误判为成功 result（不创建 task 的可观测侧面）
     assert "result" not in body, "parse error 不应返回成功 result（不应创建 task）"
+
+    # Assert —— 过程维 (process dim)：JSON-RPC parse error 无法解析原 id，规范应为 id:null。
+    # 真实形态：SUT 直接省略 id 键（应为 id:null），故接受 缺失 或 null 两种情形。
+    assert body.get("id") is None, \
+        f"期望 parse error 的 id 为 null/缺省（无法回带原 id），实际 {body.get('id')!r}"

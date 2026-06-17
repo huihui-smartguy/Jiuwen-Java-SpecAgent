@@ -4,6 +4,7 @@ from a2a_client import (
     TASK_STATES, TERMINAL_STATES,
     ERR_PARSE, ERR_METHOD_NOT_FOUND,
     SSE_EVENTS_ORDER,
+    normalize_state, id_eq, task_of,
 )
 
 # Traceability:
@@ -25,15 +26,17 @@ def test_tc_a2a_001(a2a_client):
     # Arrange / Act
     resp = a2a_client.send_message("你好", context_id="ctx-sync-001", message_id="msg-sync-001", req_id="1")
 
-    # Assert —— 过程维 (process dim)：JSON-RPC id 必须回带原 request id
-    assert resp.get("id") == "1", f"期望 id 回带 '1'，实际 {resp.get('id')!r}"
+    # Assert —— 过程维 (process dim)：JSON-RPC id 必须回带原 request id（int/str 容差）
+    assert id_eq(resp.get("id"), "1"), f"期望 id 回带 '1'，实际 {resp.get('id')!r}"
 
     # 结构存在性 (L1)
     assert "result" in resp, f"期望成功响应含 result，实际 keys={list(resp)}"
-    task = resp["result"]
-    state = task["status"]["state"]
+    # 真实形态：Task 嵌套在 result.task
+    task = task_of(resp["result"])
+    assert isinstance(task, dict), f"期望 result 含 Task（result.task），实际 result={resp['result']!r}"
+    state = normalize_state(task["status"]["state"])
 
-    # Assert —— 内容维 (content dim, L2)：终态值语义判定
+    # Assert —— 内容维 (content dim, L2)：终态值语义判定（规约 TASK_STATE_ 前缀）
     assert state in TASK_STATES, f"状态 {state!r} 不在已知状态机 {TASK_STATES}"
     assert state in TERMINAL_STATES, f"同步调用应到终态，实际 {state!r}"
     assert state == "COMPLETED", f"期望 COMPLETED，实际 {state!r}"

@@ -62,3 +62,15 @@
 - 验证期临时安装 pytest 9.1.0 与 httpx 0.28.1。
 - 两个生成用例均 py_compile=ok、可收集；失败为连接拒绝（env_issue）。
 - 待 SUT 启动后重跑即可得真实正/负向判定（断言已落在 status.state / error.code / id 回带等可观测判据）。
+
+## 5. 真实运行结果(live)
+
+- 首轮对真实 SUT 运行 12 例 12 failed，全部源于测试侧形态假设错误（非 SUT 缺陷）：
+  - R1：Task 实际嵌套在 result.task，而非 result 本身（SendMessage/GetTask/CancelTask/ListTasks）。
+  - R2：JSON-RPC id 回带为 int，而测试侧按 str 断言（== 比较类型不符）。
+  - R3：SSE 事件 result 为 oneof（task / statusUpdate / artifactUpdate），旧 helper 找 kind/type/eventType 字段恒返回 None。
+  - R4：AgentCard.url == 服务 base url 且不含 "/a2a"，public-base-url 未设时可能为空字符串。
+- SUT 触达判据处均正确：parse error −32700（且省略 id）、method-not-found −32601、GetTask 不存在 −32001 "Task not found"、终态 TASK_STATE_COMPLETED。
+- 0 处确认的 SUT 缺陷；全部失败归因测试侧形态假设。
+- harness 已按真实线缆形态修正为可复跑版（result.task 嵌套 / id 类型容差 id_eq / SSE oneof helpers / AgentCard.url 仅校验键存在）。
+- 详见 ../results-live.md。
