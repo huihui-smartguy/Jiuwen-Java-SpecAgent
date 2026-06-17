@@ -136,8 +136,69 @@ rg -n "<关注配置键>" $SUT/src/main/resources/application*.{yml,yaml,propert
 
 ---
 
-## 7. 扫描产出与交接
+## 7. 从 Java 结构派生框架 E2E 场景
 
-- 产出：`code_analysis.md`（格式见 `shared/code_analysis_template.md`）+ `.state/s2_code_facts.json`。
+> stage2 在采集六类事实之外，**额外从 Java 结构静态派生框架 E2E 场景**，写入 `.state/framework_scenes.json`
+> （schema 见 `shared/scenario_schema.md` 的 framework_scenes）。这是 stage3a-fw 子Agent 消费的内部产物，
+> 替代迭代6 由外部 helper skill 预生成的 `e2e_framework_scenes.md`——**无需外部文件、无需手工预生成步骤**。
+
+### 7.1 模块分类（按信号）
+
+按包名/类名/注解信号把扫到的模块归入七类：
+
+| category | 信号示例 |
+|----------|----------|
+| 核心引擎 | `engine`/`core`/`runtime`/`executor`，承载主业务逻辑的 `@Service`/`@Component` |
+| 数据存储 | `repository`/`dao`/`mapper`/`@Repository`/`@Entity`/JPA/MyBatis |
+| 通信 | `@FeignClient`/`RestTemplate`/`WebClient`/`@KafkaListener`/`@RabbitListener`/SSE/WebSocket |
+| 编排 | `orchestrator`/`workflow`/`saga`/`scheduler`/`@Scheduled`/状态机 |
+| 插件 | `plugin`/`extension`/`SPI`/`@ConditionalOn*`/可插拔注册 |
+| 配置 | `@Configuration`/`@ConfigurationProperties`/`@Bean` 装配 |
+| 工具 | `util`/`helper`/`common`/无状态静态方法 |
+
+```bash
+rg -n "@Service|@Component|@Repository|@Configuration|@FeignClient|@KafkaListener" --type java
+rg -n "package\s+[\w.]+\.(engine|core|runtime|repository|dao|orchestrator|plugin|config|util)" --type java
+```
+
+### 7.2 跨模块依赖与调用链
+
+从注入与导入关系还原跨模块调用链：
+
+| 信号 | 含义 |
+|------|------|
+| `@Autowired` / 构造注入 / `@Resource` | A 依赖 B（A→B 一环） |
+| `import` 跨包引用 | 跨模块边界 |
+| Controller→Service→Component | 典型三层调用链 |
+
+```bash
+rg -n "@Autowired|@Resource" --type java                       # 字段/构造注入点
+rg -n "private final \w+ \w+;" --type java                     # 构造注入候选字段
+rg -n "import [\w.]+\.(service|repository|client|component)\." --type java   # 跨模块导入
+```
+
+> 从对外端点（Controller）出发，沿注入关系向下追溯 service→component，记录调用链深度。
+
+### 7.3 组合框架 E2E 场景（三型）
+
+| 场景型 | 组成 | call_chain 深度 |
+|--------|------|-----------------|
+| 单模块入口 | 单个独立功能模块经其对外端点触发 | 1 环（entry→该模块） |
+| 跨模块协作 | 入口模块协作 1+ 个支持性模块（如引擎调存储/通信） | ≥2 环 |
+| 深度调用链 | 调用链深度≥2 的端到端链路（controller→service→component→…） | ≥2 环（重点） |
+
+每条场景按 framework_scenes schema 输出 `{id, category, modules, call_chain, entry_hint, related_fp_hint}`：
+- `entry_hint`：从 Controller 端点/协议 method 取用户可观测入口；纯内部链路无入口则标 `needs-runtime-verify`。
+- `related_fp_hint`：从模块语义给出可能关联的需求功能点线索（供 stage3a-fw 匹配 FP），不强求精确。
+
+> ⚠️ **静态派生**：以上调用链/分类均为源码静态线索，可能与真实线缆形态/运行时分发有偏差；
+> **运行时仍以 stage2.5 contract 校准为准**，冲突时 probe 胜出。
+
+---
+
+## 8. 扫描产出与交接
+
+- 产出：`code_analysis.md`（格式见 `shared/code_analysis_template.md`）+ `.state/s2_code_facts.json` + `.state/framework_scenes.json`（框架 E2E 场景派生物）。
 - 交接给 stage2.5：作为 `probe_contract.py` 的探活假设输入。
+- 交接给 stage3a-fw：`.state/framework_scenes.json` 作为框架场景补充的输入（替代外部预生成文件）。
 - **最终判据以 `contract.md`（probe 校准产物）为准**；本扫描仅提供“该探什么、预期形态是什么”的静态线索。

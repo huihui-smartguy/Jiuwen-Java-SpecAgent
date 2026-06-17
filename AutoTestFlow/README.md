@@ -20,6 +20,8 @@
 > 通用性边界：场景/设计/契约校准/执行流程与具体协议无关；黑盒脚手架 `reference/http_client.py`
 > 在 stage2.5 校准后按真实 `contract.md` 专化为具体协议形态。A2A/agent-runtime 仅作**示例**，见 `examples/a2a/`。
 
+> **无需 step1 预生成依赖**：脚手架内置于 `reference/`、判据形态由 stage2.5 契约校准产 `contract.md`、框架场景由 stage2 从代码结构自动派生（纯需求模式由 stage3aR 从需求侧派生）。
+
 ---
 
 ## 2. 测试维度
