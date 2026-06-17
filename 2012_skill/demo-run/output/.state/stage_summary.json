@@ -1,0 +1,11 @@
+{
+  "mode": "standard",
+  "module_role": "独立功能",
+  "cd_list": [],
+  "p0_count_hint": 6,
+  "total_cases": 12,
+  "p1_count": 6,
+  "scope": "A2A 核心消息+任务（黑盒 HTTP + JSON-RPC）",
+  "scenes_covered": ["E2E_A2A_001", "E2E_A2A_002", "E2E_A2A_003", "E2E_A2A_004", "E2E_A2A_005", "E2E_A2A_006"],
+  "stage4a_selected": ["TC-A2A-001", "TC-A2A-005"]
+}
