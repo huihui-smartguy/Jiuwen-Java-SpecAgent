@@ -72,13 +72,27 @@ echo "[info] pytest 版本: $(python3 -m pytest --version 2>&1 | head -n1)"
 # ---------------------------------------------------------------------------
 # 3. 运行测试（允许测试失败，不因 set -e 中断；显式关闭 errexit）
 # ---------------------------------------------------------------------------
+# 交互轨迹目录：每个用例一份 trace/<case>.jsonl + trace/session.log
+export A2A_TRACE_DIR="$(pwd)/trace"
+rm -rf "$A2A_TRACE_DIR"
+mkdir -p "$A2A_TRACE_DIR"
+echo "[info] 交互轨迹目录: ${A2A_TRACE_DIR}"
+
 set +e
-echo "[info] 运行: python3 -m pytest -v"
-python3 -m pytest -v 2>&1 | tee results.txt
+echo "[info] 运行: python3 -m pytest -v -s -rA --log-cli-level=INFO"
+python3 -m pytest -v -s -rA --log-cli-level=INFO 2>&1 | tee results.txt
 echo "[info] 生成 JUnit XML: results.junit.xml"
 python3 -m pytest -q --junitxml=results.junit.xml >/dev/null 2>&1
 PYTEST_RC=$?
 set -e
+
+# 可选：附加服务端 agent-runtime 日志尾部（best-effort）
+if [ -n "${AGENT_RUNTIME_LOG:-}" ] && [ -f "${AGENT_RUNTIME_LOG}" ]; then
+  {
+    echo "--- agent-runtime 服务端日志(尾100行) ---"
+    tail -n 100 "${AGENT_RUNTIME_LOG}"
+  } >> results.txt 2>&1
+fi
 
 # ---------------------------------------------------------------------------
 # 4. 统计 passed/failed/errored 并打印结果路径
@@ -92,6 +106,9 @@ ERRORED=$(grep -oE "[0-9]+ error" results.txt | tail -n1 | grep -oE "[0-9]+" || 
 echo "[result] passed=${PASSED:-0}  failed=${FAILED:-0}  errored=${ERRORED:-0}"
 echo "[result] 详细输出: $(pwd)/results.txt"
 echo "[result] JUnit XML : $(pwd)/results.junit.xml"
+echo "------------------------------------------------------------------"
+echo "[trace] 交互轨迹: ${A2A_TRACE_DIR}"
+ls -1 "${A2A_TRACE_DIR}"
 echo "------------------------------------------------------------------"
 echo "[info] 请把 results.txt 内容贴回以便分析。"
 

@@ -7,7 +7,148 @@ httpx 在方法内部惰性导入，使本模块即便未安装 httpx 也能被 
 
 import os
 import json
+import time
+import logging
+import datetime
+import contextvars
 from typing import Iterator, Optional, Union
+
+# ---------------------------------------------------------------------------
+# 0. 交互轨迹记录器（recorder）——把 test-agent ↔ runtime 的请求/响应/SSE 落盘+打印
+#    纯 Python，无 httpx 依赖；任何异常都吞掉，绝不影响被测流程。
+# ---------------------------------------------------------------------------
+LOG = logging.getLogger("a2a")
+
+# 当前用例名（conftest 在每个用例开始时 set_current_case 注入）。
+_current_case = contextvars.ContextVar("a2a_case", default="session")
+
+# 需要脱敏的请求头（大小写不敏感子串匹配）。
+_REDACT_HEADER_HINTS = ("authorization", "token", "cookie", "secret", "api-key", "apikey")
+
+
+def set_current_case(name: str) -> None:
+    """设置当前用例名（用于 trace 文件名 / 日志 case 字段）。"""
+    try:
+        _current_case.set(name or "session")
+    except Exception:
+        pass
+
+
+def _trace_path() -> Optional[str]:
+    """若设置 A2A_TRACE_DIR 则返回 {dir}/{case}.jsonl（并确保目录存在），否则 None。"""
+    d = os.environ.get("A2A_TRACE_DIR")
+    if not d:
+        return None
+    try:
+        os.makedirs(d, exist_ok=True)
+        return os.path.join(d, "%s.jsonl" % _current_case.get())
+    except Exception:
+        return None
+
+
+def _safe_dumps(obj) -> str:
+    """把任意对象转成可读 JSON 字符串；失败回退 repr，绝不抛异常。"""
+    try:
+        return json.dumps(obj, ensure_ascii=False, indent=2, sort_keys=False)
+    except Exception:
+        try:
+            return repr(obj)
+        except Exception:
+            return "<unprintable>"
+
+
+def _compact_dumps(obj) -> str:
+    try:
+        return json.dumps(obj, ensure_ascii=False, separators=(",", ":"))
+    except Exception:
+        try:
+            return repr(obj)
+        except Exception:
+            return "<unprintable>"
+
+
+def _redact_headers(headers) -> dict:
+    """脱敏 Authorization/token 类请求头。"""
+    out = {}
+    try:
+        for k, v in dict(headers or {}).items():
+            kl = str(k).lower()
+            if any(h in kl for h in _REDACT_HEADER_HINTS):
+                out[k] = "***REDACTED***"
+            else:
+                out[k] = v
+    except Exception:
+        return {}
+    return out
+
+
+def _emit(record: dict) -> None:
+    """补充 ts/case，打印人类可读行（调用方已 LOG），并把结构化记录追加进 trace。"""
+    try:
+        record.setdefault("ts", datetime.datetime.now().isoformat(timespec="seconds"))
+        record.setdefault("case", _current_case.get())
+    except Exception:
+        pass
+    path = _trace_path()
+    if path:
+        try:
+            with open(path, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+        except Exception:
+            pass
+
+
+def record_request(method, url, headers, body) -> None:
+    """记录 client→runtime 的一次请求。"""
+    try:
+        red = _redact_headers(headers)
+        if isinstance(body, str):
+            body_str = body
+            body_rec = body
+        else:
+            body_str = _safe_dumps(body)
+            body_rec = body
+        LOG.info(">>> [client→runtime] %s %s", method, url)
+        LOG.info("    headers=%s", _compact_dumps(red))
+        LOG.info("    body=\n%s", body_str)
+        _emit({"kind": "request", "method": method, "url": url,
+               "headers": red, "body": body_rec})
+    except Exception:
+        pass
+
+
+def record_response(method, status_code, body) -> None:
+    """记录 runtime→client 的一次响应。"""
+    try:
+        LOG.info("<<< [runtime→client] HTTP %s (%s)", status_code, method)
+        LOG.info("    body=\n%s", _safe_dumps(body))
+        _emit({"kind": "response", "method": method,
+               "status_code": status_code, "body": body})
+    except Exception:
+        pass
+
+
+def record_sse_event(idx, t0, ev) -> None:
+    """记录一条实时到达的 SSE 事件。"""
+    try:
+        try:
+            elapsed_ms = int((time.time() - t0) * 1000)
+        except Exception:
+            elapsed_ms = -1
+        kind = None
+        state = None
+        try:
+            kind = event_kind(ev)
+            state = event_state(ev)
+        except Exception:
+            pass
+        LOG.info("<<< [SSE] #%s (+%sms) kind=%s state=%s",
+                 idx, elapsed_ms, kind, state)
+        LOG.info("    event=%s", _compact_dumps(ev))
+        _emit({"kind": "sse_event", "idx": idx, "elapsed_ms": elapsed_ms,
+               "event_kind": kind, "event_state": state, "event": ev})
+    except Exception:
+        pass
 
 # ---------------------------------------------------------------------------
 # 3. 关键判据常量（来自需求文档，勿臆造）
@@ -154,12 +295,19 @@ class A2aClient:
 
     def _post_json(self, body, accept="application/json"):
         import httpx  # lazy import
+        url = self.base_url + A2A_ENDPOINT
+        method = body.get("method") if isinstance(body, dict) else None
+        method = method or "POST"
+        headers = {"Content-Type": "application/json", "Accept": accept}
+        record_request(method, url, headers, body)
         with httpx.Client(timeout=self.timeout) as client:
-            return client.post(
-                self.base_url + A2A_ENDPOINT,
-                content=json.dumps(body),
-                headers={"Content-Type": "application/json", "Accept": accept},
-            )
+            resp = client.post(url, content=json.dumps(body), headers=headers)
+            try:
+                parsed = resp.json()
+            except Exception:
+                parsed = getattr(resp, "text", "<no-text>")
+            record_response(method, resp.status_code, parsed)
+            return resp
 
     @staticmethod
     def _parse_sse_lines(lines) -> Iterator[dict]:
@@ -194,14 +342,21 @@ class A2aClient:
 
     def _stream(self, body) -> Iterator[dict]:
         import httpx  # lazy import
+        url = self.base_url + A2A_ENDPOINT
+        method = body.get("method") if isinstance(body, dict) else None
+        method = method or "POST"
+        headers = {"Content-Type": "application/json", "Accept": "text/event-stream"}
+        record_request(method, url, headers, body)
+        t0 = time.time()
+        idx = 0
         with httpx.Client(timeout=self.timeout) as client:
             with client.stream(
-                "POST",
-                self.base_url + A2A_ENDPOINT,
-                content=json.dumps(body),
-                headers={"Content-Type": "application/json", "Accept": "text/event-stream"},
+                "POST", url,
+                content=json.dumps(body), headers=headers,
             ) as resp:
                 for event in self._parse_sse_lines(resp.iter_lines()):
+                    idx += 1
+                    record_sse_event(idx, t0, event)  # 实时记录后即透传
                     yield event
 
     # -- 公开方法（仅这些，对齐 framework_reference.md §1） ---------------
@@ -229,16 +384,32 @@ class A2aClient:
 
     def get_agent_card(self) -> dict:
         import httpx  # lazy import
+        url = self.base_url + AGENT_CARD_PATHS[0]
+        headers = {"Accept": "application/json"}
+        record_request("GET", url, headers, None)
         with httpx.Client(timeout=self.timeout) as client:
-            return client.get(self.base_url + AGENT_CARD_PATHS[0]).json()
+            resp = client.get(url)
+            try:
+                parsed = resp.json()
+            except Exception:
+                parsed = getattr(resp, "text", "<no-text>")
+            record_response("GET", resp.status_code, parsed)
+            return parsed
 
     def raw_post(self, body: Union[str, dict], *, accept="application/json"):
         """发任意（含非法）请求体，用于协议合规负向用例。返回 httpx.Response。"""
         import httpx  # lazy import
+        url = self.base_url + A2A_ENDPOINT
         content = body if isinstance(body, str) else json.dumps(body)
+        method = body.get("method") if isinstance(body, dict) else "POST"
+        method = method or "POST"
+        headers = {"Content-Type": "application/json", "Accept": accept}
+        record_request(method, url, headers, body)  # body 可能是非法字符串，原样记录
         with httpx.Client(timeout=self.timeout) as client:
-            return client.post(
-                self.base_url + A2A_ENDPOINT,
-                content=content,
-                headers={"Content-Type": "application/json", "Accept": accept},
-            )
+            resp = client.post(url, content=content, headers=headers)
+            try:
+                parsed = resp.json()
+            except Exception:
+                parsed = getattr(resp, "text", "<no-text>")
+            record_response(method, resp.status_code, parsed)
+            return resp

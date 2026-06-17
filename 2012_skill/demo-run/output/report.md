@@ -74,3 +74,12 @@
 - 0 处确认的 SUT 缺陷；全部失败归因测试侧形态假设。
 - harness 已按真实线缆形态修正为可复跑版（result.task 嵌套 / id 类型容差 id_eq / SSE oneof helpers / AgentCard.url 仅校验键存在）。
 - 详见 ../results-live.md。
+
+## 6. 交互轨迹采集(v3)
+
+- 在 `a2a_client.py` 加入纯 Python 记录器（`set_current_case` / `record_request` / `record_response` / `record_sse_event` / `_emit` / `_trace_path`），logger 名 `a2a`；httpx 仍惰性导入，记录器异常全吞、绝不影响被测流程。
+- 已织入 `_post_json` / `raw_post` / `get_agent_card` / `_stream`：请求/响应落盘+打印，SSE 逐帧实时记录后透传（不改返回类型，调用方仍 `.json()`）。
+- `conftest.py` 一次性配置 `a2a` logger 的 stdout handler（+ 设 `A2A_TRACE_DIR` 时加 `session.log` FileHandler，去重），autouse `_trace` fixture 绑定用例名并在收尾打印该用例 `trace/<case>.jsonl` 路径。
+- `run.sh` 运行前 `export A2A_TRACE_DIR=$(pwd)/trace` 并清空重建，pytest 加 `-s -rA --log-cli-level=INFO`，请求行 `>>>` / 响应行 `<<<` / SSE 行 `[SSE]` 直接进 results.txt；可选 `AGENT_RUNTIME_LOG` 尾 100 行追加；末尾列出 trace 目录。
+- 三类落点：results.txt（人类可读）、trace/<case>.jsonl（结构化）、trace/session.log（合并）；字段说明见 ../trace-howto.md。
+- TC-A2A-002 改用"真实流不变量"：真实 SSE = N×TaskStatusUpdate（无独立 TaskAccepted/ArtifactUpdate，输出并入完成消息），故断言"事件非空 + 每帧 kind 均可识别 + 末事件为 TaskStatusUpdate 且末态 COMPLETED"，替代原过严的三段式顺序。
