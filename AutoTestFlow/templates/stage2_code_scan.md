@@ -164,6 +164,18 @@
 - **中**：边界处理不当、序列化形态不一致、语义模糊
 - **低**：冗余代码、命名问题
 
+### 第九步B：派生框架 E2E 场景（⚠️ stage3a-fw 的关键输入）
+
+> 从已扫描的 Java 结构**静态派生**框架 E2E 场景，替代迭代6 外部 helper skill 预生成的文件，
+> **无需外部文件、无需手工预生成**。方法学严格遵循 `shared/java_scan_guide.md` 第7节「从 Java 结构派生框架 E2E 场景」。
+
+1. **模块分类**：按包名/类名/注解信号把模块归入七类（核心引擎/数据存储/通信/编排/插件/配置/工具）。
+2. **跨模块调用链**：从 `@Autowired`/构造注入/跨包 import 还原依赖；从 Controller 端点沿注入关系向下追溯 service→component，记录调用链。
+3. **组合三型场景**：单模块入口（深度1）/ 跨模块协作（深度≥2）/ 深度调用链（深度≥2，重点）。
+4. 每条场景按 `scenario_schema.md` 的 framework_scenes schema 输出 `{id, category, modules, call_chain, entry_hint, related_fp_hint}`；纯内部链路无对外入口时 `entry_hint` 标 `needs-runtime-verify`。
+
+> ⚠️ **静态派生**：调用链/分类为源码静态线索；**运行时仍以 stage2.5 contract 校准为准**，冲突时 probe 胜出。
+
 ### 第十步：分批写入输出（⚠️ 先写小文件，保证产出）
 
 **按以下顺序写入，每写完一个文件立即确认成功：**
@@ -205,6 +217,24 @@
 
 3. **Write `{output_dir}/.state/s2_code_facts.json`**（按 scenario_schema.md 中的 code_facts schema + 第七步 serialization_facts 输出）
 
+4. **Write `{output_dir}/.state/framework_scenes.json`**（第九步B 派生的框架 E2E 场景，按 scenario_schema.md 的 framework_scenes schema）
+
+```json
+{
+  "meta": { "source": "code", "derived_by": "stage2", "note": "从 Java 结构静态派生；运行时仍以 stage2.5 contract.md 校准为准" },
+  "framework_scenes": [
+    {
+      "id": "E2E-FW-NNN",
+      "category": "核心引擎 | 数据存储 | 通信 | 编排 | 插件 | 配置 | 工具",
+      "modules": ["..."],
+      "call_chain": ["controller → service → component"],
+      "entry_hint": "对外端点/协议 method 或 needs-runtime-verify",
+      "related_fp_hint": "关联功能点线索"
+    }
+  ]
+}
+```
+
 ### 第十一步：自检
 
 | 检查项 | 要求 |
@@ -216,6 +246,7 @@
 | 序列化事实 | serialization_facts 含 响应包装/id类型/枚举前缀/错误码？无法确定的标 needs-runtime-verify？ |
 | 入口合法 | 无内部 Service impl/私有方法作为入口？ |
 | code_only粒度 | 每条code_only是用户操作主题（非单端点）？scenario_type/related_methods 已填？ |
+| 框架场景派生 | framework_scenes.json 含三型场景？每条有 category/modules/call_chain/entry_hint？无对外入口的标 needs-runtime-verify？ |
 | user_test_entry | module_role="支持性组件" 时 stage_summary.json **必须**含 user_test_entry，forbidden_direct_apis 非空。**缺失时禁止进入第十步** |
 
 ### 第十二步：仅返回摘要
@@ -235,6 +266,7 @@
 | 约束条目 | X 个 |
 | 序列化事实 | 响应包装/id类型/枚举/事件oneof 已采集 |
 | 代码独有 | X 个 |
+| 框架场景 | X 个（单模块 X / 跨模块 X / 深链 X）→ .state/framework_scenes.json |
 | 代码缺陷 | X 个（高: X） |
 ```
 

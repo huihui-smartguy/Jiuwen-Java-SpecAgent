@@ -35,7 +35,7 @@
 ### 第二步：读取输入（并行 Read）
 
 - `{output_dir}/.state/s1_index.json` — 需求侧场景索引（获取 scenario_index 的 id/name/fp_refs）
-- `{framework_scenes}` — 框架场景文件
+- `{output_dir}/.state/framework_scenes.json` — **stage2 派生的框架 E2E 场景**（内部产物，含 `framework_scenes[{id,category,modules,call_chain,entry_hint,related_fp_hint}]`）
 - `{output_dir}/.state/stage_summary.json` — module_role
 
 输出统计：`S1索引: 场景 X | 框架场景 N`
@@ -44,11 +44,11 @@
 
 ⚠️ **隔离**：仅基于第二步已读取的3个文件判断。
 
-遍历第二步已读取的全部framework-scenes：
+遍历第二步已读取的 framework_scenes.json 中 `framework_scenes` 数组全部条目：
 
 | 策略 | 检查方式 |
 |------|----------|
-| 直接匹配 | 模块路径/类名/依赖链包含本模块 → 相关 |
+| 直接匹配 | 场景的 modules/call_chain/entry_hint/related_fp_hint 与本模块/FP 关联 → 相关 |
 | 可嵌入性 | 上下文兼容 ∧ 触发可达 ∧ 数据流兼容 ∧ 类型匹配 → 相关 |
 
 排除法：4项全部为"否"才判不相关。不确定时默认相关。
@@ -61,9 +61,9 @@
 
 | 框架场景ID | 相关 | 组件类型 |
 |------------|------|---------|
-| E2E_XXX_001 | ✅ | 重试, 分支 |
-| E2E_XXX_002 | ✅ | 无 |
-| E2E_XXX_003 | ❌ | — |
+| E2E-FW-001 | ✅ | 重试, 分支 |
+| E2E-FW-002 | ✅ | 无 |
+| E2E-FW-003 | ❌ | — |
 
 ### 第四步：框架场景生成
 

@@ -17,6 +17,7 @@
 | stage_summary.json | 含 module_role + cd_list | module_role=独立功能 + cd_list=[] |
 
 > 注：纯需求模式无源码序列化事实，阶段2.5 的 contract.md 只能走静态兜底（全部标 needs-runtime-verify）或依赖真实探测；编排器据此决定是否跳过 contract 校准。
+> 注：纯需求模式无 stage2，不产 `.state/framework_scenes.json`；**框架场景改由 stage3aR 从需求侧派生**（标 needs-code/needs-runtime-verify），覆盖能力受限。
 
 ---
 

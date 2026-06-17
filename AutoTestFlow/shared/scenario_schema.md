@@ -372,6 +372,47 @@ flow_scenarios 中每个元素与单场景文件结构相同，额外字段：
 
 ---
 
+## framework_scenes.json 结构（阶段2派生产物）
+
+阶段2 在静态扫描 Java 结构后**自动派生**框架 E2E 场景，写入 `.state/framework_scenes.json`。
+本文件是 **stage3a-fw 子Agent 消费的内部产物**，替代了迭代6 由外部 helper skill 预生成的 `e2e_framework_scenes.md`——不再需要外部文件，也不需要手工预生成步骤。
+派生方法学见 `shared/java_scan_guide.md` 的「从 Java 结构派生框架 E2E 场景」。
+
+```json
+{
+  "meta": {
+    "source": "code",
+    "derived_by": "stage2",
+    "note": "从 Java 结构静态派生；运行时仍以 stage2.5 contract.md 校准为准"
+  },
+  "framework_scenes": [
+    {
+      "id": "E2E-FW-NNN",
+      "category": "核心引擎 | 数据存储 | 通信 | 编排 | 插件 | 配置 | 工具",
+      "modules": ["模块/包/类名列表"],
+      "call_chain": ["controller → service → component（跨模块调用链）"],
+      "entry_hint": "用户可观测入口提示（对外端点/协议 method）",
+      "related_fp_hint": "可能关联的需求功能点线索（供 stage3a-fw 匹配 FP）"
+    }
+  ]
+}
+```
+
+### framework_scenes 字段
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| id | 是 | 框架场景编号 E2E-FW-NNN |
+| category | 是 | 模块分类：核心引擎 / 数据存储 / 通信 / 编排 / 插件 / 配置 / 工具 |
+| modules | 是 | 涉及的模块/包/类名列表 |
+| call_chain | 是 | 跨模块调用链（controller→service→component），单模块入口可只含1环 |
+| entry_hint | 是 | 用户可观测入口提示（对外端点/协议 method），无则填 null |
+| related_fp_hint | 否 | 可能关联的需求功能点线索，供 stage3a-fw 匹配 FP |
+
+> 派生原则：**静态派生**线索，**运行时仍以 stage2.5 contract 校准为准**。代码无法确定的入口/形态标 `needs-runtime-verify`。
+
+---
+
 ## 测试用例 test_type 字段（阶段3b 产出）
 
 阶段3b 将场景展开为测试用例，每个用例必须携带 `test_type` 维度字段（取值同上）：
