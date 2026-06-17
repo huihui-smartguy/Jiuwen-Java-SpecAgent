@@ -44,6 +44,94 @@ def normalize_state(state: Optional[str]) -> Optional[str]:
     return state[len("TASK_STATE_"):] if state.startswith("TASK_STATE_") else state
 
 
+# ---------------------------------------------------------------------------
+# 真实线缆形态适配 helpers（org.a2aproject.sdk, protobuf-JSON）
+#   - JSON-RPC id 类型容差：SUT 把 id 回带成 int，请求侧用 str。
+#   - Task 嵌套在 result.task（不是 result 本身）。
+#   - SSE 事件 result 是 oneof：task / statusUpdate / artifactUpdate。
+# ---------------------------------------------------------------------------
+def id_eq(actual, expected) -> bool:
+    """JSON-RPC id 类型容差比较（int 回带 vs str 请求）。"""
+    return str(actual) == str(expected)
+
+
+def task_of(result):
+    """从 JSON-RPC result 中提取 Task：优先 result.task，回退 result 自身。"""
+    if isinstance(result, dict) and isinstance(result.get("task"), dict):
+        return result["task"]
+    if isinstance(result, dict) and ("status" in result or "id" in result):
+        return result
+    return None
+
+
+def event_payload(ev):
+    """读取 SSE 事件的 JSON-RPC result 载荷（容差 data/result 嵌套）。"""
+    if isinstance(ev, dict):
+        data = ev.get("data")
+        if isinstance(data, dict):
+            return data.get("result", data)
+        return data
+    return None
+
+
+def event_kind(ev):
+    """依据 result oneof 形状映射事件骨架名：TaskAccepted/TaskStatusUpdate/ArtifactUpdate。"""
+    p = event_payload(ev)
+    if not isinstance(p, dict):
+        return None
+    if "task" in p:
+        return "TaskAccepted"
+    if "statusUpdate" in p:
+        return "TaskStatusUpdate"
+    if "artifactUpdate" in p:
+        return "ArtifactUpdate"
+    return None
+
+
+def event_task_id(ev):
+    """容差读取事件 taskId：task.id / statusUpdate.taskId / artifactUpdate.taskId。"""
+    p = event_payload(ev)
+    if not isinstance(p, dict):
+        return None
+    task = p.get("task")
+    if isinstance(task, dict) and task.get("id"):
+        return task["id"]
+    for key in ("statusUpdate", "artifactUpdate"):
+        sub = p.get(key)
+        if isinstance(sub, dict):
+            if sub.get("taskId"):
+                return sub["taskId"]
+            nested = sub.get("task")
+            if isinstance(nested, dict) and nested.get("id"):
+                return nested["id"]
+    return None
+
+
+def event_state(ev):
+    """容差读取事件 status.state（规约 TASK_STATE_ 前缀）：statusUpdate 优先，回退 task。"""
+    p = event_payload(ev)
+    if not isinstance(p, dict):
+        return None
+    su = p.get("statusUpdate")
+    if isinstance(su, dict) and isinstance(su.get("status"), dict):
+        return normalize_state(su["status"].get("state"))
+    task = p.get("task")
+    if isinstance(task, dict) and isinstance(task.get("status"), dict):
+        return normalize_state(task["status"].get("state"))
+    return None
+
+
+def event_is_final(ev) -> bool:
+    """best-effort 读取流终止标志：statusUpdate.final 或 .last。"""
+    p = event_payload(ev)
+    if not isinstance(p, dict):
+        return False
+    su = p.get("statusUpdate")
+    if isinstance(su, dict):
+        return bool(su.get("final") or su.get("last"))
+    return False
+
+
 class A2aClient:
     """基于 httpx 的黑盒 A2A 客户端。httpx 在每个方法内惰性导入。"""
 

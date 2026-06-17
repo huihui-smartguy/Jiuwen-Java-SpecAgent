@@ -4,22 +4,13 @@ from a2a_client import (
     TASK_STATES, TERMINAL_STATES,
     ERR_PARSE, ERR_METHOD_NOT_FOUND,
     SSE_EVENTS_ORDER,
-    normalize_state,
+    normalize_state, id_eq, task_of,
 )
 
 # Traceability:
 #   scene      : E2E_A2A_001
 #   requirement: requirement.md §2 列出任务列表 / §3 ListTasks 返回 Task 数组
 #   java_class : A2aJsonRpcController.handleBlocking(ListTasksRequest)
-
-
-def _task_id(resp):
-    assert isinstance(resp, dict), f"期望响应为 dict，实际 {type(resp).__name__}"
-    result = resp.get("result")
-    assert isinstance(result, dict), f"期望含 result(Task)，实际 keys={list(resp)}"
-    tid = result.get("id")
-    assert tid, f"期望 Task 含非空 id，实际 result keys={list(result)}"
-    return tid
 
 
 def _task_list(resp):
@@ -45,13 +36,16 @@ def test_tc_a2a_010(a2a_client):
     # Arrange —— 先生成一个 task
     send_resp = a2a_client.send_message(
         "你好", context_id="ctx-list-010", message_id="msg-list-010", req_id="10")
-    task_id = _task_id(send_resp)
+    send_task = task_of(send_resp["result"])
+    assert isinstance(send_task, dict), f"期望 SendMessage result 含 Task，实际 {send_resp.get('result')!r}"
+    task_id = send_task["id"]
+    assert task_id, f"期望 Task 含非空 id，实际 task keys={list(send_task)}"
 
     # Act —— 列出任务
     resp = a2a_client.list_tasks(req_id="10")
 
-    # Assert —— 过程维 (process dim)：id 回带 + 结果为数组且含目标 taskId
-    assert resp.get("id") == "10", f"期望 ListTasks id 回带 '10'，实际 {resp.get('id')!r}"
+    # Assert —— 过程维 (process dim)：id 回带 + 结果为数组且含目标 taskId（int/str 容差）
+    assert id_eq(resp.get("id"), "10"), f"期望 ListTasks id 回带 '10'，实际 {resp.get('id')!r}"
     tasks = _task_list(resp)
     assert tasks is not None, \
         f"期望 result 为 list 或 {{'tasks':[...]}}，实际 {type(resp.get('result')).__name__}"

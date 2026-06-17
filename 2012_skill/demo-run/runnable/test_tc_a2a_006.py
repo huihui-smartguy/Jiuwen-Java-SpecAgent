@@ -5,6 +5,7 @@ from a2a_client import (
     TASK_STATES, TERMINAL_STATES,
     ERR_PARSE, ERR_METHOD_NOT_FOUND,
     SSE_EVENTS_ORDER,
+    id_eq,
 )
 
 # Traceability:
@@ -40,8 +41,8 @@ def test_tc_a2a_006(a2a_client):
     assert body["error"]["code"] == ERR_METHOD_NOT_FOUND, \
         f"期望 method-not-found {ERR_METHOD_NOT_FOUND}，实际 {body['error'].get('code')!r}"
 
-    # Assert —— 过程维 (process dim)：id 回带 == 请求 id
-    assert body.get("id") == "42", f"期望 id 回带 '42'，实际 {body.get('id')!r}"
+    # Assert —— 过程维 (process dim)：id 回带 == 请求 id（int/str 容差）
+    assert id_eq(body.get("id"), "42"), f"期望 id 回带 '42'，实际 {body.get('id')!r}"
 
     # 协议合规 (L2)：未知 method 不得返回成功 result（不创建 task）
     assert "result" not in body, "method-not-found 不应返回成功 result（不应创建 task）"

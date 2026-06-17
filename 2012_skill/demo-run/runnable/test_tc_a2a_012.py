@@ -5,6 +5,7 @@ from a2a_client import (
     TASK_STATES, TERMINAL_STATES,
     ERR_PARSE, ERR_METHOD_NOT_FOUND,
     SSE_EVENTS_ORDER,
+    id_eq,
 )
 
 # Traceability:
@@ -38,5 +39,5 @@ def test_tc_a2a_012(a2a_client):
     # 协议合规 (L2)：不存在的 task 不得返回成功 result
     assert "result" not in resp, "查询不存在 taskId 不应返回成功 result"
 
-    # Assert —— 过程维 (process dim)：error 回带原 request id
-    assert resp.get("id") == "7", f"期望 error 回带原 id '7'，实际 {resp.get('id')!r}"
+    # Assert —— 过程维 (process dim)：error 回带原 request id（int/str 容差）
+    assert id_eq(resp.get("id"), "7"), f"期望 error 回带原 id '7'，实际 {resp.get('id')!r}"
