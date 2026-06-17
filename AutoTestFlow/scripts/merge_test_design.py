@@ -60,10 +60,10 @@ def build_scene_tc_mapping(cases: list[dict]) -> dict:
 
 
 def count_by_type(cases: list[dict]) -> dict:
-    """按test_type统计用例数。"""
+    """按用例类别(case_kind)统计用例数（兼容旧字段 test_type）。"""
     counts = defaultdict(int)
     for case in cases:
-        tt = case.get("test_type", "unknown")
+        tt = case.get("case_kind") or case.get("test_type", "unknown")
         counts[tt] += 1
     return dict(counts)
 

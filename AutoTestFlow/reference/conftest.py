@@ -1,21 +1,25 @@
 # -*- coding: utf-8 -*-
-"""pytest fixtures for 黑盒 A2A 用例 + 交互轨迹日志配置。"""
+"""pytest fixtures for 通用黑盒 HTTP 用例 + 交互轨迹日志配置。
+
+通用脚手架：提供 base_url / http_client 两个 fixture，并把 logger "autotestflow"
+的请求/响应/SSE 行打到 console + trace/session.log。协议特化（A2A 等）见 examples/。
+"""
 
 import os
 import logging
 
 import pytest
 
-import a2a_client
-from a2a_client import A2aClient, base_url_from_env
+import http_client
+from http_client import HttpClient, base_url_from_env
 
 
 # ---------------------------------------------------------------------------
-# 日志：把 logger "a2a" 的请求/响应/SSE 行打到 stdout（配合 -s/--log-cli-level）；
+# 日志：把 logger "autotestflow" 的请求/响应/SSE 行打到 stdout（配合 -s/--log-cli-level）；
 # 若设置 A2A_TRACE_DIR，再加一个 {dir}/session.log 文件 handler。只配置一次。
 # ---------------------------------------------------------------------------
 def _configure_logging():
-    log = logging.getLogger("a2a")
+    log = logging.getLogger("autotestflow")
     log.setLevel(logging.INFO)
     fmt = logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s")
 
@@ -53,20 +57,20 @@ _configure_logging()
 
 @pytest.fixture(scope="session")
 def base_url() -> str:
-    """读取 A2A_BASE_URL（默认 http://localhost:8080）。"""
+    """读取 BASE_URL（默认 http://localhost:8080）。"""
     return base_url_from_env()
 
 
 @pytest.fixture
-def a2a_client(base_url) -> A2aClient:
-    """黑盒 A2A 客户端实例（httpx 惰性导入，无服务时连接失败=env_issue）。"""
-    return A2aClient(base_url=base_url)
+def http_client(base_url) -> HttpClient:
+    """通用黑盒 HTTP 客户端实例（httpx 惰性导入，无服务时连接失败=env_issue）。"""
+    return HttpClient(base_url=base_url)
 
 
 @pytest.fixture(autouse=True)
 def _trace(request):
     """每个用例：开始时绑定 case 名；结束时（若开启 trace）打印该用例轨迹文件路径。"""
-    a2a_client.set_current_case(request.node.name)
+    http_client.set_current_case(request.node.name)
     yield
     trace_dir = os.environ.get("A2A_TRACE_DIR")
     if trace_dir:
@@ -75,5 +79,6 @@ def _trace(request):
 
 
 def pytest_configure(config):
-    config.addinivalue_line("markers", "a2a: 黑盒 A2A 协议用例")
+    config.addinivalue_line("markers", "scenario: 端到端场景用例")
+    config.addinivalue_line("markers", "dfx: 质量/DFX 维度用例")
     config.addinivalue_line("markers", "sse: 流式 SSE 用例")

@@ -230,21 +230,26 @@ def save_json(path: str, data, indent=2):
         json.dump(data, f, ensure_ascii=False, indent=indent)
 
 
+def _case_kind(c: dict) -> str:
+    """用例 E2E 类别：优先新字段 case_kind，回退旧字段 test_type。"""
+    return c.get("case_kind") or c.get("test_type", "")
+
+
 def select_p0_cases(cases: list[dict], p0_count: int) -> list[dict]:
-    """筛选P0用例：按 test_type 分组，每组选1个，优先正常E2E。
+    """筛选P0用例：按用例类别(case_kind)分组，每组选1个，优先正常E2E。
 
     算法：
     1. 只从 priority="P0" 的用例中选
-    2. 按 test_type 分组，优先级：正常E2E > 异常E2E > 其他
+    2. 按 case_kind 分组，优先级：正常E2E > 异常E2E > 其他
     3. 每组取 case_id 最小的（最早定义的用例）
-    4. P0用例不足 p0_count 时，从非P0用例中按 test_type 多样性补充
+    4. P0用例不足 p0_count 时，从非P0用例中按 case_kind 多样性补充
     """
     type_order = ["正常E2E", "异常E2E", "变体E2E", "边界E2E", "约束E2E", "质量E2E"]
 
     p0_pool = [c for c in cases if c.get("priority") == "P0"]
     by_type = defaultdict(list)
     for c in p0_pool:
-        by_type[c.get("test_type", "")].append(c)
+        by_type[_case_kind(c)].append(c)
     # 每组按 case_id 排序
     for t in by_type:
         by_type[t].sort(key=lambda c: c["case_id"])
@@ -268,7 +273,7 @@ def select_p0_cases(cases: list[dict], p0_count: int) -> list[dict]:
         all_by_type = defaultdict(list)
         for c in cases:
             if c["case_id"] not in seen_ids:
-                all_by_type[c.get("test_type", "")].append(c)
+                all_by_type[_case_kind(c)].append(c)
         for t in type_order:
             if len(selected) >= p0_count:
                 break
@@ -281,12 +286,12 @@ def select_p0_cases(cases: list[dict], p0_count: int) -> list[dict]:
 
 
 def match_p0_ref(case: dict, p0_cases: list[dict]) -> str:
-    """为用例匹配最相关的P0参考用例。优先同 test_type，其次任意P0。"""
-    same_type = [p for p in p0_cases if p.get("test_type") == case.get("test_type")]
+    """为用例匹配最相关的P0参考用例。优先同用例类别(case_kind)，其次任意P0。"""
+    same_type = [p for p in p0_cases if _case_kind(p) == _case_kind(case)]
     if same_type:
         return same_type[0]["case_id"]
     # 优先正常E2E
-    normal = [p for p in p0_cases if p.get("test_type") == "正常E2E"]
+    normal = [p for p in p0_cases if _case_kind(p) == "正常E2E"]
     if normal:
         return normal[0]["case_id"]
     return p0_cases[0]["case_id"] if p0_cases else ""
@@ -526,7 +531,7 @@ def main():
     # 输出摘要
     type_counts = defaultdict(int)
     for c in p0_cases:
-        type_counts[c.get("test_type", "?")] += 1
+        type_counts[_case_kind(c) or "?"] += 1
     type_str = " / ".join(f"{t} {n}" for t, n in sorted(type_counts.items()))
 
     print(f"P0: {len(p0_cases)} ({type_str})")

@@ -11,7 +11,7 @@
 
 - **不读取需求侧任何文件**（requirement_analysis.md / s1_*.json）
 - **不生成场景，只编录代码事实**
-- 被测系统（SUT）为 Java/Spring 服务，对外通过 HTTP/RPC 端点暴露（A2A 仅为示例锚点，**不要硬编码 A2A**，按实际控制器/协议识别）
+- 被测系统（SUT）为 Java/Spring 服务，对外通过 HTTP/RPC 端点暴露；按实际控制器/协议识别，**不要硬编码任何特定协议**（具体协议形态示例见 examples/a2a/）
 
 ---
 
@@ -29,15 +29,15 @@
 **读取策略**：分层读取，优先获取对外端点与序列化模型，内部实现用Grep补充。
 
 #### 2a. P0 — 必读（先探测，再并行 Read）
-- **探测结构**：Glob `{code_path}/**/*.java` + Glob `{code_path}/**/pom.xml` / `**/build.gradle` → 识别模块布局与依赖（A2A SDK、序列化库如 protobuf-JSON/Jackson）
+- **探测结构**：Glob `{code_path}/**/*.java` + Glob `{code_path}/**/pom.xml` / `**/build.gradle` → 识别模块布局与依赖（协议 SDK、序列化库如 protobuf-JSON/Jackson）
 - **入口控制器探测**：Grep `pattern="@RestController|@Controller|@RequestMapping|@PostMapping|@GetMapping"` path=`{code_path}` → Read 命中类（获取端点）
 - **异常映射探测**：Grep `pattern="@ControllerAdvice|@RestControllerAdvice|@ExceptionHandler"` path=`{code_path}` → Read 命中类
-- **序列化/模型探测**：Grep `pattern="enum |TASK_STATE|JsonRpc|oneof|@JsonProperty"` path=`{code_path}` → Read 状态枚举、响应包装类、消息/Task 模型定义
+- **序列化/模型探测**：Grep `pattern="enum |oneof|@JsonProperty"` path=`{code_path}` → Read 状态/类型枚举、响应包装类、请求/响应模型定义（如有特定协议关键字如状态枚举前缀、RPC 包装类名，按实际补充；示例见 examples/a2a/）
 - 如 `{output_dir}/.state/skeleton/*` 存在（需求侧请求/响应样例），一并读取
 
 #### 2b. P1 — 入口与模型文件（并行 Read）
 - 对命中的控制器/Advice 类 Read 全量，重点：`@*Mapping` 方法签名、`@RequestBody`/`@RequestParam` 入参、返回类型、错误码常量
-- 对响应包装类（如 `JsonRpcResponse`、`result.task` 嵌套结构）、状态枚举（枚举名/前缀）Read 定义
+- 对响应包装类（如 RPC 响应包装、嵌套 result 结构）、状态枚举（枚举名/前缀）Read 定义（具体包装形态示例见 examples/a2a/）
 
 #### 2c. P2 — 内部实现（仅 Grep，不逐文件Read）
 - Grep `pattern="throw new |@ExceptionHandler"` path=`{code_path}`（异常抛出/映射）
@@ -100,7 +100,7 @@
 | L2: 用户可感知 | 异常被 `@ExceptionHandler` 映射为错误码/错误响应，或直接传播到响应体 | 内部吞掉 → 跳过 |
 | L3: 非通用框架异常 | 排除纯内部/框架异常（无对外映射） | 纯内部 → 跳过 |
 
-每个保留的异常记录：exception_type（Java 异常类）, message_pattern, trigger_condition, enclosing_method, location（文件:行号）, **reachable_from**（可达端点列表）, **error_code**（映射后的对外错误码，如 -32700/-32601/-32001 或 HTTP 状态码；无则填 null）。
+每个保留的异常记录：exception_type（Java 异常类）, message_pattern, trigger_condition, enclosing_method, location（文件:行号）, **reachable_from**（可达端点列表）, **error_code**（映射后的对外错误码，如协议错误码或 HTTP 状态码；无则填 null。具体错误码示例见 examples/a2a/）。
 
 **额外编录 error_code 目录**：从 `@ExceptionHandler`、错误码常量、枚举中提取所有对外错误码（code + 含义 + 触发条件），供 stage2.5 汇编错误码 catalog。
 
@@ -123,14 +123,14 @@
 > 本步骤专为下游 contract.md 校准服务。从源码采集**线缆形态事实**，不臆造。
 
 采集并写入 s2_code_facts.json 的 `serialization_facts` 字段：
-- **响应包装**：成功响应的 result 包装形态（如 `result.task` 嵌套 vs `result` 直接是 Task），从控制器返回类型/包装类推断
-- **id 类型**：JSON-RPC/请求标识在响应中的回带类型（int / string）
-- **枚举命名**：状态/类型枚举的全名与前缀（如 `TASK_STATE_*`、`ROLE_*`）
-- **事件 oneof 形态**（如有流式/SSE）：事件载荷 oneof 的字段名（如 task/statusUpdate/artifactUpdate）及 state/taskId 所在路径
+- **响应包装**：成功响应的 result 包装形态（如顶层 result 是否再嵌套一层业务对象 vs result 直接是业务对象），从控制器返回类型/包装类推断
+- **id 类型**：请求标识在响应中的回带类型（int / string）
+- **枚举命名**：状态/类型枚举的全名与前缀（记录实际前缀，如 `XXX_STATE_*`、`ROLE_*` 等）
+- **事件 oneof 形态**（如有流式/SSE）：事件载荷 oneof 的字段名及 state/标识所在路径
 - **错误码 catalog**：第五步采集的 error_code 集合
-- **入口/卡片字段**：服务自描述（如 AgentCard/能力端点）的字段及其是否依赖部署配置（如 base url）
+- **入口/自描述字段**：服务自描述（如能力端点/服务卡片）的字段及其是否依赖部署配置（如 base url 等部署相关值）
 
-每条事实标注 `evidence`（源文件:行号）。无法从源码确定的形态标注 `needs-runtime-verify`。
+（以上各项的具体协议形态示例见 examples/a2a/。）每条事实标注 `evidence`（源文件:行号）。无法从源码确定的形态标注 `needs-runtime-verify`。
 
 ### 第八步：代码独有用户场景识别
 
@@ -149,8 +149,8 @@
 
 ```json
 {
-  "entry": "场景主入口端点（如 SendMessage）",
-  "related_methods": ["SendMessage", "GetTask", "CancelTask"],
+  "entry": "场景主入口端点/方法",
+  "related_methods": ["主入口方法", "相关方法1", "相关方法2"],
   "description": "用户操作场景描述",
   "evidence": "独立场景判定依据",
   "scenario_type": "independent | sub_operation"

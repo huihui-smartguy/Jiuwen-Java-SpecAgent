@@ -56,6 +56,7 @@ S1和S3a采用**拆分文件模式**：索引文件 + 逐场景文件。S2产出
   "id": "FS-NNN",
   "name": "场景名称",
   "type": "flow | framework | quality",
+  "test_type": "scenario | dfx",
   "priority": "P0 | P1 | P2",
   "source": "requirement | code",
   "verify_points": ["验证点1"],
@@ -184,9 +185,22 @@ flow_scenarios 中每个元素与单场景文件结构相同，额外字段：
 |------|------|------|
 | id | 是 | 编号 FS-NNN |
 | type | 是 | flow=流程 / framework=框架 / quality=质量 |
+| test_type | 是 | 测试维度。`scenario`=场景维度（flow/framework/quality，本 skill 已实现并落地执行）；`dfx`=DFX 维度（可靠性/性能/安全等非功能，当前为**规划占位**，仅登记不生成可执行用例）。默认 `scenario` |
 | verify_points | 是 | 主流程验证点列表 |
 | steps | 是 | 至少1个步骤 |
 | branches | 是 | 6类分支，无分支填空数组 |
+
+### test_type / dimension（测试维度，通用）
+
+> 与 `type`（flow/framework/quality，场景的内部分类）正交。`test_type` 标记该场景/用例属于哪个**测试维度**，便于按维度统计设计覆盖与执行结果。
+
+| 取值 | 含义 | 状态 |
+|------|------|------|
+| `scenario` | 场景维度：基于需求/代码事实展开的功能流程、框架组合、质量属性场景 | 已实现（生成 + 执行） |
+| `dfx` | DFX 维度：Design for X（可靠性 / 性能 / 安全 / 可维护性等非功能要求） | 规划占位（仅登记，不生成可执行用例；待后续版本实现） |
+
+- 默认值为 `scenario`。未显式标注 `dfx` 的场景/用例一律按 `scenario` 处理。
+- `dfx` 占位条目应记录其维度（如 `dimension: reliability|performance|security`）与触发线索，供报告 DFX 维度占位说明引用，**不参与 stage4 执行**。
 | exploration_log | 否 | 追问发现记录（仅S1输出） |
 | truncated_cross | 否 | 被截断的cross分支（仅id+description，超出5个上限时记录） |
 | framework_scene | 否 | 原始框架场景ID（仅 type=framework） |
@@ -355,3 +369,17 @@ flow_scenarios 中每个元素与单场景文件结构相同，额外字段：
 | description | 用户操作场景描述 |
 | evidence | 独立场景判定依据 |
 | scenario_type | independent=独立用户场景 / sub_operation=应归入已有场景 |
+
+---
+
+## 测试用例 test_type 字段（阶段3b 产出）
+
+阶段3b 将场景展开为测试用例，每个用例必须携带 `test_type` 维度字段（取值同上）：
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| test_type | 是 | 默认 `"scenario"`；`"dfx"` 为规划占位（仅登记，不生成可执行代码、不进入 stage4） |
+| dimension | 否 | 仅当 test_type=`dfx` 时填写：`reliability` / `performance` / `security` / … |
+| oracle_refs | 是 | 每条判据必须引用 `contract.md` 的某个 specId（见 stage3b 模板） |
+
+> `test_type` 继承自来源场景；场景未标注时默认 `scenario`。`dfx` 用例由编排器跳过 stage4 执行。

@@ -2,7 +2,8 @@
 
 > 本模板定义 stage2 对 Java/Spring SUT 静态扫描后的标准输出格式。
 > 扫描方法见 `shared/java_scan_guide.md`。**所填事实是派生 `contract.md` 的静态依据，运行时以 probe 校准为准。**
-> 这是一份**填空模板**——把 `{占位}` 替换为真实值，无内容的表保留表头并标注"无"。
+> 这是一份**填空模板**——把 `{占位}` 替换为真实值，无内容的表保留表头并标注“无”。
+> 模板**协议无关**；标注 `【示例】` 的填法仅为某一协议（如 A2A/JSON-RPC）举例，按实际 SUT 替换。
 
 ---
 
@@ -15,7 +16,7 @@
 **模块**: {module}
 **分析日期**: {date}
 **扫描文件数**: {N}
-**SDK / 序列化**: {如 org.a2aproject.sdk · protobuf-JSON}
+**SDK / 序列化**: {如 Jackson · 标准 JSON / protobuf-JSON / ...}
 
 ---
 
@@ -24,7 +25,7 @@
 - 代码路径: {code_path}
 - 扫描模式: 静态分析（注解/常量/枚举/序列化）
 - 框架: Spring Boot {version}
-- 对外协议: {如 JSON-RPC over POST /a2a + GET AgentCard}
+- 对外协议: {如 REST over HTTP / JSON-RPC over POST + GET 发现端点}
 
 ---
 
@@ -32,10 +33,10 @@
 
 | 类 | 类级注解 | 方法注解 | HTTP 方法 | 路径 | 公开方法 | 入参 | 源文件:行 |
 |----|----------|----------|-----------|------|----------|------|-----------|
-| {Controller} | @RestController | @PostMapping | POST | /a2a | {handle()} | @RequestBody {Body} | {file}:{line} |
+| {Controller} | @RestController | @PostMapping | POST | {/path} | {handle()} | @RequestBody {Body} | {file}:{line} |
 | ... | | | | | | | |
 
-> RPC 分发说明（如适用）：URL 单端点，业务方法在 body 的 `method` 字段（{SendMessage/GetTask/...}）。
+> RPC 分发说明（如适用）：URL 单端点，业务方法在 body 的某字段。【示例】A2A：method 字段（SendMessage/GetTask/...）。
 
 ---
 
@@ -43,30 +44,34 @@
 
 | 错误码 | 常量/枚举名 | 触发条件 | message 模式 | @ExceptionHandler 所在类 | 规约地位 | 源文件:行 |
 |--------|-------------|----------|--------------|--------------------------|----------|-----------|
-| {-32700} | {ERR_PARSE} | {非法 JSON 请求体} | {JSON_PARSE} | {GlobalExceptionAdvice} | spec-required | {file}:{line} |
+| {code} | {ERR_XXX} | {触发条件} | {message 模式} | {GlobalExceptionAdvice} | spec-required | {file}:{line} |
 | ... | | | | | | |
+
+> 【示例】A2A：`-32700` / `ERR_PARSE` / 非法 JSON 请求体 / `JSON_PARSE`。
 
 ---
 
 ## 四、状态 / 结果枚举
 
-| 枚举类 | 取值（短名） | protobuf-JSON 全名 | 终态? | 源文件:行 |
+| 枚举类 | 取值（短名） | 序列化全名（如有） | 终态? | 源文件:行 |
 |--------|--------------|--------------------|:---:|-----------|
-| {TaskState} | {COMPLETED} | {TASK_STATE_COMPLETED} | 是 | {file}:{line} |
+| {EnumClass} | {COMPLETED} | {如 TASK_STATE_COMPLETED} | 是 | {file}:{line} |
 | ... | | | | |
 
-> 线缆实际写法（短名 / 全名）以 stage2.5 probe 为准；断言侧经 `normalize_state()` 容错。
+> 线缆实际写法（短名 / 全名）以 stage2.5 probe 为准；断言侧经 `normalize_state()` 容错常见前缀。
 
 ---
 
 ## 五、响应序列化形态
 
-| 场景 | 静态推断的嵌套形态 | 容差访问器 | 备注（待 probe 确认） |
-|------|--------------------|------------|------------------------|
-| 成功 result | {result.task（oneof 包装）} | `task_of` | R1 反例：勿裸取 result |
-| JSON-RPC id | {回带 int / 原样} | `id_eq` | R2 反例：类型容差 |
-| SSE 事件 | {result.{task\|statusUpdate\|artifactUpdate}} | `event_kind/event_state` | R3 反例：oneof |
+| 场景 | 静态推断的嵌套形态 | 容差访问 | 备注（待 probe 确认） |
+|------|--------------------|----------|------------------------|
+| 成功响应 | {如统一包装 result.xxx / 裸结构} | {访问路径} | {} |
+| id / 回带字段 | {回带类型，可能 int↔str} | `id_eq` | {} |
+| 流式/多态事件 | {oneof / 多态子结构} | {事件访问器} | {} |
 | 错误响应 | {error.code / error.message + 回带 id} | — | — |
+
+> 【示例】A2A：成功 result 包在 `result.task`（用 `task_of`）；SSE 事件 oneof（用 `event_kind/event_state`）；id 回带 int（用 `id_eq`）。
 
 ---
 
@@ -75,9 +80,9 @@
 | 项 | 静态发现 | 待 probe 确认 |
 |----|----------|----------------|
 | 流式端点标识 | {produces=text/event-stream / SseEmitter / Flux} | — |
-| 事件类型类 | {TaskStatusUpdateEvent, ArtifactUpdateEvent} | 真实流是否含全部类型 |
-| 终止标志 | {statusUpdate.final / .last} | `event_is_final` |
-| 真实流不变量 | {N×TaskStatusUpdate，末态终态} | 以实测为准 |
+| 事件类型类 | {各事件类} | 真实流是否含全部类型 |
+| 终止标志 | {final / last / done 字段} | 末事件判定 |
+| 真实流不变量 | {事件非空 + 每帧可识别 + 末态终态} | 以实测为准 |
 
 ---
 
@@ -96,8 +101,10 @@
 
 | 配置项 | 来源 | 影响字段 | 类别 | 断言强度 |
 |--------|------|----------|------|----------|
-| {public-base-url} | {application.yml} | {AgentCard.url} | deployment-config-dependent | 观察项（非硬失败） |
+| {config-key} | {application.yml} | {影响字段} | deployment-config-dependent | 观察项（非硬失败） |
 | ... | | | | |
+
+> 【示例】A2A：`public-base-url` 影响 `AgentCard.url`，未配置时为空。
 
 ---
 
