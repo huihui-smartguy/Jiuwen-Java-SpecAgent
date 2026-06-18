@@ -37,6 +37,16 @@ import socket
 import argparse
 import datetime
 
+# ---------------------------------------------------------------------------
+# 0a. 代理豁免 —— 探针直连 SUT， 不经过系统/企业 HTTP 代理。
+#     在任何 httpx 导入前执行，确保 httpx 不会将请求错误路由到不可达的代理。
+# ---------------------------------------------------------------------------
+os.environ.setdefault("no_proxy", "")
+if os.environ.get("no_proxy") != "*":
+    os.environ["no_proxy"] = os.environ.get("no_proxy", "") + ",*"
+os.environ["NO_PROXY"] = os.environ["no_proxy"]
+
+
 # httpx 不在模块顶层导入；仅在真正发请求时惰性导入（见 _http_post / _http_get）。
 
 MAX_SSE_EVENTS = 5  # 流式探针最多读取的 SSE 事件数
@@ -109,7 +119,8 @@ def _http_post(url, body, accept, timeout):
     import httpx  # 惰性导入
     headers = {"Content-Type": "application/json", "Accept": accept}
     data = body if isinstance(body, str) else json.dumps(body)
-    resp = httpx.post(url, content=data, headers=headers, timeout=timeout)
+    with httpx.Client(timeout=timeout, proxy=None) as client:
+        resp = client.post(url, content=data, headers=headers)
     return resp.status_code, _parse_body(resp)
 
 
@@ -118,29 +129,31 @@ def _http_post_stream(url, body, accept, timeout, max_events):
     import httpx  # 惰性导入
     headers = {"Content-Type": "application/json", "Accept": accept}
     events = []
-    with httpx.stream("POST", url, content=json.dumps(body),
-                      headers=headers, timeout=timeout) as resp:
-        status = resp.status_code
-        buf = []
-        for line in resp.iter_lines():
-            if line is None:
-                continue
-            line = line if isinstance(line, str) else line.decode("utf-8", "replace")
-            if line.strip() == "":
-                ev = _parse_sse_block(buf)
-                buf = []
-                if ev is not None:
-                    events.append(ev)
-                    if len(events) >= max_events:
-                        break
-            else:
-                buf.append(line)
+    with httpx.Client(timeout=timeout, proxy=None) as client:
+        with client.stream("POST", url, content=json.dumps(body),
+                          headers=headers) as resp:
+            status = resp.status_code
+            buf = []
+            for line in resp.iter_lines():
+                if line is None:
+                    continue
+                line = line if isinstance(line, str) else line.decode("utf-8", "replace")
+                if line.strip() == "":
+                    ev = _parse_sse_block(buf)
+                    buf = []
+                    if ev is not None:
+                        events.append(ev)
+                        if len(events) >= max_events:
+                            break
+                else:
+                    buf.append(line)
     return status, events
 
 
 def _http_get(url, accept, timeout):
     import httpx  # 惰性导入
-    resp = httpx.get(url, headers={"Accept": accept}, timeout=timeout)
+    with httpx.Client(timeout=timeout, proxy=None) as client:
+        resp = client.get(url, headers={"Accept": accept})
     return resp.status_code, _parse_body(resp)
 
 

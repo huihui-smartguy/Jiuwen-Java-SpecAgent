@@ -26,6 +26,15 @@ import contextvars
 from typing import Iterator, Optional, Union
 
 # ---------------------------------------------------------------------------
+# 0a. 代理豁免 —— 黑盒测试框架直连 SUT， 不经过系统/企业 HTTP 代理。
+#     在任何 httpx 导入前执行，确保 httpx 不会将请求错误路由到不可达的代理。
+# ---------------------------------------------------------------------------
+os.environ.setdefault("no_proxy", "")
+if os.environ.get("no_proxy") != "*":
+    os.environ["no_proxy"] = os.environ.get("no_proxy", "") + ",*"
+os.environ["NO_PROXY"] = os.environ["no_proxy"]
+
+# ---------------------------------------------------------------------------
 # 0. 交互轨迹记录器（recorder）——把 test-agent ↔ SUT 的请求/响应/SSE 落盘+打印
 #    纯 Python，无 httpx 依赖；任何异常都吞掉，绝不影响被测流程。
 # ---------------------------------------------------------------------------
@@ -246,7 +255,7 @@ class HttpClient:
         url = self._url(path)
         headers = {"Accept": accept}
         record_request("GET", url, headers, None)
-        with httpx.Client(timeout=self.timeout) as client:
+        with httpx.Client(timeout=self.timeout, proxy=None) as client:
             resp = client.get(url, headers=headers)
             record_response("GET", resp.status_code, _parse_response(resp))
             return resp
@@ -257,7 +266,7 @@ class HttpClient:
         url = self._url(path)
         headers = {"Content-Type": "application/json", "Accept": accept}
         record_request("POST", url, headers, body)
-        with httpx.Client(timeout=self.timeout) as client:
+        with httpx.Client(timeout=self.timeout, proxy=None) as client:
             resp = client.post(url, content=json.dumps(body), headers=headers)
             record_response("POST", resp.status_code, _parse_response(resp))
             return resp
@@ -270,7 +279,7 @@ class HttpClient:
         record_request("POST", url, headers, body)
         t0 = time.time()
         idx = 0
-        with httpx.Client(timeout=self.timeout) as client:
+        with httpx.Client(timeout=self.timeout, proxy=None) as client:
             with client.stream("POST", url,
                                content=json.dumps(body), headers=headers) as resp:
                 for event in parse_sse_lines(resp.iter_lines()):
@@ -285,7 +294,7 @@ class HttpClient:
         content = body if isinstance(body, str) else json.dumps(body)
         headers = {"Content-Type": "application/json", "Accept": accept}
         record_request("POST", url, headers, body)  # body 可能是非法字符串，原样记录
-        with httpx.Client(timeout=self.timeout) as client:
+        with httpx.Client(timeout=self.timeout, proxy=None) as client:
             resp = client.post(url, content=content, headers=headers)
             record_response("POST", resp.status_code, _parse_response(resp))
             return resp
