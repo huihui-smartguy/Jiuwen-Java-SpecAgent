@@ -1,0 +1,42 @@
+{
+  "meta": { "source": "code", "module_role": "独立功能", "code_path": "fake_repo", "base_path": "/a2a" },
+  "entry_catalog": [
+    {
+      "class": "A2aJsonRpcController",
+      "method": "handle",
+      "signature": "POST /a2a (JSON-RPC dispatch: SendMessage/...)",
+      "params": [
+        { "name": "method", "type": "string", "required": true, "default": null },
+        { "name": "params.metadata.agentId", "type": "string", "required": false, "default": null }
+      ],
+      "source_file": "src/main/java/com/example/a2a/A2aJsonRpcController.java"
+    },
+    {
+      "class": "TaskService",
+      "method": "handle",
+      "signature": "TaskResult handle(String agentId, String text)",
+      "params": [
+        { "name": "agentId", "type": "string", "required": false, "default": null }
+      ],
+      "source_file": "src/main/java/com/example/a2a/TaskService.java"
+    },
+    {
+      "class": "JsonRpcResponse",
+      "method": "<init>",
+      "signature": "JsonRpcResponse(Object id, Object result)",
+      "params": [
+        { "name": "id", "type": "object", "required": true, "default": null }
+      ],
+      "source_file": "src/main/java/com/example/a2a/JsonRpcResponse.java"
+    }
+  ],
+  "exception_catalog": [],
+  "constraint_catalog": [],
+  "code_defects": [],
+  "serialization_facts": {
+    "response_wrapper": "result.task",
+    "id_type": "string",
+    "enum_prefix": "TASK_STATE_",
+    "event_oneof": "task/statusUpdate/artifactUpdate"
+  }
+}

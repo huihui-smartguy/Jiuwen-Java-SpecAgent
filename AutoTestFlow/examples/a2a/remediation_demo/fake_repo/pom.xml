@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 极简占位 POM：本 fixture 不真正编译（remediation.config.json 的 build_cmd 为 no-op `true`）。
+     仅用于让 apply_and_reverify.py 的"物化代码仓 + git apply + 路径白名单"在离线可跑通。 -->
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>spring-ai-ascend-demo</artifactId>
+  <version>0.1.0</version>
+  <packaging>jar</packaging>
+</project>

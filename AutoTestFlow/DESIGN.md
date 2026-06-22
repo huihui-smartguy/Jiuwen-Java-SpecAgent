@@ -1,6 +1,6 @@
 # AutoTestFlow · 设计原则
 
-本文档阐述 AutoTestFlow 的设计原则。AutoTestFlow 是需求驱动的测试智能体，面向 Java/Spring 被测系统(SUT)，当前以场景化测试实现，DFX 测试并行规划。以下六条原则是其各阶段编排与纪律的根基。
+本文档阐述 AutoTestFlow 的设计原则。AutoTestFlow 是需求驱动的测试智能体，面向 Java/Spring 被测系统(SUT)，当前以场景化测试实现，DFX 测试并行规划。以下七条原则是其各阶段编排与纪律的根基。
 
 > **无需 step1 预生成依赖**：脚手架内置于 `reference/`、判据形态由 stage2.5 契约自动校准、框架场景由 stage2 从代码结构自动派生（纯需求模式由 stage3aR 从需求侧派生），无外部预生成文件与手工前置步骤。
 
@@ -69,3 +69,13 @@
 - `dfx`（规划中、并行轨道）：性能/可靠性/安全/兼容性等非功能维度，当前为 `design_only` 占位，仅产出设计骨架。
 
 新增维度时复用既有调度框架（零知识调度 / 文件即协议 / 子 Agent 隔离），只扩充对应的场景与用例生成模板，不改动编排骨架。
+
+## 7. 自动修复：以契约为准、机器复验、人工门控
+
+报告（stage5）之后，对"测试不通过"中的 `sdk_defect`（`contract.md` 背书的真实违例）可选地闭环修复：深度分析 → 修被测**业务代码** + 加开发仓**回归自测** → 本地重建复验 → 提交 fork→upstream PR 并在 upstream 开 bug issue。该能力放大了 §2「不得自我认证」的风险，故以三条纪律约束（详见 `shared/remediation_rules.md`）：
+
+- **修向契约，不洗绿**：只修 SUT 业务代码使其符合 `contract.md` 的 spec-required 形态；绝不弱化/删除 AutoTestFlow 测试或既有自测断言、不改 `contract.md`；回归自测只新增。
+- **机器复验，非自证**：绿/红由确定性脚本**重跑未改动的失败用例 + 重建后的 SUT** 判定，LLM 不宣布"修好了"；未转绿不得开 PR（`require_green_before_pr` 不可关闭）。
+- **门控外发，最小影响**：总开关 `--remediate` 默认 `off`；一切 clone-push / PR / issue 前有**强制人工确认门**；仅 `sdk_defect` 触发，定位不到则只记 issue 不改码；配置 `switches.allow_*` 为文件级第二层保险。
+
+bug issue 必须给出两段证据——(a) **规格库/契约知识**（违例的 spec-required specId、命中的故障库条目与 validation_point）+ (b) **实测结果**（失败用例的请求/响应轨迹、期望 vs 实际）——以可追溯地论证缺陷成立。

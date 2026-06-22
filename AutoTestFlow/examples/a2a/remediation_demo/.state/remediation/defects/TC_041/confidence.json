@@ -1,0 +1,12 @@
+{
+  "case_id": "TC_041",
+  "spec_id": "SPEC-RESP-WRAP",
+  "localizable": true,
+  "confidence": "high",
+  "files_touched": ["src/main/java/com/example/a2a/TaskService.java"],
+  "adds": 5,
+  "dels": 2,
+  "needs_human": false,
+  "issue_title": "[spec-violation] SPEC-RESP-WRAP: 不存在的 agentId 返回 COMPLETED 而非 FAILED",
+  "reason": "trace 证明对 nonexistent agentId 返回 result.task.status.state=COMPLETED；contract SPEC-RESP-WRAP=spec-required；对齐故障库 F-REQ-011"
+}

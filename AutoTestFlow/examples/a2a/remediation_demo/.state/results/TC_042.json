@@ -1,0 +1,15 @@
+{
+  "case_id": "TC_042",
+  "status": "sdk_defect",
+  "class": "sdk_defect",
+  "fix_rounds": 0,
+  "trace_file": ".state/trace/TC_042.jsonl",
+  "fault_ref": "F-HIST-001",
+  "oracle_refs": ["SPEC-ID-TYPE"],
+  "sdk_defect": {
+    "spec_id": "SPEC-ID-TYPE",
+    "field": "id",
+    "expected": "响应 id 以字符串类型回带（== 请求 id '1'）",
+    "actual": "数字 1（int）"
+  }
+}

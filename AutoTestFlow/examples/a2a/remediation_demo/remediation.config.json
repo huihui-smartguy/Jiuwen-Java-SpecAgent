@@ -1,0 +1,47 @@
+{
+  "version": "2.0",
+  "sut": {
+    "name": "spring-ai-ascend-demo",
+    "base_url": "http://localhost:18080",
+    "readiness_probe": { "method": "GET", "path": "/.well-known/agent-card.json", "expect_status_lt": 500 }
+  },
+  "repo": {
+    "upstream_url": "fake_repo",
+    "ref": "v0.1.0",
+    "fork_url": "https://github.com/your-fork/spring-ai-ascend-demo",
+    "fork_remote_name": "fork",
+    "clone_path": ".state/remediation/repo",
+    "business_code_roots": ["src/main/java"],
+    "selftest_roots": ["src/test/java"],
+    "default_branch": "main"
+  },
+  "build": {
+    "tool": "maven",
+    "build_cmd": "true",
+    "selftest_cmd": "true",
+    "workdir": "."
+  },
+  "run": {
+    "restart_cmd": "true",
+    "stop_cmd": "true",
+    "restart_in_background": false,
+    "readiness_timeout_sec": 5
+  },
+  "pr": {
+    "branch_prefix": "autotestflow/fix",
+    "target_branch": "main",
+    "labels": ["bug", "auto-remediation"],
+    "draft": true
+  },
+  "issue": { "labels": ["bug", "spec-violation", "auto-remediation"] },
+  "switches": {
+    "allow_push": false,
+    "allow_open_pr": false,
+    "allow_open_issue": false,
+    "require_green_before_pr": true
+  },
+  "reverify": {
+    "simulate": true,
+    "simulated_after": { "TC_041": "passed", "TC_042": "passed" }
+  }
+}

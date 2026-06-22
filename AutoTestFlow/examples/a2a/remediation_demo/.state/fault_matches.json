@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "fault_lib_version": "1.1.0",
+    "overlay_version": null,
+    "contract_path": "contract.md",
+    "generated_by": "match_faults.py",
+    "contract_probe_status": "reachable",
+    "stats": { "faults_considered": 55, "scenes": 2, "matched": 2, "downgraded": 0, "truncated": 53, "enrichment_needed": 0 }
+  },
+  "fault_matches": [
+    {
+      "fault_id": "F-REQ-011",
+      "name": "引用不存在的关联资源",
+      "severity": "高",
+      "match_reason": ["reference_field:metadata.agentId", "tag:关联资源校验"],
+      "target_endpoints": [{ "http_method": "POST", "rpc_method": "SendMessage", "path": "/a2a", "entry": "A2aJsonRpcController.handle" }],
+      "target_scenes": ["FS-001"],
+      "branch_class": "exception",
+      "priority": "P1",
+      "trigger": "在 metadata.agentId 传入不存在的资源ID",
+      "expected_behavior_raw": "应返回错误响应或终态 FAILED，不执行无效操作",
+      "oracle_refs": [
+        { "spec_id": "SPEC-RESP-WRAP", "field": "result.task.status.state", "assert_level": "L2", "authority": "spec-required", "validation_point": "不存在的关联资源应终态 FAILED" }
+      ],
+      "reconciliation": "aligned",
+      "source": "global"
+    },
+    {
+      "fault_id": "F-HIST-001",
+      "name": "响应id字段类型不一致（int vs string）",
+      "severity": "高",
+      "match_reason": ["history:TC-A2A-001", "reference_field:id"],
+      "target_endpoints": [{ "http_method": "POST", "rpc_method": "SendMessage", "path": "/a2a", "entry": "A2aJsonRpcController.handle" }],
+      "target_scenes": ["FS-001"],
+      "branch_class": "exception",
+      "priority": "P0",
+      "trigger": "发送包含字符串 id 的请求",
+      "expected_behavior_raw": "响应 id 应为字符串类型且等于请求 id",
+      "oracle_refs": [
+        { "spec_id": "SPEC-ID-TYPE", "field": "id", "assert_level": "L2", "authority": "spec-required", "validation_point": "响应 id 字段类型 === 'string' 且 == 请求 id" }
+      ],
+      "reconciliation": "aligned",
+      "source": "global"
+    }
+  ]
+}
