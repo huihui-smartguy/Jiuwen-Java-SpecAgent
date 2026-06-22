@@ -12,7 +12,7 @@
 |------|------|
 | **定位** | 需求驱动的测试智能体，按"测试维度"抽象 |
 | **测试维度** | `scenario`（场景化，**已实现**）+ `dfx`（性能/可靠性/安全/兼容性等，**规划中、并行轨道**） |
-| **输入** | 需求文档 + 一个 Java/Spring 仓的模块路径 + 运行中 SUT 的 base-url |
+| **输入** | 需求文档 + 一个 Java/Spring 仓的模块路径 + 运行中 SUT 的 base-url +（可选）故障库（规格库） |
 | **输出** | 校准契约 + 测试场景 + 测试设计 + Python 黑盒用例 + 执行报告（含交互轨迹） |
 | **被测对象** | **任意 Java/Spring SUT**（REST/RPC）。被测协议/端点/响应契约的真实形态以 stage2.5 校准出的 `contract.md` 为准 |
 | **测试栈** | stage4 生成 Python `pytest` + `httpx` 黑盒用例，只经对外协议观测 |
@@ -51,12 +51,14 @@ AutoTestFlow/                       # Skill 本体
 │   └── client_reference.md         # 客户端方法表与判据约定
 ├── examples/
 │   └── a2a/                        # A2A 示例锚点（客户端专化 + 参考资产）
-├── scripts/                        # 确定性脚本（probe / merge / select / aggregate）
+├── scripts/                        # 确定性脚本（probe / match / merge / select / aggregate / record）
 │   ├── probe_contract.py           # stage2.5 探活校准 → contract.md
+│   ├── match_faults.py             # stage2.6 故障库匹配（contract 优先封顶）→ fault_matches.json
 │   ├── merge_enriched.py
 │   ├── merge_test_design.py
 │   ├── select_p0.py
-│   └── aggregate_results.py
+│   ├── aggregate_results.py
+│   └── record_faults.py            # stage5 子步：sdk_defect 闭环自积累（默认 overlay/dry-run）
 └── templates/                      # 各阶段子 Agent Prompt
 ```
 
@@ -89,24 +91,32 @@ cp -r AutoTestFlow <你的项目>/.claude/skills/
 | `需求.md` | 需求文档路径（必填） |
 | `<java仓>/<模块>` | 被测 Java/Spring 模块路径（stage2 静态扫描对象；省略则纯需求模式） |
 | `--sut-base-url` | 运行中 SUT 的 base-url（stage2.5 探活 + stage4 就绪门 + 执行） |
+| `--fault-lib` | 故障库（规格库）路径，供 stage2.6 匹配（默认自动探测 `Specification_Repository/rest_api_common_faults.json`） |
+| `--fault-overlay` | 项目级故障库 overlay（覆盖 / 禁用 / 项目特有故障） |
+| `--faults` | 故障库启用模式：`auto`（默认，探测到库即启用）/ `on` / `off` |
+| `--fault-enrich` | stage2.6b 可选 LLM 增强（模糊绑定 / 占位替换 / contract_conflict 检出）：`on` / `off`（默认）/ `auto` |
 
 > 不提供代码路径/PR/commit 时进入**纯需求模式**（1→2R→3aR→3b），只产出测试设计文档。
+> 完整参数（`--output-dir` / `--case-batch-size` / `--p0-count` / `--pr` / `--commit` 等）以 `SKILL.md`《参数》为准；此处仅列常用项。
+> 故障库（规格库）的详细用法见下文 **§7 故障库（规格库）使用**。
 
 ---
 
 ## 6. 端到端流程
 
 ```
-需求.md + Java模块 + SUT
+需求.md + Java模块 + SUT +（可选）故障库
    │
-   ├─ stage1   需求侧场景分析（flow/framework/quality）        ← 人工裁决 ✅（缺规格库，需把关）
+   ├─ stage1   需求侧场景分析（flow/framework/quality）        ← 人工裁决 ✅（FP 拆分/场景边界把关）
    ├─ stage2   Java/Spring 静态扫描 → code_analysis.md（java_scan_guide）
    ├─ stage2.5 契约校准：probe_contract.py 探活真实 SUT → contract.md   ← 判据权威性闸
+   ├─ stage2.6 故障库匹配（可选）：match_faults.py 四类触发 + contract 封顶 → fault_matches.json
+   │            └─ 2.6b（可选，--fault-enrich on）LLM 增强：模糊绑定 / 占位替换 / contract_conflict
    ├─ stage3a  场景富化（GAP + 框架补充）
-   ├─ stage3b  测试用例设计（断言按 contract.md）             ← 人工裁决 ✅（用例完备性把关）
+   ├─ stage3b  测试用例设计（断言按 contract.md）             ← 人工裁决 ✅（故障覆盖完备性由故障库背书自动通过；FP 拆分/断言仍人工）
    ├─ stage4   就绪门（探活）→ 生成 Python pytest+httpx 用例 → 执行 + 采集交互轨迹
    │            └─ 执行边界5分类：harness_defect / sut_unsatisfied / sdk_defect / env_issue / pass
-   └─ stage5   汇总报告（含轨迹、5分类分布、需求-实现形态差异观察）
+   └─ stage5   汇总报告（含轨迹、5分类分布、需求-实现形态差异观察）+ record_faults.py 闭环（仅 sdk_defect → 去重 → overlay）
 ```
 
 `校准 → 设计 → 生成 → 就绪门 → 执行+轨迹 → 报告`：判据先校准、再设计断言；执行前先探活；
@@ -114,7 +124,71 @@ cp -r AutoTestFlow <你的项目>/.claude/skills/
 
 ---
 
-## 7. 诚实说明
+## 7. 故障库（规格库）使用
+
+> **是什么**：故障库（规格库）是一份**外部可插拔**的缺陷经验知识源（`Specification_Repository/rest_api_common_faults.json`：通用故障类目 + 历史缺陷）。流水线判据（Oracle）来自"需求 + 真实契约"，能保证"形态正确、流程跑通"，但缺少"**应该测哪些失败模式**"。故障库正是补这块——经**文件注入**，**不硬编码**进 Skill 提示词。
+
+### 7.1 默认即启用（零配置）
+
+标准模式下 `--faults auto`（默认）会**自动探测** `Specification_Repository/rest_api_common_faults.json`；探到即在 **stage2.6** 把故障按四类触发（端点/方法、标签、历史缺陷、关联字段）匹配进流水线，并用 `contract.md` 的字段权威性分级对每条故障的断言级别做**契约优先封顶**（spec-required→至多 L2；config-dependent/契约静默/未知→降 L0/L1）。
+
+**优雅降级（硬保证）**：未发现故障库 / `--faults off` / 无 `contract.md`（纯需求模式）→ **不产出任何文件**，流水线与未接入故障库时**字节级一致**。
+
+### 7.2 启用 / 覆盖 / 增强
+
+| 诉求 | 做法 |
+|------|------|
+| 默认启用 | 标准调用即可（库在 `Specification_Repository/` 时自动探测） |
+| 显式指定库 | `--fault-lib <path> --faults on` |
+| 关闭 | `--faults off`（与未接入完全一致） |
+| 项目专化 | 复制 `Specification_Repository/project_faults.example.json` 为 `<proj>/fault_library/project_faults.json`，用 `--fault-overlay <path>` 注入（覆盖 / 禁用 / 项目特有故障 / 参数占位替换） |
+| LLM 增强（可选） | `--fault-enrich on` 开 stage2.6b：把自由文本判据**模糊绑定**到契约 specId、替换 overlay 残留 `{占位符}`、检出 `contract_conflict`（默认 `off`，opt-in） |
+
+```bash
+# 默认（自动探测 Specification_Repository/）
+/auto-test-flow 需求.md <java仓>/<模块> --sut-base-url http://host:port
+
+# 显式库 + 项目 overlay + LLM 增强
+/auto-test-flow 需求.md <java仓>/<模块> --sut-base-url http://host:port \
+    --fault-lib Specification_Repository/rest_api_common_faults.json \
+    --fault-overlay <proj>/fault_library/project_faults.json --fault-enrich on
+
+# 关闭
+/auto-test-flow 需求.md <java仓>/<模块> --sut-base-url http://host:port --faults off
+```
+
+### 7.3 闭环自积累
+
+stage5 子步 `record_faults.py` 把执行中**契约背书的真实违例**（仅 `class==sdk_defect`）蒸馏为 `history_faults`，去重后默认写**项目 overlay**（不污染全局精选库），默认 dry-run（`--write` 才落库）：
+
+```bash
+python AutoTestFlow/scripts/record_faults.py --output-dir <output_dir> \
+    --fault-lib Specification_Repository/rest_api_common_faults.json \
+    --overlay-path <proj>/fault_library/project_faults.json --write
+```
+
+安全收敛：绝不收 `sut_unsatisfied / harness_defect / env_issue`（避免把非缺陷沉淀成"历史缺陷"）。overlay→全局的晋升（人工评审 + PR）见 `Specification_Repository/README.md`。
+
+### 7.4 对人工裁决门的影响（保守降级）
+
+`fault_matches.json` 存在时，**仅 stage3b 门的"异常/边界/质量覆盖完备性"维度由故障库背书自动通过**（展示故障覆盖摘要）；**stage1 门**与 **stage3b 的"FP 拆分映射 / 断言合理性"维度仍强制人工**（故障库不覆盖这些判据）。
+
+### 7.5 产物与可复现 demo
+
+| 产物 | 说明 |
+|------|------|
+| `.state/fault_matches.json` | 故障注入计划（匹配 + 契约调和 + 配额） |
+| `.state/fault_contract_alignment.md` | 故障-契约对齐报告 |
+| `.state/new_faults_detected.json` | 本轮闭环候选（dry-run 输出） |
+| 用例字段 `fault_ref` | 故障导向用例的溯源标记 |
+
+**无需 SUT 即可复现**（确定性脚本）：见 [`examples/a2a/fault_demo/README.md`](examples/a2a/fault_demo/README.md)，含 match / aggregate / record 与 `--faults off` 降级回归的完整命令与 golden。
+
+**延伸阅读**：故障库结构 / overlay / 治理见 [`Specification_Repository/README.md`](../Specification_Repository/README.md)；特性总览见 [`ChangeLogs/v1.0-引入规格库与故障库.md`](../ChangeLogs/v1.0-引入规格库与故障库.md)；设计与论证见 [`FaultsAnalysis/`](../FaultsAnalysis/)。
+
+---
+
+## 8. 诚实说明
 
 | 事项 | 状态 |
 |------|------|
@@ -122,6 +196,6 @@ cp -r AutoTestFlow <你的项目>/.claude/skills/
 | **端到端实跑** | 需用户在**可达 SUT** 上验证（探活成功才进入 stage4 执行）|
 | **stage4 跨栈** | Python 黑盒测 Java SUT，跨栈方案；需用户在可达 SUT 上端到端验证 |
 | **示例锚定** | A2A/agent-runtime 是示例（见 `examples/a2a/`）；其他 SUT 按校准出的 `contract.md` 专化 `reference/http_client.py` |
-| **人工裁决** | 当前无业务规格库，stage1/stage3b 由人工裁决补位评判标准；规格库就位后可降级为自动 |
+| **人工裁决** | 故障库（规格库）已接入（`Specification_Repository`）；stage3b 的故障覆盖完备性维度可由故障库背书自动通过，stage1 与 FP 拆分/断言合理性仍人工 |
 
 > 设计立场：Oracle（`contract.md`）必须可信、可追溯，生成器不得自我认证。详见 `DESIGN.md`。
