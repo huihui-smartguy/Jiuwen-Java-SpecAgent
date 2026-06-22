@@ -435,6 +435,32 @@ def build_oracle_refs(fault: dict, contract: dict):
     return oracle_refs, reconciliation
 
 
+def enrich_hint(fault: dict, oracle_refs: list, reconciliation: str):
+    """计算 LLM 增强提示（阶段2.6b 用）。返回 {needs_bind, unbound_points, hints} 或 None。
+
+    置位条件（脚本难以确定性处理、值得 LLM 复核）：
+      - 存在未被任何 oracle_ref 绑定的 validation_point（specId 映射不足）；
+      - reconciliation==downgraded（契约静默/降级，LLM 可复核是否另有合适 specId 或确属观察）；
+      - 残留 {placeholder}（overlay 未被 parameter_config 替换）。
+    """
+    vpoints = (fault.get("test_strategy") or {}).get("validation_points") or []
+    covered = {o.get("validation_point", "") for o in oracle_refs if o.get("validation_point")}
+    unbound = [vp for vp in vpoints if vp and vp not in covered]
+    blob = json.dumps({"t": fault.get("test_strategy"), "o": oracle_refs, "tr": fault.get("trigger", "")},
+                      ensure_ascii=False)
+    residual = bool(re.search(r"\{[a-zA-Z0-9_]+\}", blob))
+    if not (unbound or reconciliation == "downgraded" or residual):
+        return None
+    hints = []
+    if unbound:
+        hints.append("bind_validation_points")
+    if reconciliation == "downgraded":
+        hints.append("recheck_downgrade_or_conflict")
+    if residual:
+        hints.append("substitute_placeholder")
+    return {"needs_bind": True, "unbound_points": unbound, "hints": hints}
+
+
 # ---------------- 故障 → 适用场景 + 分支类别/优先级 ----------------
 
 _BRANCH_BY_CAT = {
@@ -554,7 +580,7 @@ def match(output_dir: str, fault_lib: str, overlay: str | None,
         oracle_refs, recon = build_oracle_refs(fault, contract)
         rs = list(reasons)
         rs.append(f"tag:{(fault.get('tags') or ['-'])[0]}")
-        return {
+        m = {
             "fault_id": fault.get("fault_id"),
             "name": fault.get("name", fault.get("description", "")),
             "severity": fault.get("severity", "中"),
@@ -571,6 +597,10 @@ def match(output_dir: str, fault_lib: str, overlay: str | None,
             "source": "history" if fault.get("_is_history") else
                       ("project" if fault.get("_category") == "PROJECT" else "global"),
         }
+        hint = enrich_hint(fault, oracle_refs, recon)
+        if hint:
+            m["enrich"] = hint  # 阶段2.6b（可选 LLM 增强）据此精化绑定/占位/冲突
+        return m
 
     def _relevance(m):
         joined = " ".join(m["match_reason"])
@@ -634,6 +664,7 @@ def match(output_dir: str, fault_lib: str, overlay: str | None,
                 "matched": len(matches),
                 "downgraded": stats["downgraded"],
                 "truncated": stats["truncated"],
+                "enrichment_needed": sum(1 for m in matches if m.get("enrich", {}).get("needs_bind")),
             },
         },
         "fault_matches": matches,

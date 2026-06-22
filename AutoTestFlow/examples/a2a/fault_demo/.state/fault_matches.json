@@ -10,7 +10,8 @@
       "scenes": 2,
       "matched": 21,
       "downgraded": 1,
-      "truncated": 54
+      "truncated": 54,
+      "enrichment_needed": 5
     }
   },
   "fault_matches": [
@@ -64,7 +65,17 @@
         }
       ],
       "reconciliation": "aligned",
-      "source": "global"
+      "source": "global",
+      "enrich": {
+        "needs_bind": true,
+        "unbound_points": [
+          "响应id字段回带"
+        ],
+        "hints": [
+          "bind_validation_points",
+          "substitute_placeholder"
+        ]
+      }
     },
     {
       "fault_id": "F-PROTO-001",
@@ -213,7 +224,16 @@
         }
       ],
       "reconciliation": "aligned",
-      "source": "global"
+      "source": "global",
+      "enrich": {
+        "needs_bind": true,
+        "unbound_points": [
+          "id值 === 请求id"
+        ],
+        "hints": [
+          "bind_validation_points"
+        ]
+      }
     },
     {
       "fault_id": "F-RES-002",
@@ -258,7 +278,16 @@
         }
       ],
       "reconciliation": "aligned",
-      "source": "global"
+      "source": "global",
+      "enrich": {
+        "needs_bind": true,
+        "unbound_points": [
+          "字段访问路径正确"
+        ],
+        "hints": [
+          "bind_validation_points"
+        ]
+      }
     },
     {
       "fault_id": "F-STATE-002",
@@ -466,7 +495,17 @@
         }
       ],
       "reconciliation": "aligned",
-      "source": "global"
+      "source": "global",
+      "enrich": {
+        "needs_bind": true,
+        "unbound_points": [
+          "响应id字段回带"
+        ],
+        "hints": [
+          "bind_validation_points",
+          "substitute_placeholder"
+        ]
+      }
     },
     {
       "fault_id": "F-PROTO-001",
@@ -1090,7 +1129,14 @@
         }
       ],
       "reconciliation": "downgraded",
-      "source": "history"
+      "source": "history",
+      "enrich": {
+        "needs_bind": true,
+        "unbound_points": [],
+        "hints": [
+          "recheck_downgrade_or_conflict"
+        ]
+      }
     }
   ]
 }

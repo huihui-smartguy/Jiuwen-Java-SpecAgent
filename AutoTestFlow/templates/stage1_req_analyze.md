@@ -238,6 +238,19 @@ Read `{requirement_doc}`（需求文档）
 
 如有调用示例，Write `{output_dir}/.state/skeleton/*`。
 
+### 第七步（续）：可选历史缺陷 P0 富化（best-effort，仅当传入 `{fault_lib}`）
+
+> 仅当编排器传入了故障库路径 `{fault_lib}` 时执行；否则跳过，对产物零影响。
+> 注：此为 **best-effort 启发式**——历史缺陷 `test_case_id`（如 `TC-A2A-002`）与当前 FP 无硬映射。
+> **权威的历史 P0 注入**由阶段2.6 `match_faults.py` 经 `.state/fault_matches.json` 完成；本步只是让关联在
+> 需求分析阶段尽早可见，未命中不影响任何下游。
+
+1. Read `{fault_lib}` 的 `history_faults`（取 `description` / `tags` / `test_case_id`）。
+2. 对每条历史缺陷，按关键字与 FP 入口/名称启发式匹配（如 tag `SSE`/`流式`→流式入口 FP；`协议合规`→协议入口；`资源不存在`/`关联资源`→带关联字段的写入口）。
+3. 命中的 FP：`priority` 升为 `P0`，并加 `history_fault_refs: ["F-HIST-..."]`（附加字段）。
+4. 统计写入 `s1_index.meta.fault_enrichment = {scanned, matched, refs}`。
+5. 未命中不报错、不臆造映射。
+
 ### 第八步：自检
 
 | 检查项 | 要求 |

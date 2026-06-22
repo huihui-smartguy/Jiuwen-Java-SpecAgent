@@ -534,6 +534,17 @@ python AutoTestFlow/scripts/record_faults.py \
 
 > 安全收敛：按 `(spec_id, field)` + 已知 `fault_ref` 去重；默认 dry-run，`--write` 才落库；默认写**项目级 overlay**（`project_faults.json`）不污染全局精选库。
 
+#### overlay → global 晋升流程（治理）
+
+新发现的历史缺陷先沉淀在**项目级 overlay**，经人工评审后才晋升到全局精选库，避免全局库被未核实/项目特有的缺陷污染：
+
+1. **沉淀**：`record_faults.py`（默认 `--target overlay`）把 `class=sdk_defect` 写入 `project_faults.json` 的 `history_faults`（附带 `spec_id`/`field`，便于跨轮去重）。
+2. **评审**：人工确认该缺陷**通用**（非项目特有/非环境噪声），且 `expected_behavior` 与全局契约口径一致。
+3. **晋升**：通过 **PR** 把该条目并入全局库 `rest_api_common_faults.json` 的 `history_faults`（重编 `F-HIST-{seq}`），并按 §4.4 **bump `meta.version`**（minor）。
+4. **直写（谨慎）**：团队若确有把握，可用 `record_faults.py --target global` 直接写全局，但建议仍走 PR 评审。
+
+> per-SUT 专化：每个被测项目维护自己的 `fault_library/project_faults.json`（模板见 `Specification_Repository/project_faults.example.json`），用 `--fault-overlay` 指定；全局库保持精选、跨项目共享。
+
 ### 4.3 项目级故障库维护
 
 **添加项目特有故障**：
