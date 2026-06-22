@@ -52,7 +52,17 @@
 
 ### 2.1 全局故障库（rest_api_common_faults.json）
 
-**文件位置**：`.claude/skills/AutoTestFlow/shared/fault_library/rest_api_common_faults.json`
+**文件位置**：`Specification_Repository/rest_api_common_faults.json`（本仓库实际位置；亦兼容历史路径 `.claude/skills/AutoTestFlow/shared/fault_library/rest_api_common_faults.json`）。
+
+> **实现对齐（本文档设想 → 实际产物）**：
+> | 本文档设想 | 实际实现 | 产物 |
+> |---|---|---|
+> | `update_fault_library.py` | `AutoTestFlow/scripts/record_faults.py`（仅 sdk_defect / 去重 / 默认 overlay / dry-run） | `.state/new_faults_detected.json` 或 overlay `history_faults` |
+> | `validate_fault_contract.py` | 并入 `AutoTestFlow/scripts/match_faults.py` 的契约调和步 | `.state/fault_matches.json` + `.state/fault_contract_alignment.md` |
+> | 故障注入（Stage1/3a/3b 设想） | 阶段2.6 `match_faults.py` 产计划 → stage3b 读取产 `fault_ref` 用例 | `.state/fault_matches.json` |
+> | 库路径 `.claude/skills/.../fault_library/` | `Specification_Repository/`（`match_faults.py` 默认探测） | — |
+>
+> 可运行示例见 `AutoTestFlow/examples/a2a/fault_demo/`（含 fixture + golden 产物，无需 SUT）。
 
 **版本信息**：
 - 当前版本：**v1.1.0**
@@ -506,25 +516,34 @@ vi fault_library/project_faults.json
 
 **Stage 4 自动故障提取**：
 
-测试执行后，系统会自动从失败结果中提取新缺陷：
+测试执行后，由 `record_faults.py` 从结果中**仅提取 `class=sdk_defect`（contract 背书的真实违例）**作为新缺陷（绝不收 sut_unsatisfied / harness_defect / env_issue）：
 
 ```bash
-# 运行测试
-claude-code skill AutoTestFlow --stage 4
-
-# 查看自动积累的新缺陷
-cat .state/results/new_faults_detected.json
-
-# 新缺陷会自动写入故障库的history_faults字段
+# 查看自动积累候选（dry-run 产物）
+cat <output_dir>/.state/new_faults_detected.json
 ```
 
-**手动触发故障积累脚本**：
+**手动触发故障积累脚本**（实现为 `record_faults.py`）：
 
 ```bash
-python .claude/skills/AutoTestFlow/scripts/update_fault_library.py \
-    --results-dir .state/results \
-    --fault-lib .claude/skills/AutoTestFlow/shared/fault_library/rest_api_common_faults.json
+python AutoTestFlow/scripts/record_faults.py \
+    --output-dir <output_dir> \
+    --fault-lib Specification_Repository/rest_api_common_faults.json \
+    [--write] [--target overlay|global]
 ```
+
+> 安全收敛：按 `(spec_id, field)` + 已知 `fault_ref` 去重；默认 dry-run，`--write` 才落库；默认写**项目级 overlay**（`project_faults.json`）不污染全局精选库。
+
+#### overlay → global 晋升流程（治理）
+
+新发现的历史缺陷先沉淀在**项目级 overlay**，经人工评审后才晋升到全局精选库，避免全局库被未核实/项目特有的缺陷污染：
+
+1. **沉淀**：`record_faults.py`（默认 `--target overlay`）把 `class=sdk_defect` 写入 `project_faults.json` 的 `history_faults`（附带 `spec_id`/`field`，便于跨轮去重）。
+2. **评审**：人工确认该缺陷**通用**（非项目特有/非环境噪声），且 `expected_behavior` 与全局契约口径一致。
+3. **晋升**：通过 **PR** 把该条目并入全局库 `rest_api_common_faults.json` 的 `history_faults`（重编 `F-HIST-{seq}`），并按 §4.4 **bump `meta.version`**（minor）。
+4. **直写（谨慎）**：团队若确有把握，可用 `record_faults.py --target global` 直接写全局，但建议仍走 PR 评审。
+
+> per-SUT 专化：每个被测项目维护自己的 `fault_library/project_faults.json`（模板见 `Specification_Repository/project_faults.example.json`），用 `--fault-overlay` 指定；全局库保持精选、跨项目共享。
 
 ### 4.3 项目级故障库维护
 
@@ -649,15 +668,18 @@ Stage 4 (执行验证)
 3. 如`contract.md`定义了对应字段，故障断言为L2（值语义断言）
 4. 冲突时契约优先，故障降级为观察项
 
-**校准报告生成**：
+**校准报告生成**（实现内置于 `match_faults.py`，无需独立脚本）：
 
 ```bash
-# 生成故障契约校准报告
-python .claude/skills/AutoTestFlow/scripts/validate_fault_contract.py \
-    --fault-lib fault_library/project_faults.json \
-    --contract .state/contract.md \
-    --output fault_library/fault_contract_alignment.md
+# 契约优先调和在阶段2.6 由 match_faults.py 完成，并顺带产出对齐报告
+python AutoTestFlow/scripts/match_faults.py \
+    --output-dir <output_dir> \
+    --fault-lib Specification_Repository/rest_api_common_faults.json
+# → .state/fault_matches.json（每条故障 oracle 按权威性封顶）+ .state/fault_contract_alignment.md（对齐报告）
 ```
+
+> 说明：原设想的 `validate_fault_contract.py` 已并入 `match_faults.py` 的 reconciliation 步——断言级别按
+> `contract.md` 权威性分级表封顶（spec-required→至多 L2，config-dependent/静默/未知→L0/L1，冲突→契约优先）。
 
 ---
 

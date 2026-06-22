@@ -1,0 +1,63 @@
+{
+  "meta": {
+    "version": "0.1.0",
+    "scope": "project",
+    "project_name": "{project_name}",
+    "description": "项目级故障库 overlay 模板。复制为 <project>/fault_library/project_faults.json 或用 --fault-overlay 指定。match_faults.py 会在全局库之上套用本文件：禁用→过滤、覆盖→替换 test_strategy、项目特有→追加、{占位符}→按 parameter_config 替换。",
+    "last_updated": "2026-06-22"
+  },
+  "extends": "rest_api_common_faults.json",
+
+  "parameter_config": {
+    "project_name": "A2A-Java-SpecAgent",
+    "discovery_endpoint": "/.well-known/agent-card.json",
+    "expected_endpoint_path": "/a2a",
+    "endpoint_field": "url",
+    "reference_field": "metadata.agentId"
+  },
+
+  "disabled_faults": [
+    {
+      "ref_fault_id": "F-SEC-003",
+      "disable_reason": "本项目无认证授权层，鉴权类用例不适用",
+      "disabled_date": "2026-06-22"
+    }
+  ],
+
+  "fault_overrides": [
+    {
+      "ref_fault_id": "F-RES-004",
+      "override_reason": "本项目枚举带 TASK_STATE_ 前缀，归一规则项目特有",
+      "custom_test_strategy": {
+        "trigger_pattern": "执行返回 state 的请求",
+        "expected_behavior": "枚举值去前缀后属于 {COMPLETED,FAILED,WORKING,...}",
+        "assertion_level": "L2",
+        "validation_points": ["state 经 normalize_state 去前缀", "归一后在允许枚举内"]
+      }
+    }
+  ],
+
+  "project_specific_faults": [
+    {
+      "fault_id": "F-PROJ-001",
+      "name": "发现端点 url 字段缺失或不含 a2a 路径",
+      "description": "访问 {discovery_endpoint} 时响应应含 {endpoint_field} 且值含 {expected_endpoint_path}",
+      "severity": "高",
+      "related_endpoint": "{discovery_endpoint}",
+      "test_strategy": {
+        "trigger_pattern": "访问服务发现端点 {discovery_endpoint}",
+        "expected_behavior": "响应含 {endpoint_field} 字段，值包含 {expected_endpoint_path}",
+        "assertion_level": "L2",
+        "validation_points": [
+          "响应包含 {endpoint_field} 字段",
+          "字段值包含 {expected_endpoint_path}",
+          "字段不为空字符串"
+        ]
+      },
+      "applicable_scenarios": ["GET"],
+      "tags": ["发现机制", "A2A特有", "card"]
+    }
+  ],
+
+  "history_faults": []
+}

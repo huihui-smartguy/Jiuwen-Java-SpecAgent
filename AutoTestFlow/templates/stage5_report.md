@@ -23,6 +23,7 @@
 3. `{output_dir}/case_results.json` — 执行统计（含设计用例的 test_type / case_kind）
 4. `{output_dir}/.state/results/*.json` — 各用例详细结果（含 status/class/trace_file/oracle_refs/skip_reason/sdk_defect，glob 后并行读取）
 5. `{output_dir}/.state/trace/*.jsonl`（如有，按需抽样读取末帧/关键帧，用于交互轨迹摘要）
+6. `{output_dir}/.state/fault_matches.json` + `{output_dir}/.state/new_faults_detected.json`（如有，故障库覆盖与自积累，见第8部分；无则省略该节）
 
 ### 第二步：生成报告
 
@@ -139,6 +140,26 @@
 - 说明：DFX 维度当前**仅登记、未生成可执行用例、未执行**，待后续版本实现；本轮报告不对其做通过/失败判定。
 ```
 
+#### 第8部分：故障库覆盖（fault coverage，仅当 `.state/fault_matches.json` 存在）
+
+> 编排器子步（在 case_results.json 生成后、本报告生成前）：
+> `python {skill_dir}/scripts/record_faults.py --output-dir {output_dir}`（默认 dry-run）
+> → 仅把 `class=sdk_defect` 蒸馏为候选 `history_faults`，写 `.state/new_faults_detected.json`；`--write` 才落项目 overlay（不污染全局精选库）。
+> 数据源：`.state/fault_matches.json`（阶段2.6 注入计划）+ 带 `fault_ref` 的用例结果 + `.state/new_faults_detected.json`。**无故障库接入时整节省略。**
+
+```markdown
+## 8. 故障库覆盖（fault coverage）
+
+- 故障库版本：{fault_lib_version}；匹配故障数：{matched}（降级 {downgraded}）
+- 故障导向用例（fault_ref 非空）：{N} 条；结果分类：pass X / sdk_defect X / sut_unsatisfied X
+- 本轮自积累（record_faults）：新增候选 X 条 / 去重跳过 X 条
+
+| fault_id | 场景 | 分支 | 用例数 | sdk_defect | 说明 |
+|----------|------|------|--------|-----------|------|
+
+> 故障逼出的确认缺陷已并入第4部分（按 fault_ref 标注来源）；新积累历史缺陷见 `.state/new_faults_detected.json`。
+```
+
 ### 第三步：写入输出
 
 Write `{output_dir}/report.md`
@@ -156,6 +177,7 @@ Write `{output_dir}/report.md`
 | 执行5分类 | pass X / harness_defect已修 X / sut_unsatisfied忽略 X / sdk_defect X / env_issue X |
 | 交互轨迹 | X 条（env_issue 无轨迹 X） |
 | 确认缺陷 | sdk_defect X 条 |
+| 故障库覆盖 | 匹配 X / 故障用例 X / 新积累 X（未接入则 -） |
 | 契约观察 | spec-required X / config-dependent X / needs-runtime-verify X |
 | 静态缺陷/GAP | CD X / GAP X |
 | 输出文件 | report.md |
