@@ -118,6 +118,9 @@ AskUserQuestion(questions=[{
 | `--pr` | PR编号，逗号分隔 | 可选（与 code_path/commit 三选一） |
 | `--commit` | Commit ID，逗号分隔 | 可选（与 code_path/pr 三选一） |
 | `--base` | 基准分支 | 仓库默认分支 |
+| `--fault-lib` | 故障库（规格库）路径，供阶段2.6 匹配 | 自动探测 `Specification_Repository/rest_api_common_faults.json`（可选） |
+| `--fault-overlay` | 项目级故障库 overlay（覆盖/禁用/项目特有故障） | 可选 |
+| `--faults` | 故障库启用模式：`auto`（探测到库即启用）/ `on` / `off` | `auto` |
 
 **注意**：
 - `--sut-base-url` 若不可达，阶段2.5 自动退化为静态源推导（读 SUT 源/SDK）并标 `needs-runtime-verify`；阶段4 的 SUT 就绪门会因此整批标 `env_issue`。
@@ -203,6 +206,7 @@ AskUserQuestion(questions=[{
 | 1 需求侧分析 | `templates/stage1_req_analyze.md` | `shared/scenario_schema.md` | `.state/s1_index.json` + `.state/s1_scenarios/*` | ✅ | **✅** |
 | 2 Java代码扫描 | `templates/stage2_code_scan.md` | `shared/code_analysis_template.md` + `shared/java_scan_guide.md` | `.state/s2_code_facts.json` + `.state/stage_summary.json` + `.state/framework_scenes.json`（框架场景派生物） | ✅ | ❌ |
 | 2.5 契约校准 | `templates/stage2_5_contract_calibrate.md` | `scripts/probe_contract.py` | `contract.md` + `.state/contract_samples.json` | — | ❌ |
+| 2.6 故障匹配（可选） | —（纯脚本） | `scripts/match_faults.py` | `.state/fault_matches.json` + `.state/fault_contract_alignment.md` | — | ❌ |
 | 2R 需求摘要（纯需求） | `templates/stage2R_req_summary.md` | — | `.state/stage_summary.json` | — | ❌ |
 | 3a-gap GAP场景 | `templates/stage3a_gap.md` | — | `.state/s3a_enriched/FS-GAP-*.json` | ✅ | ❌ |
 | 3a-fw 框架场景 | `templates/stage3a_framework.md` | 输入 `.state/framework_scenes.json`（stage2 派生） | `.state/s3a_framework.json` | ✅ | ❌ |
@@ -275,6 +279,30 @@ AskUserQuestion(questions=[{
   → reachable=false → contract_samples.json 写 reachable:false（probe 已 exit 0，不崩溃）
                       → 子Agent 退化：静态推导(读 SUT 源/SDK 序列化) + 全条目标 needs-runtime-verify
                       → 编排器记录：stage4 SUT 就绪门将命中 → 整批 env_issue
+
+自动进入阶段2.6（故障匹配）
+```
+
+### 阶段2.6：故障库匹配（可选，纯脚本，前景 <5s）
+
+> 人工裁决：❌ | 条件：标准模式 + 探测到故障库（`--faults≠off`）
+> **定位**：在 `contract.md` 就位后，把外部故障库（规格库）匹配进流水线，并按契约权威性封顶断言级别。
+> **优雅降级**：未发现故障库 / `--faults=off` / 无 `contract.md` → 跳过且不产出任何文件，流水线与未接入时**字节级一致**。
+
+```
+步骤1: 编排器前景执行（不启动 Agent）
+  → 执行: python {skill_dir}/scripts/match_faults.py \
+            --output-dir {output_dir} \
+            [--fault-lib {fault_lib}] [--fault-overlay {fault_overlay}] [--faults auto|on|off]
+  → 输入: contract.md（权威性分级表）+ .state/s1_index.json + .state/s1_scenarios/*.json
+          + .state/s2_code_facts.json + 故障库[+overlay]
+  → 匹配: 端点/方法 · 标签 · 历史(test_case_id→P0) · 关联字段(agentId 等)
+  → 调和: 每条故障的断言级别按 contract 权威性封顶（spec-required→L2；config-dependent/静默/未知→L0/L1）
+  → 输出: .state/fault_matches.json（场景→matched_faults，含 fault_ref/branch_class/oracle_refs/reconciliation）
+
+步骤2: 验证
+  → 若 .state/fault_matches.json 存在 → stage3b 将据此补充故障导向用例
+  → 若不存在（降级）→ stage3b 行为与未接入时完全一致
 
 自动进入阶段3a
 ```

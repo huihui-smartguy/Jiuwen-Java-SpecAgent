@@ -1,0 +1,25 @@
+{
+  "meta": { "source": "code", "module_role": "独立功能", "code_path": "agent-runtime", "base_path": "/a2a" },
+  "entry_catalog": [
+    {
+      "class": "A2aJsonRpcController",
+      "method": "handle",
+      "signature": "POST /a2a (JSON-RPC dispatch: SendMessage/SendStreamingMessage/GetTask/...)",
+      "params": [
+        { "name": "method", "type": "string", "required": true, "default": null },
+        { "name": "params.message.parts", "type": "array", "required": true, "default": null },
+        { "name": "params.metadata.agentId", "type": "string", "required": false, "default": null }
+      ],
+      "source_file": "A2aJsonRpcController.java"
+    }
+  ],
+  "exception_catalog": [],
+  "constraint_catalog": [],
+  "code_defects": [],
+  "serialization_facts": {
+    "response_wrapper": "result.task",
+    "id_type": "string",
+    "enum_prefix": "TASK_STATE_",
+    "event_oneof": "task/statusUpdate/artifactUpdate"
+  }
+}

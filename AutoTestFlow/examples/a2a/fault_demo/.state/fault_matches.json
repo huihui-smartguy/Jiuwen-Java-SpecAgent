@@ -1,0 +1,1096 @@
+{
+  "meta": {
+    "fault_lib_version": "1.1.0",
+    "overlay_version": null,
+    "contract_path": "contract.md",
+    "generated_by": "match_faults.py",
+    "contract_probe_status": "reachable",
+    "stats": {
+      "faults_considered": 55,
+      "scenes": 2,
+      "matched": 21,
+      "downgraded": 1,
+      "truncated": 54
+    }
+  },
+  "fault_matches": [
+    {
+      "fault_id": "F-REQ-011",
+      "name": "引用不存在的关联资源",
+      "severity": "高",
+      "match_reason": [
+        "reference_field:metadata.agentId",
+        "tag:关联资源校验"
+      ],
+      "target_endpoints": [
+        {
+          "http_method": "POST",
+          "rpc_method": "SendMessage 同步发送消息",
+          "path": "/a2a",
+          "entry": "A2aJsonRpcController.handle"
+        }
+      ],
+      "target_scenes": [
+        "FS-001"
+      ],
+      "target_fps": [
+        "FP-001"
+      ],
+      "branch_class": "exception",
+      "priority": "P1",
+      "trigger": "在请求参数的关联字段中传入不存在的资源ID（如metadata.agentId='nonexistent-{uuid}'）",
+      "expected_behavior_raw": "应返回错误响应或终态FAILED，不执行无效操作",
+      "oracle_refs": [
+        {
+          "spec_id": "SPEC-RESP-WRAP",
+          "field": "result.<obj>.status.state",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "响应包含error字段或状态字段指示失败"
+        },
+        {
+          "spec_id": "SPEC-ERR-32603",
+          "field": "error.code",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "错误码或message指示资源不存在或关联无效"
+        },
+        {
+          "spec_id": "SPEC-ID-TYPE",
+          "field": "id",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "不创建资源或执行无效操作"
+        }
+      ],
+      "reconciliation": "aligned",
+      "source": "global"
+    },
+    {
+      "fault_id": "F-PROTO-001",
+      "name": "JSON-RPC错误响应缺少id字段",
+      "severity": "高",
+      "match_reason": [
+        "category:FC-PROTO",
+        "tag:协议合规"
+      ],
+      "target_endpoints": [
+        {
+          "http_method": "POST",
+          "rpc_method": "SendMessage 同步发送消息",
+          "path": "/a2a",
+          "entry": "A2aJsonRpcController.handle"
+        }
+      ],
+      "target_scenes": [
+        "FS-001"
+      ],
+      "target_fps": [
+        "FP-001"
+      ],
+      "branch_class": "exception",
+      "priority": "P1",
+      "trigger": "触发任意JSON-RPC错误（如parse error, invalid request）",
+      "expected_behavior_raw": "错误响应必须包含id字段",
+      "oracle_refs": [
+        {
+          "spec_id": "SPEC-ERR-32603",
+          "field": "error.code",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "响应body包含id字段"
+        },
+        {
+          "spec_id": "SPEC-ID-TYPE",
+          "field": "id",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "id字段值与请求id一致或为null（仅当请求无法解析时）"
+        },
+        {
+          "spec_id": "SPEC-RESP-WRAP",
+          "field": "result.<obj>.status.state",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "响应body包含id字段"
+        }
+      ],
+      "reconciliation": "aligned",
+      "source": "global"
+    },
+    {
+      "fault_id": "F-PROTO-002",
+      "name": "JSON-RPC非法请求体",
+      "severity": "高",
+      "match_reason": [
+        "category:FC-PROTO",
+        "tag:协议合规"
+      ],
+      "target_endpoints": [
+        {
+          "http_method": "POST",
+          "rpc_method": "SendMessage 同步发送消息",
+          "path": "/a2a",
+          "entry": "A2aJsonRpcController.handle"
+        }
+      ],
+      "target_scenes": [
+        "FS-001"
+      ],
+      "target_fps": [
+        "FP-001"
+      ],
+      "branch_class": "exception",
+      "priority": "P1",
+      "trigger": "发送格式错误的JSON（如缺少引号、括号不匹配）",
+      "expected_behavior_raw": "返回parse error (-32700)",
+      "oracle_refs": [
+        {
+          "spec_id": "SPEC-ERR-32700",
+          "field": "error.code",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "error.code = -32700"
+        },
+        {
+          "spec_id": "SPEC-ID-TYPE",
+          "field": "id",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "响应包含id字段"
+        },
+        {
+          "spec_id": "SPEC-RESP-WRAP",
+          "field": "result.<obj>.status.state",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "error.code = -32700"
+        }
+      ],
+      "reconciliation": "aligned",
+      "source": "global"
+    },
+    {
+      "fault_id": "F-RES-001",
+      "name": "响应id字段类型不一致",
+      "severity": "高",
+      "match_reason": [
+        "category:FC-RES",
+        "tag:类型一致性"
+      ],
+      "target_endpoints": [
+        {
+          "http_method": "POST",
+          "rpc_method": "SendMessage 同步发送消息",
+          "path": "/a2a",
+          "entry": "A2aJsonRpcController.handle"
+        }
+      ],
+      "target_scenes": [
+        "FS-001"
+      ],
+      "target_fps": [
+        "FP-001"
+      ],
+      "branch_class": "quality",
+      "priority": "P1",
+      "trigger": "发送包含字符串id的请求",
+      "expected_behavior_raw": "响应id字段类型应与请求一致（string类型）",
+      "oracle_refs": [
+        {
+          "spec_id": "SPEC-ID-TYPE",
+          "field": "id",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "响应id字段存在"
+        },
+        {
+          "spec_id": "SPEC-RESP-WRAP",
+          "field": "result.<obj>.status.state",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "id字段类型 === string"
+        }
+      ],
+      "reconciliation": "aligned",
+      "source": "global"
+    },
+    {
+      "fault_id": "F-RES-002",
+      "name": "响应结构嵌套错误",
+      "severity": "高",
+      "match_reason": [
+        "category:FC-RES",
+        "tag:结构一致性"
+      ],
+      "target_endpoints": [
+        {
+          "http_method": "POST",
+          "rpc_method": "SendMessage 同步发送消息",
+          "path": "/a2a",
+          "entry": "A2aJsonRpcController.handle"
+        }
+      ],
+      "target_scenes": [
+        "FS-001"
+      ],
+      "target_fps": [
+        "FP-001"
+      ],
+      "branch_class": "quality",
+      "priority": "P1",
+      "trigger": "执行正常请求",
+      "expected_behavior_raw": "响应结构应符合contract.md定义",
+      "oracle_refs": [
+        {
+          "spec_id": "SPEC-RESP-WRAP",
+          "field": "result.<obj>.status.state",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "响应body包含result字段"
+        },
+        {
+          "spec_id": "SPEC-ID-TYPE",
+          "field": "id",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "result包含期望的子字段"
+        }
+      ],
+      "reconciliation": "aligned",
+      "source": "global"
+    },
+    {
+      "fault_id": "F-STATE-002",
+      "name": "不存在的资源ID",
+      "severity": "中",
+      "match_reason": [
+        "reference_field:metadata.agentId",
+        "tag:边界测试"
+      ],
+      "target_endpoints": [
+        {
+          "http_method": "POST",
+          "rpc_method": "SendMessage 同步发送消息",
+          "path": "/a2a",
+          "entry": "A2aJsonRpcController.handle"
+        }
+      ],
+      "target_scenes": [
+        "FS-001"
+      ],
+      "target_fps": [
+        "FP-001"
+      ],
+      "branch_class": "boundary",
+      "priority": "P2",
+      "trigger": "传入不存在的资源ID（如随机UUID）",
+      "expected_behavior_raw": "返回标准错误响应，回带id",
+      "oracle_refs": [
+        {
+          "spec_id": "SPEC-RESP-WRAP",
+          "field": "result.<obj>.status.state",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "响应包含error字段"
+        },
+        {
+          "spec_id": "SPEC-ERR-32603",
+          "field": "error.code",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "错误码指示资源不存在"
+        },
+        {
+          "spec_id": "SPEC-ID-TYPE",
+          "field": "id",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "响应id字段回带"
+        }
+      ],
+      "reconciliation": "aligned",
+      "source": "global"
+    },
+    {
+      "fault_id": "F-STATE-004",
+      "name": "状态流转顺序错误",
+      "severity": "高",
+      "match_reason": [
+        "category:FC-STATE",
+        "tag:状态机"
+      ],
+      "target_endpoints": [
+        {
+          "http_method": "POST",
+          "rpc_method": "SendMessage 同步发送消息",
+          "path": "/a2a",
+          "entry": "A2aJsonRpcController.handle"
+        }
+      ],
+      "target_scenes": [
+        "FS-001"
+      ],
+      "target_fps": [
+        "FP-001"
+      ],
+      "branch_class": "boundary",
+      "priority": "P1",
+      "trigger": "尝试执行不允许的状态流转",
+      "expected_behavior_raw": "返回业务拒绝或状态不变",
+      "oracle_refs": [
+        {
+          "spec_id": "SPEC-RESP-WRAP",
+          "field": "result.<obj>.status.state",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "状态保持当前状态"
+        },
+        {
+          "spec_id": "SPEC-ERR-32603",
+          "field": "error.code",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "不执行非法流转"
+        },
+        {
+          "spec_id": "SPEC-ID-TYPE",
+          "field": "id",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "返回错误指示非法流转"
+        }
+      ],
+      "reconciliation": "aligned",
+      "source": "global"
+    },
+    {
+      "fault_id": "F-STATE-006",
+      "name": "幂等性违反",
+      "severity": "高",
+      "match_reason": [
+        "category:FC-STATE",
+        "tag:幂等性"
+      ],
+      "target_endpoints": [
+        {
+          "http_method": "POST",
+          "rpc_method": "SendMessage 同步发送消息",
+          "path": "/a2a",
+          "entry": "A2aJsonRpcController.handle"
+        }
+      ],
+      "target_scenes": [
+        "FS-001"
+      ],
+      "target_fps": [
+        "FP-001"
+      ],
+      "branch_class": "boundary",
+      "priority": "P1",
+      "trigger": "多次执行幂等操作（如相同id的SendMessage）",
+      "expected_behavior_raw": "多次执行应产生相同结果",
+      "oracle_refs": [
+        {
+          "spec_id": "SPEC-RESP-WRAP",
+          "field": "result.<obj>.status.state",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "多次执行返回相同结果"
+        },
+        {
+          "spec_id": "SPEC-ERR-32603",
+          "field": "error.code",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "不创建重复资源"
+        },
+        {
+          "spec_id": "SPEC-ID-TYPE",
+          "field": "id",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "状态一致"
+        }
+      ],
+      "reconciliation": "aligned",
+      "source": "global"
+    },
+    {
+      "fault_id": "F-REQ-011",
+      "name": "引用不存在的关联资源",
+      "severity": "高",
+      "match_reason": [
+        "reference_field:params.metadata.agentId",
+        "tag:关联资源校验"
+      ],
+      "target_endpoints": [
+        {
+          "http_method": "POST",
+          "rpc_method": "SendStreamingMessage SSE 流式消息",
+          "path": "/a2a",
+          "entry": "A2aJsonRpcController.handle"
+        }
+      ],
+      "target_scenes": [
+        "FS-002"
+      ],
+      "target_fps": [
+        "FP-002"
+      ],
+      "branch_class": "exception",
+      "priority": "P1",
+      "trigger": "在请求参数的关联字段中传入不存在的资源ID（如metadata.agentId='nonexistent-{uuid}'）",
+      "expected_behavior_raw": "应返回错误响应或终态FAILED，不执行无效操作",
+      "oracle_refs": [
+        {
+          "spec_id": "SPEC-RESP-WRAP",
+          "field": "result.<obj>.status.state",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "响应包含error字段或状态字段指示失败"
+        },
+        {
+          "spec_id": "SPEC-ERR-32603",
+          "field": "error.code",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "错误码或message指示资源不存在或关联无效"
+        },
+        {
+          "spec_id": "SPEC-ID-TYPE",
+          "field": "id",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "不创建资源或执行无效操作"
+        }
+      ],
+      "reconciliation": "aligned",
+      "source": "global"
+    },
+    {
+      "fault_id": "F-PROTO-001",
+      "name": "JSON-RPC错误响应缺少id字段",
+      "severity": "高",
+      "match_reason": [
+        "category:FC-PROTO",
+        "tag:协议合规"
+      ],
+      "target_endpoints": [
+        {
+          "http_method": "POST",
+          "rpc_method": "SendStreamingMessage SSE 流式消息",
+          "path": "/a2a",
+          "entry": "A2aJsonRpcController.handle"
+        }
+      ],
+      "target_scenes": [
+        "FS-002"
+      ],
+      "target_fps": [
+        "FP-002"
+      ],
+      "branch_class": "exception",
+      "priority": "P1",
+      "trigger": "触发任意JSON-RPC错误（如parse error, invalid request）",
+      "expected_behavior_raw": "错误响应必须包含id字段",
+      "oracle_refs": [
+        {
+          "spec_id": "SPEC-ERR-32603",
+          "field": "error.code",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "响应body包含id字段"
+        },
+        {
+          "spec_id": "SPEC-ID-TYPE",
+          "field": "id",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "id字段值与请求id一致或为null（仅当请求无法解析时）"
+        },
+        {
+          "spec_id": "SPEC-RESP-WRAP",
+          "field": "result.<obj>.status.state",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "响应body包含id字段"
+        }
+      ],
+      "reconciliation": "aligned",
+      "source": "global"
+    },
+    {
+      "fault_id": "F-PROTO-002",
+      "name": "JSON-RPC非法请求体",
+      "severity": "高",
+      "match_reason": [
+        "category:FC-PROTO",
+        "tag:协议合规"
+      ],
+      "target_endpoints": [
+        {
+          "http_method": "POST",
+          "rpc_method": "SendStreamingMessage SSE 流式消息",
+          "path": "/a2a",
+          "entry": "A2aJsonRpcController.handle"
+        }
+      ],
+      "target_scenes": [
+        "FS-002"
+      ],
+      "target_fps": [
+        "FP-002"
+      ],
+      "branch_class": "exception",
+      "priority": "P1",
+      "trigger": "发送格式错误的JSON（如缺少引号、括号不匹配）",
+      "expected_behavior_raw": "返回parse error (-32700)",
+      "oracle_refs": [
+        {
+          "spec_id": "SPEC-ERR-32700",
+          "field": "error.code",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "error.code = -32700"
+        },
+        {
+          "spec_id": "SPEC-ID-TYPE",
+          "field": "id",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "响应包含id字段"
+        },
+        {
+          "spec_id": "SPEC-RESP-WRAP",
+          "field": "result.<obj>.status.state",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "error.code = -32700"
+        }
+      ],
+      "reconciliation": "aligned",
+      "source": "global"
+    },
+    {
+      "fault_id": "F-SSE-001",
+      "name": "SSE事件类型无法识别",
+      "severity": "高",
+      "match_reason": [
+        "category:FC-SSE→streaming_scene",
+        "tag:SSE"
+      ],
+      "target_endpoints": [
+        {
+          "http_method": "POST",
+          "rpc_method": "SendStreamingMessage SSE 流式消息",
+          "path": "/a2a",
+          "entry": "A2aJsonRpcController.handle"
+        }
+      ],
+      "target_scenes": [
+        "FS-002"
+      ],
+      "target_fps": [
+        "FP-002"
+      ],
+      "branch_class": "quality",
+      "priority": "P1",
+      "trigger": "触发SSE流式响应",
+      "expected_behavior_raw": "所有事件的event/kind字段应在契约定义的枚举值中",
+      "oracle_refs": [
+        {
+          "spec_id": "SPEC-SSE",
+          "field": "event.kind / last_event.status.state",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "每个事件的event/kind字段存在"
+        },
+        {
+          "spec_id": "SPEC-RESP-WRAP",
+          "field": "result.<obj>.status.state",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "字段值在允许的枚举值列表中"
+        },
+        {
+          "spec_id": "SPEC-ID-TYPE",
+          "field": "id",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "末事件为终态事件"
+        }
+      ],
+      "reconciliation": "aligned",
+      "source": "global"
+    },
+    {
+      "fault_id": "F-SSE-002",
+      "name": "SSE流未到达终态",
+      "severity": "高",
+      "match_reason": [
+        "category:FC-SSE→streaming_scene",
+        "tag:SSE"
+      ],
+      "target_endpoints": [
+        {
+          "http_method": "POST",
+          "rpc_method": "SendStreamingMessage SSE 流式消息",
+          "path": "/a2a",
+          "entry": "A2aJsonRpcController.handle"
+        }
+      ],
+      "target_scenes": [
+        "FS-002"
+      ],
+      "target_fps": [
+        "FP-002"
+      ],
+      "branch_class": "quality",
+      "priority": "P1",
+      "trigger": "触发SSE流式响应",
+      "expected_behavior_raw": "最后一个事件应为终态事件",
+      "oracle_refs": [
+        {
+          "spec_id": "SPEC-SSE",
+          "field": "event.kind / last_event.status.state",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "事件序列不为空"
+        },
+        {
+          "spec_id": "SPEC-RESP-WRAP",
+          "field": "result.<obj>.status.state",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "最后一个事件的state字段为终态"
+        },
+        {
+          "spec_id": "SPEC-ERR-32603",
+          "field": "error.code",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "无异常中断"
+        },
+        {
+          "spec_id": "SPEC-ID-TYPE",
+          "field": "id",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "事件序列不为空"
+        }
+      ],
+      "reconciliation": "aligned",
+      "source": "global"
+    },
+    {
+      "fault_id": "F-STATE-002",
+      "name": "不存在的资源ID",
+      "severity": "中",
+      "match_reason": [
+        "reference_field:params.metadata.agentId",
+        "tag:边界测试"
+      ],
+      "target_endpoints": [
+        {
+          "http_method": "POST",
+          "rpc_method": "SendStreamingMessage SSE 流式消息",
+          "path": "/a2a",
+          "entry": "A2aJsonRpcController.handle"
+        }
+      ],
+      "target_scenes": [
+        "FS-002"
+      ],
+      "target_fps": [
+        "FP-002"
+      ],
+      "branch_class": "boundary",
+      "priority": "P2",
+      "trigger": "传入不存在的资源ID（如随机UUID）",
+      "expected_behavior_raw": "返回标准错误响应，回带id",
+      "oracle_refs": [
+        {
+          "spec_id": "SPEC-RESP-WRAP",
+          "field": "result.<obj>.status.state",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "响应包含error字段"
+        },
+        {
+          "spec_id": "SPEC-ERR-32603",
+          "field": "error.code",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "错误码指示资源不存在"
+        },
+        {
+          "spec_id": "SPEC-ID-TYPE",
+          "field": "id",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "响应id字段回带"
+        }
+      ],
+      "reconciliation": "aligned",
+      "source": "global"
+    },
+    {
+      "fault_id": "F-STATE-004",
+      "name": "状态流转顺序错误",
+      "severity": "高",
+      "match_reason": [
+        "category:FC-STATE",
+        "tag:状态机"
+      ],
+      "target_endpoints": [
+        {
+          "http_method": "POST",
+          "rpc_method": "SendStreamingMessage SSE 流式消息",
+          "path": "/a2a",
+          "entry": "A2aJsonRpcController.handle"
+        }
+      ],
+      "target_scenes": [
+        "FS-002"
+      ],
+      "target_fps": [
+        "FP-002"
+      ],
+      "branch_class": "boundary",
+      "priority": "P1",
+      "trigger": "尝试执行不允许的状态流转",
+      "expected_behavior_raw": "返回业务拒绝或状态不变",
+      "oracle_refs": [
+        {
+          "spec_id": "SPEC-RESP-WRAP",
+          "field": "result.<obj>.status.state",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "状态保持当前状态"
+        },
+        {
+          "spec_id": "SPEC-ERR-32603",
+          "field": "error.code",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "不执行非法流转"
+        },
+        {
+          "spec_id": "SPEC-ID-TYPE",
+          "field": "id",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "返回错误指示非法流转"
+        }
+      ],
+      "reconciliation": "aligned",
+      "source": "global"
+    },
+    {
+      "fault_id": "F-STATE-006",
+      "name": "幂等性违反",
+      "severity": "高",
+      "match_reason": [
+        "category:FC-STATE",
+        "tag:幂等性"
+      ],
+      "target_endpoints": [
+        {
+          "http_method": "POST",
+          "rpc_method": "SendStreamingMessage SSE 流式消息",
+          "path": "/a2a",
+          "entry": "A2aJsonRpcController.handle"
+        }
+      ],
+      "target_scenes": [
+        "FS-002"
+      ],
+      "target_fps": [
+        "FP-002"
+      ],
+      "branch_class": "boundary",
+      "priority": "P1",
+      "trigger": "多次执行幂等操作（如相同id的SendMessage）",
+      "expected_behavior_raw": "多次执行应产生相同结果",
+      "oracle_refs": [
+        {
+          "spec_id": "SPEC-RESP-WRAP",
+          "field": "result.<obj>.status.state",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "多次执行返回相同结果"
+        },
+        {
+          "spec_id": "SPEC-ERR-32603",
+          "field": "error.code",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "不创建重复资源"
+        },
+        {
+          "spec_id": "SPEC-ID-TYPE",
+          "field": "id",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "状态一致"
+        }
+      ],
+      "reconciliation": "aligned",
+      "source": "global"
+    },
+    {
+      "fault_id": "F-HIST-001",
+      "name": "响应id字段类型不一致（int vs string）",
+      "severity": "高",
+      "match_reason": [
+        "history:TC-A2A-001",
+        "tag:历史缺陷"
+      ],
+      "target_endpoints": [
+        {
+          "http_method": "POST",
+          "rpc_method": "SendMessage 同步发送消息",
+          "path": "/a2a",
+          "entry": "A2aJsonRpcController.handle"
+        }
+      ],
+      "target_scenes": [
+        "FS-001"
+      ],
+      "target_fps": [
+        "FP-001"
+      ],
+      "branch_class": "quality",
+      "priority": "P0",
+      "trigger": "发送包含字符串id的请求",
+      "expected_behavior_raw": "响应id应为字符串类型",
+      "oracle_refs": [
+        {
+          "spec_id": "SPEC-ID-TYPE",
+          "field": "id",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "响应id字段类型 === 'string'"
+        },
+        {
+          "spec_id": "SPEC-RESP-WRAP",
+          "field": "result.<obj>.status.state",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "id值 === 请求id"
+        }
+      ],
+      "reconciliation": "aligned",
+      "source": "history"
+    },
+    {
+      "fault_id": "F-HIST-002",
+      "name": "响应结构嵌套错误（result.task而非result）",
+      "severity": "高",
+      "match_reason": [
+        "history:TC-A2A-003",
+        "tag:历史缺陷"
+      ],
+      "target_endpoints": [
+        {
+          "http_method": "POST",
+          "rpc_method": "SendMessage 同步发送消息",
+          "path": "/a2a",
+          "entry": "A2aJsonRpcController.handle"
+        }
+      ],
+      "target_scenes": [
+        "FS-001"
+      ],
+      "target_fps": [
+        "FP-001"
+      ],
+      "branch_class": "quality",
+      "priority": "P0",
+      "trigger": "执行GetTask查询",
+      "expected_behavior_raw": "响应结构应为result.task而非result",
+      "oracle_refs": [
+        {
+          "spec_id": "SPEC-RESP-WRAP",
+          "field": "result.<obj>.status.state",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "响应包含result.task字段"
+        },
+        {
+          "spec_id": "SPEC-ID-TYPE",
+          "field": "id",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "task.id不为空"
+        }
+      ],
+      "reconciliation": "aligned",
+      "source": "history"
+    },
+    {
+      "fault_id": "F-HIST-003",
+      "name": "JSON-RPC错误响应缺少id字段",
+      "severity": "高",
+      "match_reason": [
+        "history:TC-A2A-005",
+        "tag:历史缺陷"
+      ],
+      "target_endpoints": [
+        {
+          "http_method": "POST",
+          "rpc_method": "SendMessage 同步发送消息",
+          "path": "/a2a",
+          "entry": "A2aJsonRpcController.handle"
+        }
+      ],
+      "target_scenes": [
+        "FS-001"
+      ],
+      "target_fps": [
+        "FP-001"
+      ],
+      "branch_class": "exception",
+      "priority": "P0",
+      "trigger": "发送非法JSON请求体",
+      "expected_behavior_raw": "错误响应必须包含id字段",
+      "oracle_refs": [
+        {
+          "spec_id": "SPEC-ERR-32603",
+          "field": "error.code",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "响应body包含id字段"
+        },
+        {
+          "spec_id": "SPEC-ID-TYPE",
+          "field": "id",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "响应body包含id字段"
+        },
+        {
+          "spec_id": "SPEC-RESP-WRAP",
+          "field": "result.<obj>.status.state",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "响应body包含id字段"
+        }
+      ],
+      "reconciliation": "aligned",
+      "source": "history"
+    },
+    {
+      "fault_id": "F-HIST-004",
+      "name": "SSE事件kind字段无法识别",
+      "severity": "高",
+      "match_reason": [
+        "history:TC-A2A-002",
+        "tag:历史缺陷"
+      ],
+      "target_endpoints": [
+        {
+          "http_method": "POST",
+          "rpc_method": "SendStreamingMessage SSE 流式消息",
+          "path": "/a2a",
+          "entry": "A2aJsonRpcController.handle"
+        }
+      ],
+      "target_scenes": [
+        "FS-002"
+      ],
+      "target_fps": [
+        "FP-002"
+      ],
+      "branch_class": "quality",
+      "priority": "P0",
+      "trigger": "触发SSE流式响应",
+      "expected_behavior_raw": "所有事件的kind字段应在契约定义的枚举值中",
+      "oracle_refs": [
+        {
+          "spec_id": "SPEC-SSE",
+          "field": "event.kind / last_event.status.state",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "每个事件的kind字段存在"
+        },
+        {
+          "spec_id": "SPEC-RESP-WRAP",
+          "field": "result.<obj>.status.state",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "字段值在允许的枚举值列表中"
+        },
+        {
+          "spec_id": "SPEC-ID-TYPE",
+          "field": "id",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "每个事件的kind字段存在"
+        }
+      ],
+      "reconciliation": "aligned",
+      "source": "history"
+    },
+    {
+      "fault_id": "F-HIST-005",
+      "name": "Agent Card endpoint字段缺失",
+      "severity": "高",
+      "match_reason": [
+        "history:TC-A2A-004",
+        "tag:历史缺陷"
+      ],
+      "target_endpoints": [
+        {
+          "http_method": "POST",
+          "rpc_method": "SendMessage 同步发送消息",
+          "path": "/a2a",
+          "entry": "A2aJsonRpcController.handle"
+        }
+      ],
+      "target_scenes": [
+        "FS-001"
+      ],
+      "target_fps": [
+        "FP-001"
+      ],
+      "branch_class": "quality",
+      "priority": "P0",
+      "trigger": "访问Agent Card发现端点",
+      "expected_behavior_raw": "Agent Card应包含url或endpoint字段",
+      "oracle_refs": [
+        {
+          "spec_id": "SPEC-CARD",
+          "field": "<field>",
+          "assert_level": "L0",
+          "authority": "needs-runtime-verify",
+          "validation_point": "响应包含url或endpoint字段"
+        },
+        {
+          "spec_id": "SPEC-CARD-URL",
+          "field": "<field>",
+          "assert_level": "L1",
+          "authority": "deployment-config-dependent",
+          "validation_point": "字段值包含'/a2a'路径"
+        },
+        {
+          "spec_id": "SPEC-RESP-WRAP",
+          "field": "result.<obj>.status.state",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "字段不为空字符串"
+        },
+        {
+          "spec_id": "SPEC-ID-TYPE",
+          "field": "id",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "响应包含url或endpoint字段"
+        }
+      ],
+      "reconciliation": "downgraded",
+      "source": "history"
+    }
+  ]
+}

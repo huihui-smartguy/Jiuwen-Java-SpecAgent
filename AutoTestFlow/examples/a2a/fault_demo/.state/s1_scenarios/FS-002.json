@@ -1,0 +1,19 @@
+{
+  "id": "FS-002",
+  "name": "SendStreamingMessage SSE 流式消息",
+  "type": "flow",
+  "test_type": "scenario",
+  "priority": "P0",
+  "source": "requirement",
+  "verify_points": ["SSE 事件序列非空", "每个事件 kind 在契约枚举内", "末事件为终态"],
+  "steps": [
+    {
+      "seq": 1,
+      "action": "通过 POST /a2a 建立 SSE 流并逐事件消费",
+      "fp_ref": "FP-002",
+      "data_scope": "message.parts",
+      "check": "事件流以终态事件结束"
+    }
+  ],
+  "branches": { "parameter": [], "boundary": [], "exception": [], "quality": [], "constraint": [], "cross": [] }
+}

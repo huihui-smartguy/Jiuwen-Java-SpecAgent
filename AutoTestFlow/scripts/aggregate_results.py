@@ -49,26 +49,34 @@ def aggregate(output_dir: str):
             "status": status,
             "fix_rounds": r.get("fix_rounds", 0),
         }
-        if r.get("sdk_bug"):
-            details[case_id]["sdk_bug"] = r["sdk_bug"]
+        # 当前 stage4 模板写 sdk_defect（对象）；兼容历史字段名 sdk_bug
+        sdk = r.get("sdk_defect") or r.get("sdk_bug")
+        if sdk:
+            details[case_id]["sdk_defect"] = sdk
+        if r.get("fault_ref"):
+            details[case_id]["fault_ref"] = r["fault_ref"]
         if r.get("mock_file"):
             details[case_id]["mock_file"] = r["mock_file"]
 
-    # 统计
+    # 统计（5 分类：passed / harness_defect / sut_unsatisfied / sdk_defect / env_issue）
     total = len(details)
-    passed = sum(1 for d in details.values() if d["status"] == "passed")
-    sdk_defects = sum(1 for d in details.values() if "sdk_bug" in d["status"] or "defect" in d["status"])
-    failed = sum(1 for d in details.values() if d["status"] == "failed")
-    env_issues = sum(1 for d in details.values() if "env_issue" in d["status"])
-    # passed 含 sdk_bug_found（通过了但发现了缺陷）
-    pass_count = passed + sdk_defects
+
+    def _count(name):
+        return sum(1 for d in details.values() if d["status"] == name)
+
+    passed = _count("passed")
+    harness_defects = _count("harness_defect")
+    sut_unsatisfied = _count("sut_unsatisfied")
+    sdk_defects = _count("sdk_defect")
+    env_issues = _count("env_issue")
 
     case_results = {
         "summary": {
             "total": total,
-            "passed": pass_count,
+            "passed": passed,
+            "harness_defects": harness_defects,
+            "sut_unsatisfied": sut_unsatisfied,
             "sdk_defects": sdk_defects,
-            "failed": failed,
             "env_issues": env_issues,
         },
         "details": details,
@@ -79,7 +87,8 @@ def aggregate(output_dir: str):
     save_json(output_path, case_results)
 
     # 输出摘要
-    print(f"Total: {total} | Passed: {pass_count} | SDK defects: {sdk_defects} | Failed: {failed}")
+    print(f"Total: {total} | Passed: {passed} | sdk_defect: {sdk_defects} | "
+          f"sut_unsatisfied: {sut_unsatisfied} | harness: {harness_defects} | env: {env_issues}")
     print(f"Output: {output_path}")
 
 

@@ -1,0 +1,19 @@
+{
+  "id": "FS-001",
+  "name": "SendMessage 同步发送消息",
+  "type": "flow",
+  "test_type": "scenario",
+  "priority": "P0",
+  "source": "requirement",
+  "verify_points": ["返回 COMPLETED 终态", "id 回带等于请求 id"],
+  "steps": [
+    {
+      "seq": 1,
+      "action": "构造消息并通过 POST /a2a 同步发送",
+      "fp_ref": "FP-001",
+      "data_scope": "message.parts, metadata.agentId",
+      "check": "返回任务对象，终态 COMPLETED"
+    }
+  ],
+  "branches": { "parameter": [], "boundary": [], "exception": [], "quality": [], "constraint": [], "cross": [] }
+}
