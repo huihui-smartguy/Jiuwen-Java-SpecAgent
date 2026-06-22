@@ -22,3 +22,13 @@
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
+
+# AutoTestFlow auto-remediation (v2.0): materialized SUT clone + re-verify traces + PR body temp
+# —— 绝不提交克隆出的被测代码仓与运行期轨迹；plan/manifest/reverify/submitted 与 defects/ 仍提交
+**/.state/remediation/repo/
+**/.state/remediation/trace/
+**/.state/remediation/_pr_body.md
+
+# Python
+__pycache__/
+*.pyc

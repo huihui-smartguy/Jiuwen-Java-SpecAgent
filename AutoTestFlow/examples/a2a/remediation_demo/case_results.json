@@ -1,0 +1,34 @@
+{
+  "summary": {
+    "total": 2,
+    "passed": 0,
+    "harness_defects": 0,
+    "sut_unsatisfied": 0,
+    "sdk_defects": 2,
+    "env_issues": 0
+  },
+  "details": {
+    "TC_041": {
+      "status": "sdk_defect",
+      "fix_rounds": 0,
+      "fault_ref": "F-REQ-011",
+      "sdk_defect": {
+        "spec_id": "SPEC-RESP-WRAP",
+        "field": "result.task.status.state",
+        "expected": "终态 FAILED（不存在的 agentId 不应成功）",
+        "actual": "COMPLETED"
+      }
+    },
+    "TC_042": {
+      "status": "sdk_defect",
+      "fix_rounds": 0,
+      "fault_ref": "F-HIST-001",
+      "sdk_defect": {
+        "spec_id": "SPEC-ID-TYPE",
+        "field": "id",
+        "expected": "响应 id 以字符串类型回带（== 请求 id '1'）",
+        "actual": "数字 1（int）"
+      }
+    }
+  }
+}
