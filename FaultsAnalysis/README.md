@@ -72,11 +72,12 @@
 | [`02-AutoTestFlow现状与可注入点分析.md`](./02-AutoTestFlow现状与可注入点分析.md) | 流水线阶段与产物、文件即协议、已预留规格库 seam、a2a 用例缺口实证、SUT 模块结构、可注入点定位 |
 | [`03-集成设计方案.md`](./03-集成设计方案.md) | **核心**：硬编码 vs 可插拔论证、集成架构、`fault_matches.json` schema、模板钩子、契约安全、反馈回路、治理、用例形态变化实例 |
 | [`04-落地路线图与验证.md`](./04-落地路线图与验证.md) | 分阶段实施（Phase 1/2/3）+ 文件清单 + 风险与缓解 + 端到端验证计划 |
-| [`05-评审深度分析.md`](./05-评审深度分析.md) | 三点评审答复：未存在脚本的职责与取舍、MCP 外接 vs 可插拔文件、"覆盖缺口(输入)≠缺陷建议(输出)"链路 |
+| [`05-评审深度分析.md`](./05-评审深度分析.md) | 三点评审答复：未存在脚本的职责与取舍、MCP 外接 vs 可插拔文件（**补充 LLM Wiki 三方对比 b.4/b.6**）、"覆盖缺口(输入)≠缺陷建议(输出)"链路 |
 | [`06-Phase3设计与落地.md`](./06-Phase3设计与落地.md) | Phase 3：可选 LLM 增强子 Agent + 契约安全、保守人工门降级矩阵、overlay→global 治理、stage1 历史 P0 钩子、MCP 作源延后 |
+| [`07-LLM_Wiki与故障库知识源分析.md`](./07-LLM_Wiki与故障库知识源分析.md) | LLM Wiki 三态谱系（仓内NL/RAG/DeepWiki）、两类消费者、与内核张力、file/MCP/LLM Wiki 三方对比、价值场景与护栏、推荐架构与演进（Phase A/B/C） |
 
 ## 6. 本轮范围
 
-- ✅ 交付：本目录 5 份分析与设计文档，github MCP 推送到分支 `claude/charming-edison-ubgj86`。
+- ✅ 交付：本目录 7 份分析与设计文档，github MCP 推送到分支 `claude/charming-edison-ubgj86`。
 - ⛔ 不做：本轮**不修改** `AutoTestFlow/` 下任何 Skill/模板/脚本，也**不修改**故障库本体。
 - ➡️ 后续：待你 review 设计方案后，再单独开一轮按 `04` 的 Phase 1 落地（`match_faults.py` + `stage3b` 钩子）。
