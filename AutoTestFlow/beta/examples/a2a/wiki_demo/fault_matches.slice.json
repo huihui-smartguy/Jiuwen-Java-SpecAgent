@@ -1,0 +1,69 @@
+{
+  "meta": {
+    "fault_lib_version": "1.1.0-demo",
+    "overlay_version": null,
+    "contract_path": "contract.md",
+    "generated_by": "match_faults.py（裁剪切片，仅含 1 条 needs_bind 条目供 wiki_demo 演示 stage2.6b）",
+    "contract_probe_status": "reachable",
+    "stats": {
+      "faults_considered": 3,
+      "scenes": 1,
+      "matched": 1,
+      "downgraded": 0,
+      "truncated": 0,
+      "enrichment_needed": 1
+    }
+  },
+  "fault_matches": [
+    {
+      "fault_id": "F-REQ-011",
+      "name": "引用不存在的关联资源",
+      "severity": "高",
+      "match_reason": [
+        "reference_field:metadata.agentId",
+        "tag:关联资源校验"
+      ],
+      "target_endpoints": [
+        {
+          "http_method": "POST",
+          "rpc_method": "SendMessage 同步发送消息",
+          "path": "/a2a",
+          "entry": "A2aJsonRpcController.handle"
+        }
+      ],
+      "target_scenes": ["FS-001"],
+      "target_fps": ["FP-001"],
+      "branch_class": "exception",
+      "priority": "P1",
+      "trigger": "在请求参数的关联字段中传入不存在的资源ID（如metadata.agentId='nonexistent-7f3a'）",
+      "expected_behavior_raw": "应返回错误响应或终态FAILED，不执行无效操作",
+      "oracle_refs": [
+        {
+          "spec_id": "SPEC-RESP-WRAP",
+          "field": "result.<obj>.status.state",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "响应包含error字段或状态字段指示失败"
+        },
+        {
+          "spec_id": "SPEC-ERR-32603",
+          "field": "error.code",
+          "assert_level": "L2",
+          "authority": "spec-required",
+          "validation_point": "错误码或message指示资源不存在或关联无效"
+        }
+      ],
+      "reconciliation": "aligned",
+      "source": "global",
+      "enrich": {
+        "needs_bind": true,
+        "unbound_points": [
+          "响应id字段回带"
+        ],
+        "hints": [
+          "bind_validation_points"
+        ]
+      }
+    }
+  ]
+}

@@ -225,6 +225,28 @@ python AutoTestFlow/scripts/record_faults.py --output-dir <output_dir> \
 
 ---
 
+## Beta（预研特性，默认关闭）
+
+> Beta 是**预研暂存区**：代码物理隔离在 [`beta/`](beta/)，由 `--beta-*` 开关显式开启，**默认关闭时流水线与稳定版字节级一致**；不得违反 `DESIGN.md` §1–§8。
+
+### v1.0：故障库接入 LLM Wiki（`--beta-wiki`）
+
+依据 [`FaultsAnalysis/07`](../FaultsAnalysis/07-LLM_Wiki与故障库知识源分析.md) §九 **Phase A**：由结构化故障库**单向派生**仓内 NL 文章（`Specification_Repository/wiki/*.md`），供 **stage2.6b / stage6** 的 LLM 子 Agent 按 `fault_id` 确定性取用，作 **advisory 建议层**——**不作 oracle、不进 `match_faults.py`、断言仍由 `contract.md` 封顶**。
+
+```bash
+# 启用：先派生 wiki，再让 stage2.6b/stage6 用 beta 模板读 wiki 作 advisory
+python AutoTestFlow/beta/scripts/gen_wiki.py            # 故障库 JSON → wiki/*.md（单向派生、幂等）
+python AutoTestFlow/beta/scripts/check_wiki.py          # 护栏校验（覆盖/溯源/不漂移/不越权/非matcher）
+/auto-test-flow 需求.md <java仓>/<模块> --sut-base-url http://host:port \
+    --faults on --fault-enrich on --beta-wiki on
+
+# 关闭（默认）：--beta-wiki off → 用稳定模板、不读 wiki，与 v2.x 字节级一致
+```
+
+**无需真实 SUT/LLM 即可复现**：见 [`beta/examples/a2a/wiki_demo/README.md`](beta/examples/a2a/wiki_demo/README.md)（sample 库 + golden + 纸面 trace）。总览见 [`beta/README.md`](beta/README.md) 与 [`ChangeLogs/v3.0-Beta预研_故障库接入LLM_Wiki.md`](../ChangeLogs/v3.0-Beta预研_故障库接入LLM_Wiki.md)。
+
+---
+
 ## 9. 诚实说明
 
 | 事项 | 状态 |

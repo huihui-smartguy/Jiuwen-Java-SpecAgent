@@ -1,0 +1,59 @@
+# F-REQ-009 · 特殊字符注入
+
+> 溯源：`rest_api_common_faults.json` → `FC-REQ-001`（请求体缺陷）→ `F-REQ-009`
+> 严重程度：中 ｜ 故障建议断言级别：L2（**最终以项目 `contract.md` 权威性封顶**，见下「契约锚点」）
+> 标签：字符处理、编码、安全
+> 本文由 `beta/scripts/gen_wiki.py` 从结构化故障库**单向派生**，仅作 advisory；**不作 oracle、不进 `match_faults.py`**。
+
+## 故障模式（通俗描述）
+
+传入特殊字符（如Unicode、转义字符、控制字符）
+
+## 怎么触发
+
+传入特殊字符或非ASCII字符
+
+## 预期行为
+
+应正确处理或转义，不导致解析错误
+
+验证点：
+- 不导致JSON解析错误
+- 正确存储或返回
+- 不导致服务异常
+
+## 契约锚点（候选 specId 种类）
+
+本故障的判据**唯一来自项目 `contract.md`**。`match_faults.py` 会按 contract 权威性把本故障解析为具体 specId，并据权威性封顶断言级别（spec-required→至多 L2；config-dependent→至多 L1；needs-runtime-verify / 契约静默→至多 L0 观察）。候选种类：
+
+- ERR→SPEC-ERR-*
+- RESP_WRAP→SPEC-RESP-WRAP
+
+> ⚠️ 本文**不声明无条件断言级别**；以上仅供 LLM 阶段（stage2.6b）语义绑定参考，最终 specId 与断言级别以 `contract.md` 为准。
+
+## 常见根因方向（通用经验 · advisory）
+
+> 下列为**按类通用经验提示**，非结构化库字段；供 stage6 根因叙事起步，**最终须以实测 trace + 源码定位为准**。
+- 入参校验缺失：业务层未校验必选/类型/边界即直接访问字段（易 NPE 或静默通过）
+- 校验注解与业务依赖不一致（如标可选但逻辑必需）
+- 字段名/大小写映射不一致（驼峰 vs 下划线）
+
+## 历史案例
+
+（暂无关联历史缺陷；一旦实测复现，`record_faults.py` 会把 `sdk_defect` 蒸馏回 `history_faults`，再由本脚本重生成时回链此处。）
+
+## 关联故障
+
+同类（FC-REQ-001 请求体缺陷）：
+- [F-REQ-001](./F-REQ-001.md)
+- [F-REQ-002](./F-REQ-002.md)
+- [F-REQ-003](./F-REQ-003.md)
+- [F-REQ-004](./F-REQ-004.md)
+- [F-REQ-005](./F-REQ-005.md)
+- [F-REQ-006](./F-REQ-006.md)
+- [F-REQ-007](./F-REQ-007.md)
+- [F-REQ-008](./F-REQ-008.md)
+- [F-REQ-010](./F-REQ-010.md)
+- [F-REQ-011](./F-REQ-011.md)
+
+返回：[分类汇总](./category-FC-REQ.md) ｜ [索引](./index.md)

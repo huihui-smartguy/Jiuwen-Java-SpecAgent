@@ -1,0 +1,56 @@
+{
+  "generated_by": "check_wiki.py",
+  "ok": true,
+  "fault_lib_version": "1.1.0-demo",
+  "wiki_dir": "AutoTestFlow/beta/examples/a2a/wiki_demo/golden/wiki",
+  "checks": [
+    {
+      "id": "C1",
+      "name": "覆盖：fault_id↔文章一一对应",
+      "ok": true,
+      "detail": {
+        "lib_faults": 3,
+        "missing": [],
+        "orphans": []
+      }
+    },
+    {
+      "id": "C2",
+      "name": "溯源：头部回链 fault_id+category",
+      "ok": true,
+      "detail": {
+        "violations": []
+      }
+    },
+    {
+      "id": "C3",
+      "name": "不漂移：wiki 严格由 JSON 单向派生",
+      "ok": true,
+      "detail": {
+        "drifted": []
+      }
+    },
+    {
+      "id": "C4",
+      "name": "不越权：advisory 免责声明齐备、无判据化措辞",
+      "ok": true,
+      "detail": {
+        "violations": []
+      }
+    },
+    {
+      "id": "C5",
+      "name": "非 matcher 输入：确定性脚本不引用 wiki",
+      "ok": true,
+      "detail": {
+        "references": []
+      }
+    }
+  ],
+  "summary": {
+    "total": 5,
+    "passed": 5,
+    "failed": 0,
+    "faults_checked": 3
+  }
+}
