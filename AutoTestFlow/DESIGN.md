@@ -79,3 +79,13 @@
 - **门控外发，最小影响**：总开关 `--remediate` 默认 `off`；一切 clone-push / PR / issue 前有**强制人工确认门**；仅 `sdk_defect` 触发，定位不到则只记 issue 不改码；配置 `switches.allow_*` 为文件级第二层保险。
 
 bug issue 必须给出两段证据——(a) **规格库/契约知识**（违例的 spec-required specId、命中的故障库条目与 validation_point）+ (b) **实测结果**（失败用例的请求/响应轨迹、期望 vs 实际）——以可追溯地论证缺陷成立。
+
+## 8. Beta 预研：门控、隔离、不得逾越内核
+
+为预研可能接入的新特性（如知识源新形态），设 **Beta 暂存区**（代码物理隔离于 `beta/` 子树，由 `--beta-*` 开关显式开启，默认关闭）。Beta 的硬约束：
+
+- **默认关闭即字节级一致**：开关 `off`（默认）时不调用任何 Beta 代码、不产任何 Beta 文件，流水线与稳定版**字节级一致**（复用 §7 `--remediate` 的优雅降级范式）。
+- **不得违反 §1–§7**：Beta 只能在既有不变量之上做**增强**，绝不绕过——尤其 §2「`contract.md` 唯一 Oracle / 生成器不得自我认证」与 §7「不洗绿」。
+- **隔离可退役**：稳定目录（`scripts/`、`templates/` 等）零改动；`SKILL.md` 仅以 additive 方式接入。预研结论为不采用时删除 `beta/` 子项与开关即可，不影响稳定流水线。
+
+首个 Beta（v1.0）为「故障库接入 LLM Wiki」（Phase A）：由结构化故障库**单向派生**仓内 NL 文章，作 stage2.6b/stage6 的 **advisory 建议层**——**不作 oracle、不进 `match_faults.py`、断言仍由 `contract.md` 封顶**。详见 `beta/README.md` 与 `ChangeLogs/v3.0-Beta预研_故障库接入LLM_Wiki.md`。

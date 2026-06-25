@@ -128,6 +128,7 @@ AskUserQuestion(questions=[{
 | `--remediate` | 自动修复总开关（阶段6/7）：`off`(不产任何修复文件,流水线字节级一致) / `dry-run`(深析+本地复验,**不**推送/PR/issue) / `on`(经**强制人工确认门**后真实提交) | `off` |
 | `--remediation-config` | 修复配置文件（声明 SUT 与代码仓），见 `shared/remediation_config_schema.md` | 探测 `<output_dir>/remediation.config.json` → `<work_dir>/.autotestflow/remediation.config.json` |
 | `--remediation-max-defects` | 单轮最多处理的 sdk_defect 数（限影响面） | 5 |
+| `--beta-wiki` | **Beta 预研开关**（故障库接入 LLM Wiki，Phase A）：`off`(不生成/不读取 wiki，用稳定模板，流水线字节级一致) / `on`(先派生仓内 wiki，再让 stage2.6b/stage6 用 beta 模板读 wiki 作 advisory)。详见 `beta/README.md` | `off` |
 
 **注意**：
 - `--sut-base-url` 若不可达，阶段2.5 自动退化为静态源推导（读 SUT 源/SDK）并标 `needs-runtime-verify`；阶段4 的 SUT 就绪门会因此整批标 `env_issue`。
@@ -320,6 +321,9 @@ AskUserQuestion(questions=[{
   → 作用：对 enrich.needs_bind 条目做 specId 绑定 / 占位替换 / contract_conflict 检出，回写 fault_matches.json
   → 契约安全：断言级别不得越权封顶，找不到 specId 的点保留为观察，冲突时契约优先
   → --fault-enrich=off（默认）→ 跳过
+  → 【Beta · --beta-wiki on】先跑 `python beta/scripts/gen_wiki.py` 刷新仓内 wiki，再改用
+    `beta/templates/stage2_6_fault_match.beta.md`（额外把 `wiki_dir` 传入，子 Agent 读 `wiki/{fault_id}.md`
+    作 advisory 语义线索）；--beta-wiki=off（默认）→ 仍用稳定模板，行为字节级一致。详见「Beta（预研特性，默认关闭）」节。
 
 自动进入阶段3a
 ```
@@ -512,6 +516,9 @@ AskUserQuestion(questions=[{
           {output_dir} {clone_path} {business_code_roots} {selftest_roots} {contract_path}
     产出: .state/remediation/defects/{case_id}/{root_cause.md, patch.diff?, regression_test.diff?, issue.md, pr.md, confidence.json}
   → 等待全部完成，验证目录存在
+  → 【Beta · --beta-wiki on】改用 `beta/templates/stage6_defect_analyze.beta.md`（额外传入 `wiki_dir`，子 Agent 在
+    `fault_ref` 命中时读 `wiki/{fault_ref}.md` 作 advisory 根因/叙事素材，强化 issue 规格库半边）；
+    --beta-wiki=off（默认）→ 用稳定模板，缺陷处理逻辑与产物字节级一致。详见「Beta（预研特性，默认关闭）」节。
 
 步骤3: 汇总 manifest（前景）
   → python {skill_dir}/scripts/remediation_plan.py --output-dir {output_dir} --finalize
@@ -550,6 +557,36 @@ AskUserQuestion(questions=[{
 
 （auto-remediation 结束；流水线终止）
 ```
+
+---
+
+## Beta（预研特性，默认关闭）
+
+> Beta 是 AutoTestFlow 的**预研暂存区**：代码物理隔离在 `beta/` 子树，由开关显式开启；**默认关闭时流水线与稳定版字节级一致**。
+> Beta 特性**不得违反** `DESIGN.md` §1–§7 与 `shared/rules.md` §4；只能在不变量之上做**增强**。详见 `beta/README.md`。
+
+### v1.0：故障库接入 LLM Wiki（`--beta-wiki`，Phase A）
+
+依据 `FaultsAnalysis/07-LLM_Wiki与故障库知识源分析.md` §九 Phase A：由结构化故障库**单向派生**仓内 NL 文章
+（`Specification_Repository/wiki/*.md`），供 stage2.6b / stage6 的 LLM 子 Agent 按 `fault_id` 确定性取用，
+作 **advisory 建议层**——**不作 oracle、不进 `match_faults.py`、断言级别仍由 `contract.md` 封顶**。
+
+```
+--beta-wiki off（默认）
+  → 不跑 gen_wiki、不读 wiki；stage2.6b/stage6 用稳定模板 → 与 v2.x 字节级一致（优雅降级）。
+
+--beta-wiki on
+  步骤A（编排器前景，纯脚本）: python {skill_dir}/beta/scripts/gen_wiki.py [--fault-lib ..][--fault-overlay ..]
+      → 由 JSON 单向派生 Specification_Repository/wiki/{fault_id}.md(+category/index)；幂等、缺库优雅退出。
+  步骤B（可选校验）: python {skill_dir}/beta/scripts/check_wiki.py
+      → 护栏校验（覆盖/溯源/不漂移/不越权/非matcher）→ .state/wiki_check.json；不绿则不应启用 wiki。
+  步骤C（模板切换）:
+      stage2.6b → beta/templates/stage2_6_fault_match.beta.md（传 wiki_dir；读 wiki/{fault_id}.md 辅助绑定）
+      stage6    → beta/templates/stage6_defect_analyze.beta.md（传 wiki_dir；fault_ref 命中读 wiki/{fault_ref}.md 丰富 issue）
+```
+
+**红线**：wiki 仅 advisory；判据唯一来自 `contract.md`；wiki 与 contract 冲突一律以 contract 为准；
+确定性脚本（match_faults/record_faults）永不读 wiki。离线 demo：`beta/examples/a2a/wiki_demo/`。
 
 ---
 

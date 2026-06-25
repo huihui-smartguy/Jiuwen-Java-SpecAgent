@@ -46,6 +46,15 @@
     └── 配置示例（3个项目配置） ← 新增章节
 ```
 
+### 1.4 LLM Wiki 派生层（`wiki/`，Beta 预研，可选）
+
+> `Specification_Repository/wiki/` 是由结构化 JSON 故障库**单向派生**的**自然语言（NL）建议层**（AutoTestFlow Beta v1.0，Phase A）。
+
+- **单一真相仍是 JSON**：`wiki/*.md` 由 `AutoTestFlow/beta/scripts/gen_wiki.py` 从 `rest_api_common_faults.json`(+overlay) 编译生成，**不可手改**（改知识→改 JSON→重生成）。
+- **仅 advisory**：供 stage2.6b / stage6 的 LLM 子 Agent 按 `fault_id` 取用，作语义/叙事参考；**不作 oracle、不进 `match_faults.py`、断言仍由 `contract.md` 封顶**。
+- **默认关闭**：仅 `--beta-wiki on` 时生成与使用；关闭时确定性流水线与未接入时一致。
+- 生成/校验：`gen_wiki.py` 生成、`check_wiki.py` 护栏校验（覆盖/溯源/不漂移/不越权/非 matcher）。详见 `AutoTestFlow/beta/README.md` 与 `ChangeLogs/v3.0-Beta预研_故障库接入LLM_Wiki.md`。
+
 ---
 
 ## 二、故障库文件结构
