@@ -1,0 +1,714 @@
+{
+  "meta": {
+    "version": "1.0.0",
+    "scope": "global",
+    "description": "Web前端功能故障模式库（适用于所有Web应用的前端交互测试）",
+    "last_updated": "2026-06-27",
+    "maintainer": "test_engineering_team",
+    "source_standards": [
+      "ISTQB 软件测试通用失效模式",
+      "OWASP Web Top10 2021",
+      "LLM流式对话、SSE长连接行业通用测试实践",
+      "线上真实生产故障复盘沉淀"
+    ],
+    "library_type": "baseline"
+  },
+  "fault_categories": [
+    {
+      "category_id": "FC-WEB-001",
+      "category_name": "输入框边界/异常测试点",
+      "description": "前端输入控件相关的边界值和异常输入故障模式",
+      "faults": [
+        {
+          "fault_id": "F-WEB-001",
+          "name": "空值输入",
+          "description": "必填输入框输入空值或仅空格",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["ISTQB"],
+            "description": "边界值测试 - 空值边界"
+          },
+          "test_strategy": {
+            "trigger_pattern": "在必填输入框中输入空字符串或仅空格字符",
+            "expected_behavior": "应显示校验错误提示，阻止表单提交",
+            "assertion_level": "L2",
+            "validation_points": [
+              "输入框显示必填校验错误提示",
+              "提交按钮被禁用或提交时拦截",
+              "错误提示文案清晰明确",
+              "不发送空值请求到后端"
+            ]
+          },
+          "tags": ["输入校验", "边界测试", "空值处理"]
+        },
+        {
+          "fault_id": "F-WEB-002",
+          "name": "超长文本输入",
+          "description": "输入超过字段最大长度限制的文本",
+          "severity": "中",
+          "source": {
+            "type": "baseline",
+            "standards": ["ISTQB"],
+            "description": "边界值测试 - 最大长度边界"
+          },
+          "test_strategy": {
+            "trigger_pattern": "在输入框中输入超过maxLength限制的文本（如10000字符）",
+            "expected_behavior": "应在达到限制时阻止输入或截断，并显示提示",
+            "assertion_level": "L2",
+            "validation_points": [
+              "输入在达到限制时自动阻止或截断",
+              "显示字符计数提示（如120/1000）",
+              "不导致页面卡顿或崩溃",
+              "提交时进行二次校验"
+            ]
+          },
+          "tags": ["输入校验", "边界测试", "长度限制"]
+        },
+        {
+          "fault_id": "F-WEB-003",
+          "name": "最小长度未达标",
+          "description": "输入的文本长度未达到最小长度要求",
+          "severity": "中",
+          "source": {
+            "type": "baseline",
+            "standards": ["ISTQB"],
+            "description": "边界值测试 - 最小长度边界"
+          },
+          "test_strategy": {
+            "trigger_pattern": "在需要最小长度的字段中输入不足长度的文本",
+            "expected_behavior": "应显示校验错误提示",
+            "assertion_level": "L2",
+            "validation_points": [
+              "输入框显示最小长度校验错误",
+              "错误提示包含最小长度要求",
+              "提交时阻止发送不合规数据",
+              "实时校验或失焦时校验"
+            ]
+          },
+          "tags": ["输入校验", "边界测试", "长度限制"]
+        },
+        {
+          "fault_id": "F-WEB-004",
+          "name": "特殊字符输入",
+          "description": "输入包含特殊字符（如Unicode、控制字符、emoji等）",
+          "severity": "中",
+          "source": {
+            "type": "baseline",
+            "standards": ["ISTQB"],
+            "description": "等价类测试 - 特殊字符输入"
+          },
+          "test_strategy": {
+            "trigger_pattern": "输入特殊字符（如< > & \" ' \\n \\t emoji表情 Unicode字符）",
+            "expected_behavior": "应正确处理或显示错误提示，不导致页面异常",
+            "assertion_level": "L2",
+            "validation_points": [
+              "特殊字符被正确显示或转义",
+              "不导致XSS漏洞",
+              "不导致前端解析错误",
+              "后端能正确接收和处理"
+            ]
+          },
+          "tags": ["输入校验", "字符编码", "XSS防护"]
+        },
+        {
+          "fault_id": "F-WEB-005",
+          "name": "HTML注入攻击",
+          "description": "输入HTML标签或脚本代码进行注入测试",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["OWASP Web Top10 2021"],
+            "description": "A03:2021 Injection - XSS跨站脚本攻击"
+          },
+          "test_strategy": {
+            "trigger_pattern": "在输入框中输入HTML标签或JavaScript代码（如<script>alert('XSS')</script>）",
+            "expected_behavior": "应自动转义HTML标签，不执行注入的脚本",
+            "assertion_level": "L2",
+            "validation_points": [
+              "HTML标签被正确转义显示",
+              "不执行注入的脚本代码",
+              "不弹出alert或执行其他恶意代码",
+              "显示原始文本而非渲染后的HTML"
+            ]
+          },
+          "tags": ["安全", "XSS攻击", "HTML注入"]
+        },
+        {
+          "fault_id": "F-WEB-006",
+          "name": "负数输入",
+          "description": "在应为正数的字段中输入负数",
+          "severity": "中",
+          "source": {
+            "type": "baseline",
+            "standards": ["ISTQB"],
+            "description": "边界值测试 - 数值边界"
+          },
+          "test_strategy": {
+            "trigger_pattern": "在年龄、数量、金额等正数字段中输入负数",
+            "expected_behavior": "应显示校验错误提示",
+            "assertion_level": "L2",
+            "validation_points": [
+              "显示负数校验错误提示",
+              "错误提示说明需要正数",
+              "提交时拦截负数值",
+              "输入时进行实时校验"
+            ]
+          },
+          "tags": ["输入校验", "边界测试", "数值校验"]
+        },
+        {
+          "fault_id": "F-WEB-007",
+          "name": "非法格式输入",
+          "description": "输入格式不符合字段要求（如邮箱、电话、日期、URL等）",
+          "severity": "中",
+          "source": {
+            "type": "baseline",
+            "standards": ["ISTQB"],
+            "description": "等价类测试 - 格式校验"
+          },
+          "test_strategy": {
+            "trigger_pattern": "在格式化字段中输入非法格式（如邮箱字段输入'abc'，日期字段输入'2024-13-45'）",
+            "expected_behavior": "应显示格式校验错误提示",
+            "assertion_level": "L2",
+            "validation_points": [
+              "显示格式错误提示",
+              "提示包含正确格式示例",
+              "提交时拦截格式错误数据",
+              "支持常见格式校验"
+            ]
+          },
+          "tags": ["输入校验", "格式验证", "正则校验"]
+        },
+        {
+          "fault_id": "F-WEB-008",
+          "name": "全空格输入",
+          "description": "在必填字段中仅输入空格字符",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["ISTQB"],
+            "description": "边界值测试 - 空白字符边界"
+          },
+          "test_strategy": {
+            "trigger_pattern": "在必填输入框中仅输入空格字符（如'   '）",
+            "expected_behavior": "应识别为空值并显示校验错误",
+            "assertion_level": "L2",
+            "validation_points": [
+              "将全空格识别为空值",
+              "显示必填校验错误",
+              "不trim后发送空字符串到后端",
+              "提交时进行trim校验"
+            ]
+          },
+          "tags": ["输入校验", "边界测试", "空值处理"]
+        },
+        {
+          "fault_id": "F-WEB-009",
+          "name": "粘贴超长文本",
+          "description": "从其他应用粘贴超长文本到输入框",
+          "severity": "中",
+          "source": {
+            "type": "baseline",
+            "standards": ["线上真实生产故障复盘"],
+            "description": "用户真实使用场景 - 从其他应用复制长文本"
+          },
+          "test_strategy": {
+            "trigger_pattern": "从文档或其他应用复制大量文本（如5000字符），粘贴到输入框",
+            "expected_behavior": "应自动截断或阻止，并显示提示",
+            "assertion_level": "L2",
+            "validation_points": [
+              "粘贴后自动截断到最大长度",
+              "或粘贴时阻止并显示提示",
+              "显示已用字符数（如5000/1000）",
+              "不导致页面卡顿或崩溃"
+            ]
+          },
+          "tags": ["输入校验", "边界测试", "粘贴操作"]
+        }
+      ]
+    },
+    {
+      "category_id": "FC-WEB-002",
+      "category_name": "页面流程组合场景",
+      "description": "用户操作流程相关的组合场景故障",
+      "faults": [
+        {
+          "fault_id": "F-WEB-010",
+          "name": "表单中途刷新",
+          "description": "在填写表单过程中刷新页面",
+          "severity": "中",
+          "source": {
+            "type": "baseline",
+            "standards": ["线上真实生产故障复盘"],
+            "description": "用户真实使用场景 - 误操作刷新页面"
+          },
+          "test_strategy": {
+            "trigger_pattern": "在填写表单中途按F5或点击刷新按钮",
+            "expected_behavior": "应提示用户确认或自动保存草稿",
+            "assertion_level": "L2",
+            "validation_points": [
+              "显示确认对话框提示可能丢失数据",
+              "或自动保存表单草稿",
+              "刷新后能恢复表单内容",
+              "不提交未完成的表单"
+            ]
+          },
+          "tags": ["表单流程", "用户体验", "数据保护"]
+        },
+        {
+          "fault_id": "F-WEB-011",
+          "name": "重复点击提交",
+          "description": "快速多次点击提交按钮",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["ISTQB"],
+            "description": "并发测试 - 重复提交"
+          },
+          "test_strategy": {
+            "trigger_pattern": "快速连续点击提交按钮多次",
+            "expected_behavior": "应防抖或禁用按钮，避免重复提交",
+            "assertion_level": "L2",
+            "validation_points": [
+              "第一次点击后按钮立即禁用",
+              "显示loading状态",
+              "不发送多个相同请求到后端",
+              "后端也应有幂等性校验"
+            ]
+          },
+          "tags": ["表单流程", "防重复提交", "防抖"]
+        },
+        {
+          "fault_id": "F-WEB-012",
+          "name": "后退重新提交",
+          "description": "提交成功后按浏览器后退按钮再重新提交",
+          "severity": "中",
+          "source": {
+            "type": "baseline",
+            "standards": ["ISTQB"],
+            "description": "边界测试 - 浏览器后退行为"
+          },
+          "test_strategy": {
+            "trigger_pattern": "提交表单成功后按浏览器后退，再重新点击提交",
+            "expected_behavior": "应检测到重复提交或跳转到结果页",
+            "assertion_level": "L2",
+            "validation_points": [
+              "后退后重新提交被拦截",
+              "或检测到重复提交并提示",
+              "不创建重复资源",
+              "后端有幂等性保护"
+            ]
+          },
+          "tags": ["表单流程", "幂等性", "浏览器行为"]
+        },
+        {
+          "fault_id": "F-WEB-013",
+          "name": "多标签同时操作",
+          "description": "在多个浏览器标签页中同时操作同一资源",
+          "severity": "中",
+          "source": {
+            "type": "baseline",
+            "standards": ["线上真实生产故障复盘"],
+            "description": "用户真实使用场景 - 多标签并发操作"
+          },
+          "test_strategy": {
+            "trigger_pattern": "打开多个标签页同时编辑同一资源，依次保存",
+            "expected_behavior": "应检测冲突或提示数据已过期",
+            "assertion_level": "L2",
+            "validation_points": [
+              "后保存的标签页检测到数据已过期",
+              "显示冲突提示或强制覆盖确认",
+              "不导致数据不一致",
+              "提供版本号或时间戳检测机制"
+            ]
+          },
+          "tags": ["并发操作", "数据一致性", "冲突检测"]
+        },
+        {
+          "fault_id": "F-WEB-014",
+          "name": "会话过期操作",
+          "description": "会话过期后继续操作页面",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["OWASP Web Top10 2021"],
+            "description": "A07:2021 Identification and Authentication Failures"
+          },
+          "test_strategy": {
+            "trigger_pattern": "登录后等待会话过期（如30分钟），再尝试操作",
+            "expected_behavior": "应跳转到登录页并提示会话过期",
+            "assertion_level": "L2",
+            "validation_points": [
+              "操作时检测会话已过期",
+              "跳转到登录页面",
+              "显示会话过期提示",
+              "不泄露敏感数据"
+            ]
+          },
+          "tags": ["会话管理", "认证", "用户体验"]
+        }
+      ]
+    },
+    {
+      "category_id": "FC-WEB-003",
+      "category_name": "渲染&长连接异常",
+      "description": "页面渲染和长连接相关的故障",
+      "faults": [
+        {
+          "fault_id": "F-WEB-015",
+          "name": "SSE流式分片丢失",
+          "description": "Server-Sent Events流式响应中出现分片丢失",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["LLM流式对话行业通用测试实践"],
+            "description": "SSE流式输出 - 分片丢失场景"
+          },
+          "test_strategy": {
+            "trigger_pattern": "模拟SSE流式响应中出现分片丢失（如网络波动导致部分event未接收）",
+            "expected_behavior": "应有重连机制或错误处理",
+            "assertion_level": "L2",
+            "validation_points": [
+              "检测到分片丢失并重连",
+              "或提示用户并请求重新生成",
+              "不显示不完整或错乱的内容",
+              "支持从断点恢复"
+            ]
+          },
+          "tags": ["SSE", "流式输出", "容错"]
+        },
+        {
+          "fault_id": "F-WEB-016",
+          "name": "WebSocket断开重连",
+          "description": "WebSocket连接异常断开后的重连机制",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["线上真实生产故障复盘"],
+            "description": "WebSocket连接 - 网络波动重连"
+          },
+          "test_strategy": {
+            "trigger_pattern": "模拟WebSocket连接断开（如网络中断、服务器重启）",
+            "expected_behavior": "应自动重连或提示用户重连",
+            "assertion_level": "L2",
+            "validation_points": [
+              "检测到连接断开",
+              "尝试自动重连",
+              "显示重连状态或提示",
+              "重连后恢复数据同步"
+            ]
+          },
+          "tags": ["WebSocket", "长连接", "重连机制"]
+        },
+        {
+          "fault_id": "F-WEB-017",
+          "name": "空数据无兜底",
+          "description": "接口返回空数据时页面无兜底显示",
+          "severity": "中",
+          "source": {
+            "type": "baseline",
+            "standards": ["线上真实生产故障复盘"],
+            "description": "空状态 - 缺少兜底显示"
+          },
+          "test_strategy": {
+            "trigger_pattern": "使接口返回空数据或null",
+            "expected_behavior": "应显示友好的空状态提示",
+            "assertion_level": "L2",
+            "validation_points": [
+              "显示空状态占位图或文案",
+              "提示无数据或暂无内容",
+              "提供引导操作（如刷新、返回）",
+              "不显示空白页面或报错"
+            ]
+          },
+          "tags": ["空状态", "用户体验", "兜底处理"]
+        },
+        {
+          "fault_id": "F-WEB-018",
+          "name": "超长文本布局错乱",
+          "description": "显示超长文本导致页面布局错乱",
+          "severity": "中",
+          "source": {
+            "type": "baseline",
+            "standards": ["线上真实生产故障复盘"],
+            "description": "布局问题 - 超长文本导致布局异常"
+          },
+          "test_strategy": {
+            "trigger_pattern": "在列表、卡片等组件中显示超长文本（如无换行的长字符串）",
+            "expected_behavior": "应正确截断或换行，不破坏布局",
+            "assertion_level": "L2",
+            "validation_points": [
+              "超长文本自动换行",
+              "或显示省略号（...）并支持展开",
+              "不导致横向滚动条",
+              "不影响其他元素布局"
+            ]
+          },
+          "tags": ["布局", "文本显示", "CSS样式"]
+        },
+        {
+          "fault_id": "F-WEB-019",
+          "name": "文件上传异常",
+          "description": "文件上传过程中的异常场景",
+          "severity": "中",
+          "source": {
+            "type": "baseline",
+            "standards": ["ISTQB"],
+            "description": "文件操作 - 上传异常场景"
+          },
+          "test_strategy": {
+            "trigger_pattern": "上传超大文件、非法格式文件、中断上传",
+            "expected_behavior": "应正确校验并提示错误",
+            "assertion_level": "L2",
+            "validation_points": [
+              "校验文件大小和格式",
+              "显示错误提示",
+              "支持断点续传或重新上传",
+              "显示上传进度"
+            ]
+          },
+          "tags": ["文件上传", "校验", "进度显示"]
+        },
+        {
+          "fault_id": "F-WEB-020",
+          "name": "流式输出中途网络中断",
+          "description": "SSE流式输出过程中网络中断",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["LLM流式对话行业通用测试实践"],
+            "description": "流式输出 - 网络中断场景"
+          },
+          "test_strategy": {
+            "trigger_pattern": "在SSE流式输出过程中模拟网络中断",
+            "expected_behavior": "应有错误处理和恢复机制",
+            "assertion_level": "L2",
+            "validation_points": [
+              "检测到网络中断",
+              "显示错误提示或重连按钮",
+              "保存已接收的流式内容",
+              "支持重新生成或恢复"
+            ]
+          },
+          "tags": ["SSE", "流式输出", "网络中断"]
+        },
+        {
+          "fault_id": "F-WEB-021",
+          "name": "用户主动取消流式输出",
+          "description": "用户主动停止正在进行的流式输出",
+          "severity": "中",
+          "source": {
+            "type": "baseline",
+            "standards": ["LLM流式对话行业通用测试实践"],
+            "description": "流式输出 - 用户主动取消"
+          },
+          "test_strategy": {
+            "trigger_pattern": "在SSE流式输出过程中点击停止按钮",
+            "expected_behavior": "应立即停止输出并保留已接收内容",
+            "assertion_level": "L2",
+            "validation_points": [
+              "立即停止接收新内容",
+              "保留已显示的内容",
+              "显示已停止状态",
+              "提供重新生成的选项"
+            ]
+          },
+          "tags": ["SSE", "流式输出", "用户交互"]
+        },
+        {
+          "fault_id": "F-WEB-022",
+          "name": "流式分片乱序/重复/空分片",
+          "description": "SSE流式输出中分片顺序错误、重复或空分片",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["LLM流式对话行业通用测试实践"],
+            "description": "流式输出 - 分片异常场景"
+          },
+          "test_strategy": {
+            "trigger_pattern": "模拟SSE流式响应中分片顺序错误、重复或包含空分片",
+            "expected_behavior": "应有分片去重、排序和校验机制",
+            "assertion_level": "L2",
+            "validation_points": [
+              "检测并忽略重复分片",
+              "按正确顺序拼接分片",
+              "过滤空分片",
+              "显示完整正确的内容"
+            ]
+          },
+          "tags": ["SSE", "流式输出", "分片处理"]
+        },
+        {
+          "fault_id": "F-WEB-023",
+          "name": "流式结束标记丢失",
+          "description": "SSE流式响应缺少结束标记导致页面永久loading",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["LLM流式对话行业通用测试实践"],
+            "description": "流式输出 - 缺少结束标记"
+          },
+          "test_strategy": {
+            "trigger_pattern": "模拟SSE流式响应中缺少结束标记",
+            "expected_behavior": "应有超时机制或强制结束",
+            "assertion_level": "L2",
+            "validation_points": [
+              "检测到长时间无新分片",
+              "设置超时自动结束",
+              "移除loading状态",
+              "显示错误提示或保留已接收内容"
+            ]
+          },
+          "tags": ["SSE", "流式输出", "超时处理"]
+        },
+        {
+          "fault_id": "F-WEB-024",
+          "name": "断网重连后流式内容重复推送",
+          "description": "网络断开后重连，导致已推送的内容重复显示",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["LLM流式对话行业通用测试实践"],
+            "description": "流式输出 - 重连后重复推送"
+          },
+          "test_strategy": {
+            "trigger_pattern": "在SSE流式输出中断网后重连",
+            "expected_behavior": "应有去重机制，避免重复显示",
+            "assertion_level": "L2",
+            "validation_points": [
+              "记录已接收的分片ID",
+              "过滤已显示的分片",
+              "只显示新接收的内容",
+              "不出现重复文本"
+            ]
+          },
+          "tags": ["SSE", "流式输出", "去重"]
+        },
+        {
+          "fault_id": "F-WEB-025",
+          "name": "多会话流式内容交叉污染",
+          "description": "多个会话同时进行流式输出时，内容交叉污染",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["LLM流式对话行业通用测试实践"],
+            "description": "流式输出 - 多会话交叉污染"
+          },
+          "test_strategy": {
+            "trigger_pattern": "同时打开多个会话进行流式输出",
+            "expected_behavior": "每个会话应独立处理流式内容，不互相干扰",
+            "assertion_level": "L2",
+            "validation_points": [
+              "每个会话独立显示自己的内容",
+              "不出现其他会话的内容",
+              "会话间无数据泄漏",
+              "正确绑定流式响应到对应会话"
+            ]
+          },
+          "tags": ["SSE", "流式输出", "会话隔离"]
+        }
+      ]
+    },
+    {
+      "category_id": "FC-WEB-004",
+      "category_name": "前端鉴权异常",
+      "description": "前端认证和授权相关的异常场景",
+      "faults": [
+        {
+          "fault_id": "F-WEB-026",
+          "name": "Token篡改",
+          "description": "篡改存储在前端的认证Token",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["OWASP Web Top10 2021"],
+            "description": "A07:2021 Identification and Authentication Failures"
+          },
+          "test_strategy": {
+            "trigger_pattern": "通过开发者工具修改localStorage或sessionStorage中的Token",
+            "expected_behavior": "应检测到Token无效并跳转登录",
+            "assertion_level": "L2",
+            "validation_points": [
+              "检测到Token签名错误",
+              "跳转到登录页面",
+              "显示认证失败提示",
+              "不泄露敏感信息"
+            ]
+          },
+          "tags": ["认证", "Token安全", "OWASP"]
+        },
+        {
+          "fault_id": "F-WEB-027",
+          "name": "过期Token操作",
+          "description": "使用已过期的Token进行操作",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["OWASP Web Top10 2021"],
+            "description": "A07:2021 Identification and Authentication Failures"
+          },
+          "test_strategy": {
+            "trigger_pattern": "将Token修改为已过期的时间戳，然后进行操作",
+            "expected_behavior": "应检测到Token过期并刷新或跳转登录",
+            "assertion_level": "L2",
+            "validation_points": [
+              "检测到Token已过期",
+              "尝试刷新Token或跳转登录",
+              "显示会话过期提示",
+              "不执行操作"
+            ]
+          },
+          "tags": ["认证", "Token过期", "会话管理"]
+        },
+        {
+          "fault_id": "F-WEB-028",
+          "name": "本地存储删除后操作",
+          "description": "删除localStorage或sessionStorage后尝试操作",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["OWASP Web Top10 2021"],
+            "description": "A05:2021 Security Misconfiguration"
+          },
+          "test_strategy": {
+            "trigger_pattern": "通过开发者工具清空localStorage和sessionStorage，然后点击操作",
+            "expected_behavior": "应检测到认证信息缺失并跳转登录",
+            "assertion_level": "L2",
+            "validation_points": [
+              "检测到认证信息缺失",
+              "跳转到登录页面",
+              "显示未登录提示",
+              "不执行操作"
+            ]
+          },
+          "tags": ["认证", "本地存储", "会话管理"]
+        },
+        {
+          "fault_id": "F-WEB-029",
+          "name": "无权限路由直接访问",
+          "description": "直接在地址栏访问无权限的路由",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["OWASP Web Top10 2021"],
+            "description": "A01:2021 Broken Access Control"
+          },
+          "test_strategy": {
+            "trigger_pattern": "直接在地址栏输入无权限访问的路由URL",
+            "expected_behavior": "应跳转到无权限提示页或返回",
+            "assertion_level": "L2",
+            "validation_points": [
+              "检测到无权限访问",
+              "显示无权限提示或403页面",
+              "不显示无权限页面内容",
+              "记录访问日志"
+            ]
+          },
+          "tags": ["授权", "访问控制", "路由守卫"]
+        }
+      ]
+    }
+  ],
+  "history_faults": []
+}
