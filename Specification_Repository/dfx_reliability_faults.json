@@ -1,0 +1,718 @@
+{
+  "meta": {
+    "version": "1.0.0",
+    "scope": "global",
+    "description": "DFX可靠性故障模式库（适用于Web/API/Agent通用场景）",
+    "last_updated": "2026-06-27",
+    "maintainer": "test_engineering_team",
+    "source_standards": [
+      "CNCF ChaosMesh 云原生混沌工程故障场景",
+      "LLM流式对话、SSE长连接、Agent ToolCall架构行业通用测试实践",
+      "线上真实生产故障复盘沉淀"
+    ],
+    "library_type": "baseline"
+  },
+  "fault_categories": [
+    {
+      "category_id": "FC-DFX-001",
+      "category_name": "依赖服务失效场景（Web/API/Agent通用）",
+      "description": "下游依赖服务失效导致的故障",
+      "faults": [
+        {
+          "fault_id": "F-DFX-001",
+          "name": "下游API超时",
+          "description": "下游依赖API响应超时",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["CNCF ChaosMesh"],
+            "description": "依赖故障 - API超时"
+          },
+          "test_strategy": {
+            "trigger_pattern": "模拟下游API响应超时（延迟超过阈值）",
+            "expected_behavior": "应有超时控制和降级处理",
+            "assertion_level": "L2",
+            "validation_points": [
+              "设置合理的超时时间",
+              "超时后取消请求",
+              "启用降级或缓存",
+              "返回友好的错误提示"
+            ]
+          },
+          "tags": ["依赖服务", "超时", "降级"],
+          "applicable_scenarios": ["web", "rest_api", "agent"]
+        },
+        {
+          "fault_id": "F-DFX-002",
+          "name": "502/503错误",
+          "description": "下游服务返回502 Bad Gateway或503 Service Unavailable",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["CNCF ChaosMesh"],
+            "description": "依赖故障 - 服务不可用"
+          },
+          "test_strategy": {
+            "trigger_pattern": "模拟下游服务返回502或503错误",
+            "expected_behavior": "应有重试和降级机制",
+            "assertion_level": "L2",
+            "validation_points": [
+              "检测到502/503错误",
+              "启用指数退避重试",
+              "达到重试上限后降级",
+              "返回服务暂时不可用提示"
+            ]
+          },
+          "tags": ["依赖服务", "错误处理", "重试"],
+          "applicable_scenarios": ["web", "rest_api", "agent"]
+        },
+        {
+          "fault_id": "F-DFX-003",
+          "name": "限流429",
+          "description": "下游服务返回429 Too Many Requests",
+          "severity": "中",
+          "source": {
+            "type": "baseline",
+            "standards": ["CNCF ChaosMesh"],
+            "description": "依赖故障 - 限流"
+          },
+          "test_strategy": {
+            "trigger_pattern": "模拟下游服务返回429限流错误",
+            "expected_behavior": "应有请求节流和排队机制",
+            "assertion_level": "L2",
+            "validation_points": [
+              "检测到429错误",
+              "启用请求节流",
+              "延迟重试请求",
+              "或使用缓存替代实时请求"
+            ]
+          },
+          "tags": ["依赖服务", "限流", "节流"],
+          "applicable_scenarios": ["web", "rest_api", "agent"]
+        },
+        {
+          "fault_id": "F-DFX-004",
+          "name": "返回乱码",
+          "description": "下游服务返回乱码或格式错误的数据",
+          "severity": "中",
+          "source": {
+            "type": "baseline",
+            "standards": ["线上真实生产故障复盘"],
+            "description": "依赖故障 - 数据格式错误"
+          },
+          "test_strategy": {
+            "trigger_pattern": "模拟下游服务返回乱码或格式错误数据",
+            "expected_behavior": "应有数据校验和容错处理",
+            "assertion_level": "L2",
+            "validation_points": [
+              "检测到数据格式错误",
+              "记录错误日志",
+              "启用降级或默认值",
+              "不因格式错误导致崩溃"
+            ]
+          },
+          "tags": ["依赖服务", "数据校验", "容错"],
+          "applicable_scenarios": ["web", "rest_api", "agent"]
+        },
+        {
+          "fault_id": "F-DFX-005",
+          "name": "完全断连",
+          "description": "下游服务完全无法连接",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["CNCF ChaosMesh"],
+            "description": "依赖故障 - 连接失败"
+          },
+          "test_strategy": {
+            "trigger_pattern": "模拟下游服务网络不可达或端口关闭",
+            "expected_behavior": "应有熔断和降级机制",
+            "assertion_level": "L2",
+            "validation_points": [
+              "检测到连接失败",
+              "启用熔断器",
+              "进入降级模式",
+              "快速失败不阻塞调用方"
+            ]
+          },
+          "tags": ["依赖服务", "熔断", "降级"],
+          "applicable_scenarios": ["web", "rest_api", "agent"]
+        },
+        {
+          "fault_id": "F-DFX-006",
+          "name": "LLM流式接口中途超时",
+          "description": "LLM流式推理接口中途超时",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["LLM流式对话行业通用测试实践"],
+            "description": "依赖故障 - 流式接口超时"
+          },
+          "test_strategy": {
+            "trigger_pattern": "模拟LLM流式接口中途无响应",
+            "expected_behavior": "应有流式超时检测和终止",
+            "assertion_level": "L2",
+            "validation_points": [
+              "检测到流式输出超时",
+              "终止流式连接",
+              "保存已接收内容",
+              "提示用户超时并支持重试"
+            ]
+          },
+          "tags": ["依赖服务", "流式输出", "超时"],
+          "applicable_scenarios": ["agent"]
+        },
+        {
+          "fault_id": "F-DFX-007",
+          "name": "向量服务推理中断",
+          "description": "向量检索服务推理过程中中断",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["BIPI Agent 生产故障库"],
+            "description": "依赖故障 - 向量服务中断"
+          },
+          "test_strategy": {
+            "trigger_pattern": "模拟向量服务在推理过程中中断",
+            "expected_behavior": "应有中断检测和降级处理",
+            "assertion_level": "L2",
+            "validation_points": [
+              "检测到向量服务中断",
+              "启用降级（如使用简单检索）",
+              "记录中断日志",
+              "返回部分结果或错误提示"
+            ]
+          },
+          "tags": ["依赖服务", "向量服务", "中断"],
+          "applicable_scenarios": ["agent"]
+        },
+        {
+          "fault_id": "F-DFX-008",
+          "name": "工具服务流式响应异常",
+          "description": "Agent调用的工具服务流式响应异常",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["LLM流式对话行业通用测试实践"],
+            "description": "依赖故障 - 工具服务流式异常"
+          },
+          "test_strategy": {
+            "trigger_pattern": "模拟工具服务流式响应异常（分片错误、断连）",
+            "expected_behavior": "应有流式错误检测和恢复",
+            "assertion_level": "L2",
+            "validation_points": [
+              "检测到流式分片错误",
+              "过滤错误分片或重连",
+              "不因流式异常导致Agent崩溃",
+              "返回部分结果或错误提示"
+            ]
+          },
+          "tags": ["依赖服务", "流式输出", "容错"],
+          "applicable_scenarios": ["agent"]
+        }
+      ]
+    },
+    {
+      "category_id": "FC-DFX-002",
+      "category_name": "系统资源耗尽场景",
+      "description": "系统资源耗尽导致的故障",
+      "faults": [
+        {
+          "fault_id": "F-DFX-009",
+          "name": "CPU满载",
+          "description": "系统CPU使用率100%导致响应缓慢",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["CNCF ChaosMesh"],
+            "description": "资源耗尽 - CPU满载"
+          },
+          "test_strategy": {
+            "trigger_pattern": "模拟CPU满载场景（如高负载计算）",
+            "expected_behavior": "应有负载均衡和限流机制",
+            "assertion_level": "L2",
+            "validation_points": [
+              "启用请求队列",
+              "限流保护核心接口",
+              "或启用水平扩展",
+              "不因CPU满载导致服务不可用"
+            ]
+          },
+          "tags": ["资源耗尽", "CPU", "限流"],
+          "applicable_scenarios": ["web", "rest_api", "agent"]
+        },
+        {
+          "fault_id": "F-DFX-010",
+          "name": "内存OOM",
+          "description": "系统内存耗尽导致进程崩溃",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["CNCF ChaosMesh"],
+            "description": "资源耗尽 - 内存溢出"
+          },
+          "test_strategy": {
+            "trigger_pattern": "模拟内存耗尽场景",
+            "expected_behavior": "应有内存监控和自动重启机制",
+            "assertion_level": "L2",
+            "validation_points": [
+              "监控内存使用率",
+              "达到阈值时预警",
+              "进程崩溃后自动重启",
+              "重启后恢复正常服务"
+            ]
+          },
+          "tags": ["资源耗尽", "内存", "OOM"],
+          "applicable_scenarios": ["web", "rest_api", "agent"]
+        },
+        {
+          "fault_id": "F-DFX-011",
+          "name": "连接池打满",
+          "description": "数据库或网络连接池耗尽",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["CNCF ChaosMesh"],
+            "description": "资源耗尽 - 连接池耗尽"
+          },
+          "test_strategy": {
+            "trigger_pattern": "模拟大量并发请求导致连接池耗尽",
+            "expected_behavior": "应有连接池管理和排队机制",
+            "assertion_level": "L2",
+            "validation_points": [
+              "设置合理的连接池大小",
+              "连接超时自动释放",
+              "新请求排队等待",
+              "不因连接池耗尽导致服务崩溃"
+            ]
+          },
+          "tags": ["资源耗尽", "连接池", "并发"],
+          "applicable_scenarios": ["web", "rest_api", "agent"]
+        },
+        {
+          "fault_id": "F-DFX-012",
+          "name": "磁盘IO阻塞",
+          "description": "磁盘IO阻塞导致响应缓慢",
+          "severity": "中",
+          "source": {
+            "type": "baseline",
+            "standards": ["CNCF ChaosMesh"],
+            "description": "资源耗尽 - 磁盘IO阻塞"
+          },
+          "test_strategy": {
+            "trigger_pattern": "模拟磁盘IO阻塞（如大量写入）",
+            "expected_behavior": "应有异步IO和缓存机制",
+            "assertion_level": "L2",
+            "validation_points": [
+              "使用异步IO减少阻塞",
+              "启用缓存减少磁盘访问",
+              "监控IO延迟",
+              "不影响核心接口响应"
+            ]
+          },
+          "tags": ["资源耗尽", "磁盘IO", "缓存"],
+          "applicable_scenarios": ["web", "rest_api", "agent"]
+        },
+        {
+          "fault_id": "F-DFX-013",
+          "name": "并发流式会话耗尽连接",
+          "description": "大量并发SSE流式会话耗尽连接",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["LLM流式对话行业通用测试实践"],
+            "description": "资源耗尽 - 流式连接耗尽"
+          },
+          "test_strategy": {
+            "trigger_pattern": "模拟大量并发SSE流式会话",
+            "expected_behavior": "应有流式连接限制和排队",
+            "assertion_level": "L2",
+            "validation_points": [
+              "限制最大并发流式连接数",
+              "超出限制时排队或拒绝",
+              "监控连接使用情况",
+              "不因连接耗尽导致服务崩溃"
+            ]
+          },
+          "tags": ["资源耗尽", "流式连接", "并发"],
+          "applicable_scenarios": ["web", "agent"]
+        },
+        {
+          "fault_id": "F-DFX-014",
+          "name": "长时流式会话内存累积泄漏",
+          "description": "长时间流式会话导致内存持续增长",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["BIPI Agent 生产故障库"],
+            "description": "资源耗尽 - 内存泄漏"
+          },
+          "test_strategy": {
+            "trigger_pattern": "模拟长时间流式会话，观察内存增长",
+            "expected_behavior": "应有会话管理和内存回收",
+            "assertion_level": "L2",
+            "validation_points": [
+              "设置会话超时时间",
+              "超时自动清理会话",
+              "释放相关内存资源",
+              "内存使用稳定不持续增长"
+            ]
+          },
+          "tags": ["资源耗尽", "内存泄漏", "流式会话"],
+          "applicable_scenarios": ["web", "agent"]
+        }
+      ]
+    },
+    {
+      "category_id": "FC-DFX-003",
+      "category_name": "恢复性&降级场景",
+      "description": "系统恢复和降级相关的故障",
+      "faults": [
+        {
+          "fault_id": "F-DFX-015",
+          "name": "进程崩溃重启校验会话",
+          "description": "进程崩溃重启后校验会话状态",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["CNCF ChaosMesh"],
+            "description": "恢复性 - 崩溃恢复"
+          },
+          "test_strategy": {
+            "trigger_pattern": "模拟进程崩溃后重启",
+            "expected_behavior": "应恢复会话状态或提示用户",
+            "assertion_level": "L2",
+            "validation_points": [
+              "重启后尝试恢复会话",
+              "或提示用户会话已失效",
+              "清除过期会话",
+              "不影响新会话创建"
+            ]
+          },
+          "tags": ["恢复性", "崩溃", "会话管理"],
+          "applicable_scenarios": ["web", "rest_api", "agent"]
+        },
+        {
+          "fault_id": "F-DFX-016",
+          "name": "熔断开启后恢复",
+          "description": "熔断器开启后下游服务恢复正常",
+          "severity": "中",
+          "source": {
+            "type": "baseline",
+            "standards": ["CNCF ChaosMesh"],
+            "description": "恢复性 - 熔断恢复"
+          },
+          "test_strategy": {
+            "trigger_pattern": "模拟熔断开启，下游服务恢复",
+            "expected_behavior": "熔断器应在一段时间后尝试恢复",
+            "assertion_level": "L2",
+            "validation_points": [
+              "熔断开启后进入半开状态",
+              "探测下游服务是否恢复",
+              "恢复成功后关闭熔断",
+              "恢复失败保持熔断状态"
+            ]
+          },
+          "tags": ["恢复性", "熔断", "降级"],
+          "applicable_scenarios": ["web", "rest_api", "agent"]
+        },
+        {
+          "fault_id": "F-DFX-017",
+          "name": "缓存雪崩降级",
+          "description": "大量缓存同时失效导致请求直击数据库",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["线上真实生产故障复盘"],
+            "description": "恢复性 - 缓存雪崩"
+          },
+          "test_strategy": {
+            "trigger_pattern": "模拟大量缓存同时过期",
+            "expected_behavior": "应有缓存预热和降级机制",
+            "assertion_level": "L2",
+            "validation_points": [
+              "设置不同的缓存过期时间",
+              "缓存过期时异步刷新",
+              "启用限流保护数据库",
+              "或返回默认值降级"
+            ]
+          },
+          "tags": ["恢复性", "缓存", "雪崩"],
+          "applicable_scenarios": ["web", "rest_api"]
+        },
+        {
+          "fault_id": "F-DFX-018",
+          "name": "长会话内存溢出",
+          "description": "长时间会话导致内存溢出",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["BIPI Agent 生产故障库"],
+            "description": "恢复性 - 会话溢出"
+          },
+          "test_strategy": {
+            "trigger_pattern": "模拟长时间会话积累大量数据",
+            "expected_behavior": "应有会话分片和清理机制",
+            "assertion_level": "L2",
+            "validation_points": [
+              "会话数据分片存储",
+              "定期清理过期会话",
+              "限制单个会话数据量",
+              "避免单会话占用过多内存"
+            ]
+          },
+          "tags": ["恢复性", "会话", "内存管理"],
+          "applicable_scenarios": ["web", "agent"]
+        },
+        {
+          "fault_id": "F-DFX-019",
+          "name": "流式中断后自动重试风暴",
+          "description": "流式中断后大量客户端自动重试导致请求风暴",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["LLM流式对话行业通用测试实践"],
+            "description": "恢复性 - 重试风暴"
+          },
+          "test_strategy": {
+            "trigger_pattern": "模拟流式中断，大量客户端自动重试",
+            "expected_behavior": "应有退避重试和限流机制",
+            "assertion_level": "L2",
+            "validation_points": [
+              "客户端启用指数退避",
+              "设置最大重试次数",
+              "服务端启用限流",
+              "避免重试风暴打垮服务"
+            ]
+          },
+          "tags": ["恢复性", "重试", "限流"],
+          "applicable_scenarios": ["web", "agent"]
+        },
+        {
+          "fault_id": "F-DFX-020",
+          "name": "服务滚动更新中断流式对话",
+          "description": "服务滚动更新过程中中断流式对话",
+          "severity": "中",
+          "source": {
+            "type": "baseline",
+            "standards": ["LLM流式对话行业通用测试实践"],
+            "description": "恢复性 - 滚动更新中断"
+          },
+          "test_strategy": {
+            "trigger_pattern": "模拟服务滚动更新，观察流式对话",
+            "expected_behavior": "应有会话迁移和中断处理",
+            "assertion_level": "L2",
+            "validation_points": [
+              "会话状态持久化",
+              "支持会话迁移",
+              "或提示用户重新开始",
+              "记录中断日志"
+            ]
+          },
+          "tags": ["恢复性", "滚动更新", "会话迁移"],
+          "applicable_scenarios": ["web", "agent"]
+        },
+        {
+          "fault_id": "F-DFX-021",
+          "name": "半完成流式任务状态自愈校验",
+          "description": "流式任务中断后校验并恢复状态",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["BIPI Agent 生产故障库"],
+            "description": "恢复性 - 任务自愈"
+          },
+          "test_strategy": {
+            "trigger_pattern": "模拟流式任务中途中断",
+            "expected_behavior": "应有状态校验和自愈机制",
+            "assertion_level": "L2",
+            "validation_points": [
+              "记录任务中断点",
+              "重启后校验任务状态",
+              "从断点恢复或标记失败",
+              "不产生部分完成的状态"
+            ]
+          },
+          "tags": ["恢复性", "任务状态", "自愈"],
+          "applicable_scenarios": ["agent"]
+        },
+        {
+          "fault_id": "F-DFX-022",
+          "name": "中断后幂等性校验",
+          "description": "操作中断后重试应具备幂等性",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["线上真实生产故障复盘"],
+            "description": "恢复性 - 幂等性校验"
+          },
+          "test_strategy": {
+            "trigger_pattern": "模拟操作中断后重试",
+            "expected_behavior": "重试不应产生副作用",
+            "assertion_level": "L2",
+            "validation_points": [
+              "操作具备幂等性",
+              "重试不重复执行",
+              "不重复创建资源",
+              "状态一致"
+            ]
+          },
+          "tags": ["恢复性", "幂等性", "重试"],
+          "applicable_scenarios": ["web", "rest_api", "agent"]
+        }
+      ]
+    },
+    {
+      "category_id": "FC-DFX-004",
+      "category_name": "运维可观测DFX测试点",
+      "description": "运维可观测性和监控相关的故障",
+      "faults": [
+        {
+          "fault_id": "F-DFX-023",
+          "name": "异常无日志",
+          "description": "发生异常但未记录日志",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["线上真实生产故障复盘"],
+            "description": "可观测性 - 缺少日志"
+          },
+          "test_strategy": {
+            "trigger_pattern": "触发各种异常场景，检查日志记录",
+            "expected_behavior": "所有异常都应记录详细日志",
+            "assertion_level": "L2",
+            "validation_points": [
+              "异常记录日志级别",
+              "日志包含异常堆栈",
+              "日志包含关键上下文信息",
+              "便于问题定位"
+            ]
+          },
+          "tags": ["可观测性", "日志", "故障定位"],
+          "applicable_scenarios": ["web", "rest_api", "agent"]
+        },
+        {
+          "fault_id": "F-DFX-024",
+          "name": "无traceID",
+          "description": "请求缺少traceID导致无法追踪链路",
+          "severity": "中",
+          "source": {
+            "type": "baseline",
+            "standards": ["CNCF ChaosMesh"],
+            "description": "可观测性 - 缺少链路追踪"
+          },
+          "test_strategy": {
+            "trigger_pattern": "检查请求的traceID传递",
+            "expected_behavior": "所有请求都应有唯一的traceID",
+            "assertion_level": "L2",
+            "validation_points": [
+              "每个请求生成traceID",
+              "traceID在微服务间传递",
+              "支持通过traceID追踪全链路",
+              "日志中包含traceID"
+            ]
+          },
+          "tags": ["可观测性", "链路追踪", "traceID"],
+          "applicable_scenarios": ["web", "rest_api", "agent"]
+        },
+        {
+          "fault_id": "F-DFX-025",
+          "name": "健康探针失败",
+          "description": "健康检查探针失败但服务仍响应",
+          "severity": "高",
+          "source": {
+            "type": "baseline",
+            "standards": ["CNCF ChaosMesh"],
+            "description": "可观测性 - 健康检查"
+          },
+          "test_strategy": {
+            "trigger_pattern": "检查健康探针的准确性",
+            "expected_behavior": "健康探针应准确反映服务状态",
+            "assertion_level": "L2",
+            "validation_points": [
+              "健康探针检查核心依赖",
+              "探针失败时标记服务不健康",
+              "不健康的实例不再接收流量",
+              "探针恢复后自动恢复流量"
+            ]
+          },
+          "tags": ["可观测性", "健康检查", "流量管理"],
+          "applicable_scenarios": ["web", "rest_api", "agent"]
+        },
+        {
+          "fault_id": "F-DFX-026",
+          "name": "配置更新不生效",
+          "description": "配置更新后未生效",
+          "severity": "中",
+          "source": {
+            "type": "baseline",
+            "standards": ["线上真实生产故障复盘"],
+            "description": "可观测性 - 配置管理"
+          },
+          "test_strategy": {
+            "trigger_pattern": "更新配置后验证是否生效",
+            "expected_behavior": "配置更新应立即生效",
+            "assertion_level": "L2",
+            "validation_points": [
+              "配置更新后立即重载",
+              "验证配置是否生效",
+              "配置更新记录日志",
+              "支持配置回滚"
+            ]
+          },
+          "tags": ["可观测性", "配置管理", "重载"],
+          "applicable_scenarios": ["web", "rest_api", "agent"]
+        },
+        {
+          "fault_id": "F-DFX-027",
+          "name": "流式中断无异常埋点",
+          "description": "流式中断时缺少监控埋点",
+          "severity": "中",
+          "source": {
+            "type": "baseline",
+            "standards": ["LLM流式对话行业通用测试实践"],
+            "description": "可观测性 - 流式监控"
+          },
+          "test_strategy": {
+            "trigger_pattern": "检查流式中断时的监控埋点",
+            "expected_behavior": "流式中断应有完整的监控埋点",
+            "assertion_level": "L2",
+            "validation_points": [
+              "记录流式开始时间",
+              "记录中断原因和时间",
+              "统计流式中断率",
+              "支持告警配置"
+            ]
+          },
+          "tags": ["可观测性", "流式监控", "埋点"],
+          "applicable_scenarios": ["web", "agent"]
+        },
+        {
+          "fault_id": "F-DFX-028",
+          "name": "长连接断开无监控告警",
+          "description": "长连接异常断开但无监控告警",
+          "severity": "中",
+          "source": {
+            "type": "baseline",
+            "standards": ["线上真实生产故障复盘"],
+            "description": "可观测性 - 长连接监控"
+          },
+          "test_strategy": {
+            "trigger_pattern": "模拟长连接异常断开",
+            "expected_behavior": "应有长连接监控和告警",
+            "assertion_level": "L2",
+            "validation_points": [
+              "统计长连接数量",
+              "监控连接断开率",
+              "异常断开触发告警",
+              "记录断开原因"
+            ]
+          },
+          "tags": ["可观测性", "长连接", "告警"],
+          "applicable_scenarios": ["web", "agent"]
+        }
+      ]
+    }
+  ],
+  "history_faults": []
+}
