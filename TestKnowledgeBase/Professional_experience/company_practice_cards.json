@@ -1,0 +1,207 @@
+{
+  "meta": {
+    "version": "1.0.0",
+    "last_updated": "2026-06-29",
+    "description": "主要全球互联网和 AI 公司公开测试实践卡片，供 AutoTestFlow 生成策略和门禁时引用。"
+  },
+  "practice_cards": [
+    {
+      "practice_id": "PE-COMP-GOOGLE-TEST-SUITE",
+      "organization": "Google",
+      "theme": "Developer-driven automated testing and test suite shape",
+      "source_refs": ["SRC-GOOGLE-SWE-TESTING", "SRC-GOOGLE-TEST-PYRAMID"],
+      "principles": [
+        "测试应帮助工程团队安全变更，而不只是发现缺陷。",
+        "反馈回路需要快速、可靠、可定位。",
+        "大规模 E2E 应保持少量，优先使用小而确定的测试。"
+      ],
+      "acceptance_implications": [
+        "PR 前必须存在快速稳定测试层。",
+        "E2E 失败必须能定位到模块、依赖或配置，不应只给出模糊流程失败。",
+        "flaky 测试必须计入套件健康风险。"
+      ],
+      "autotestflow_use": ["stage3b", "stage5"],
+      "confidence": "high"
+    },
+    {
+      "practice_id": "PE-COMP-GOOGLE-SRE",
+      "organization": "Google",
+      "theme": "Reliability testing and production confidence",
+      "source_refs": ["SRC-GOOGLE-SRE-RELIABILITY"],
+      "principles": [
+        "可靠性需要通过测试和监控量化信心。",
+        "能在上线前阻断缺陷的测试相当于降低 MTTR。",
+        "传统测试、配置测试、压力测试、生产探针和 canary 共同组成可靠性验证。"
+      ],
+      "acceptance_implications": [
+        "可靠性验收必须包含容量、配置、依赖和生产探针。",
+        "高风险变更需要 canary 或等价的渐进放量证据。",
+        "报告必须说明哪些缺陷可在上线前被阻断。"
+      ],
+      "autotestflow_use": ["stage3b", "stage4", "stage5"],
+      "confidence": "high"
+    },
+    {
+      "practice_id": "PE-COMP-MICROSOFT-FUNDAMENTALS",
+      "organization": "Microsoft",
+      "theme": "Engineering fundamentals for testing and observability",
+      "source_refs": ["SRC-MICROSOFT-TESTING"],
+      "principles": [
+        "没有测试的代码不完整。",
+        "单元测试应在 PR merge 前运行，失败阻断继续合并。",
+        "系统应从设计阶段支持参数化、日志、外部日志、相关 ID 和性能指标。"
+      ],
+      "acceptance_implications": [
+        "测试报告必须区分 PR gate、regular E2E、load/performance、synthetic monitoring。",
+        "缺少 correlation ID、关键日志或性能指标时，应作为可观测性缺口。",
+        "性能和压力测试应在适用场景中成为上线门禁。"
+      ],
+      "autotestflow_use": ["stage2", "stage3b", "stage5"],
+      "confidence": "high"
+    },
+    {
+      "practice_id": "PE-COMP-MICROSOFT-AI-OBS",
+      "organization": "Microsoft",
+      "theme": "AI observability and lifecycle evaluation",
+      "source_refs": ["SRC-MICROSOFT-AI-OBSERVABILITY"],
+      "principles": [
+        "AI observability 覆盖 evaluation、monitoring、tracing。",
+        "AI 评估应覆盖质量、安全、可靠性、RAG、工具调用和任务完成。",
+        "生产后需要采样评估、scheduled eval、scheduled red teaming 和告警。"
+      ],
+      "acceptance_implications": [
+        "AI Agent 上线前必须有 eval dataset 和至少一个任务相关评分器。",
+        "工具调用准确率、任务完成率、安全指标、延迟和错误率应进入报告。",
+        "生产监控必须能关联 LLM call、tool invocation、agent decision 和 trace。"
+      ],
+      "autotestflow_use": ["stage3b", "stage4", "stage5"],
+      "confidence": "high"
+    },
+    {
+      "practice_id": "PE-COMP-AWS-RELIABILITY",
+      "organization": "AWS",
+      "theme": "Well-Architected reliability",
+      "source_refs": ["SRC-AWS-WA-RELIABILITY"],
+      "principles": [
+        "可靠性来自强基础、弹性架构、一致变更管理和已验证的故障恢复。",
+        "架构需要可被最佳实践持续衡量和改进。"
+      ],
+      "acceptance_implications": [
+        "DFX 测试应证明依赖失效、资源耗尽、恢复和降级路径。",
+        "上线门禁应包含变更管理和恢复流程证据。",
+        "只验证 happy-path 不足以满足可靠性验收。"
+      ],
+      "autotestflow_use": ["stage3b", "stage5"],
+      "confidence": "high"
+    },
+    {
+      "practice_id": "PE-COMP-NETFLIX-FIT",
+      "organization": "Netflix",
+      "theme": "Controlled failure injection",
+      "source_refs": ["SRC-NETFLIX-FIT"],
+      "principles": [
+        "真实失败要在受控 blast radius 内演练。",
+        "先隔离到测试账号或设备，再逐步扩大到小比例生产流量。",
+        "失败场景应来自依赖路径和历史事故。"
+      ],
+      "acceptance_implications": [
+        "故障注入必须包含作用域、注入点、预期降级和退出条件。",
+        "DFX 用例应覆盖依赖超时、500、持久层失败和缓存失败。",
+        "连续运行的故障测试应把新引入脆弱性沉淀回知识库。"
+      ],
+      "autotestflow_use": ["stage3b", "stage4", "stage5"],
+      "confidence": "high"
+    },
+    {
+      "practice_id": "PE-COMP-NETFLIX-CANARY",
+      "organization": "Netflix",
+      "theme": "Automated canary analysis",
+      "source_refs": ["SRC-NETFLIX-KAYENTA"],
+      "principles": [
+        "canary 需要 baseline 与 canary 的指标对比。",
+        "指标判断应包括数据校验、清洗、比较和最终评分。",
+        "报告要解释失败指标，帮助建立部署信心。"
+      ],
+      "acceptance_implications": [
+        "高风险服务变更应要求 baseline/canary 对比或等价证据。",
+        "无数据、缺指标、指标不可解释应作为发布风险。",
+        "stage5 报告应给出可回滚的门禁结论。"
+      ],
+      "autotestflow_use": ["stage5"],
+      "confidence": "high"
+    },
+    {
+      "practice_id": "PE-COMP-META-SAPIENZ",
+      "organization": "Meta",
+      "theme": "Automated test design at scale",
+      "source_refs": ["SRC-META-SAPIENZ"],
+      "principles": [
+        "自动化测试要尽量贴近真实可复现入口。",
+        "报告必须低误报、可行动，并嵌入 CI 近实时反馈。",
+        "机器搜索可以扩展测试设计，但仍需要人类领域知识补位。"
+      ],
+      "acceptance_implications": [
+        "AutoTestFlow 生成的失败必须有用户入口或黑盒 trace 可复现。",
+        "报告中每个缺陷都应可行动，而不是只给异常堆栈。",
+        "自动生成用例需要保留 provenance，如 fault_ref、oracle_refs、trace。"
+      ],
+      "autotestflow_use": ["stage3b", "stage4", "stage5"],
+      "confidence": "high"
+    },
+    {
+      "practice_id": "PE-COMP-META-AI-EVAL",
+      "organization": "Meta",
+      "theme": "Model benchmark, human evaluation, safety tools",
+      "source_refs": ["SRC-META-LLAMA-EVAL"],
+      "principles": [
+        "模型能力评估应结合大量 benchmark 和真实场景人工评估。",
+        "Agentic 系统需要安全组件和标准接口。",
+        "应用方需要对自己的具体应用做 evaluation。"
+      ],
+      "acceptance_implications": [
+        "AI 测试不能只用通用 benchmark，必须有应用场景 eval。",
+        "prompt injection、safety guard、tool-use 能力需要独立验收。",
+        "长上下文、多语言、工具调用能力应按实际启用范围测试。"
+      ],
+      "autotestflow_use": ["stage3b", "stage5"],
+      "confidence": "medium"
+    },
+    {
+      "practice_id": "PE-COMP-OPENAI-EVALS",
+      "organization": "OpenAI",
+      "theme": "Evals as behavior specification",
+      "source_refs": ["SRC-OPENAI-EVALS"],
+      "principles": [
+        "先描述任务行为，再用测试输入运行 eval，最后分析结果并迭代。",
+        "eval 需要 test data schema 和 testing criteria。",
+        "测试数据应包含输入和 ground truth，grader 决定输出是否满足要求。"
+      ],
+      "acceptance_implications": [
+        "AI 用例必须明确 task、dataset schema、grader 和通过阈值。",
+        "LLM 输出验收应区分 exact/string/code/LLM grader。",
+        "eval run 结果应可追溯到 prompt、model、输入和评分器版本。"
+      ],
+      "autotestflow_use": ["stage3b", "stage4", "stage5"],
+      "confidence": "high"
+    },
+    {
+      "practice_id": "PE-COMP-ANTHROPIC-EVALS",
+      "organization": "Anthropic",
+      "theme": "Success criteria and grading hierarchy",
+      "source_refs": ["SRC-ANTHROPIC-EVALS"],
+      "principles": [
+        "LLM 应用成功标准要具体、可度量、可达成、相关。",
+        "多数应用需要多维评估，例如任务忠实度、一致性、相关性、隐私、延迟、成本。",
+        "评分应优先选择最快、最可靠、最可扩展的方法。"
+      ],
+      "acceptance_implications": [
+        "AI 测试必须列出多维成功标准，而非单一准确率。",
+        "能用代码评分时优先代码评分，需要 LLM 评分时必须有清晰 rubric。",
+        "安全等模糊目标也要量化为阈值或风险等级。"
+      ],
+      "autotestflow_use": ["stage1", "stage3b", "stage5"],
+      "confidence": "high"
+    }
+  ]
+}
+
