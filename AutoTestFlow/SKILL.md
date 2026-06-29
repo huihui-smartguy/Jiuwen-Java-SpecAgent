@@ -121,7 +121,9 @@ AskUserQuestion(questions=[{
 | `--pr` | PR编号，逗号分隔 | 可选（与 code_path/commit 三选一） |
 | `--commit` | Commit ID，逗号分隔 | 可选（与 code_path/pr 三选一） |
 | `--base` | 基准分支 | 仓库默认分支 |
-| `--fault-lib` | 故障库（规格库）路径，供阶段2.6 匹配 | 自动探测 `TestKnowledgeBase/Fault/rest_api_faults.json`；`Specification_Repository` 仅遗留兼容 |
+| `--knowledge-root` | TestKnowledgeBase 根目录，供阶段2.6 registry/glob discovery 使用 | 仓内 `TestKnowledgeBase` |
+| `--knowledge-domain` | 知识域过滤：`all` / `rest_api` / `web` / `agent` / `dfx`，或逗号分隔 package_id | `all` |
+| `--fault-lib` | 显式故障库路径，仅用于旧 demo 或单文件调试 | 可选；默认不自动回退 `Specification_Repository` |
 | `--fault-overlay` | 项目级故障库 overlay（覆盖/禁用/项目特有故障） | 可选 |
 | `--faults` | 故障库启用模式：`auto`（探测到库即启用）/ `on` / `off` | `auto` |
 | `--fault-enrich` | 阶段2.6b 可选 LLM 增强（模糊绑定 / 占位替换 / contract_conflict 检出）：`on` / `off` / `auto` | `off` |
@@ -214,7 +216,7 @@ AskUserQuestion(questions=[{
 | 1 需求侧分析 | `templates/stage1_req_analyze.md` | `shared/scenario_schema.md` | `.state/s1_index.json` + `.state/s1_scenarios/*` | ✅ | **✅** |
 | 2 Java代码扫描 | `templates/stage2_code_scan.md` | `shared/code_analysis_template.md` + `shared/java_scan_guide.md` | `.state/s2_code_facts.json` + `.state/stage_summary.json` + `.state/framework_scenes.json`（框架场景派生物） | ✅ | ❌ |
 | 2.5 契约校准 | `templates/stage2_5_contract_calibrate.md` | `scripts/probe_contract.py` | `contract.md` + `.state/contract_samples.json` | — | ❌ |
-| 2.6 故障匹配（可选） | —（纯脚本） | `scripts/match_faults.py` | `.state/fault_matches.json` + `.state/fault_contract_alignment.md` | — | ❌ |
+| 2.6 知识/故障匹配（可选） | —（纯脚本） | `scripts/match_faults.py` | `.state/knowledge_matches.json` + `.state/fault_matches.json` + `.state/fault_contract_alignment.md` | — | ❌ |
 | 2.6b 故障增强（可选） | `templates/stage2_6_fault_match.md` | — | 回写 `.state/fault_matches.json` | ✅ | ❌ |
 | 2R 需求摘要（纯需求） | `templates/stage2R_req_summary.md` | — | `.state/stage_summary.json` | — | ❌ |
 | 3a-gap GAP场景 | `templates/stage3a_gap.md` | — | `.state/s3a_enriched/FS-GAP-*.json` | ✅ | ❌ |
@@ -295,22 +297,23 @@ AskUserQuestion(questions=[{
 自动进入阶段2.6（故障匹配）
 ```
 
-### 阶段2.6：故障库匹配（可选，纯脚本，前景 <5s）
+### 阶段2.6：TestKnowledgeBase 知识/故障匹配（可选，纯脚本，前景 <5s）
 
-> 人工裁决：❌ | 条件：标准模式 + 探测到故障库（`--faults≠off`）
-> **定位**：在 `contract.md` 就位后，把外部故障库（规格库）匹配进流水线，并按契约权威性封顶断言级别。后续迭代以 `TestKnowledgeBase/Fault/` 为故障知识主干，`Specification_Repository/` 不再承担实际产品迭代职责。
-> **优雅降级**：未发现故障库 / `--faults=off` / 无 `contract.md` → 跳过且不产出任何文件，流水线与未接入时**字节级一致**。
+> 人工裁决：❌ | 条件：标准模式 + 探测到 TestKnowledgeBase（`--faults≠off`）
+> **定位**：在 `contract.md` 就位后，通过 `TestKnowledgeBase/registry.json` 或 `TestKnowledgeBase/Fault/*.json` 动态发现知识包并匹配进流水线，再按契约权威性封顶断言级别。`Specification_Repository/` 仅允许显式旧 demo 调用，不再作为自动 fallback。
+> **优雅降级**：未发现 TestKnowledgeBase / `--faults=off` / 无 `contract.md` → 跳过且不产出任何文件，流水线与未接入时**字节级一致**。
 
 ```
 步骤1: 编排器前景执行（不启动 Agent）
   → 执行: python {skill_dir}/scripts/match_faults.py \
             --output-dir {output_dir} \
-            [--fault-lib {fault_lib}] [--fault-overlay {fault_overlay}] [--faults auto|on|off]
+            [--knowledge-root {knowledge_root}] [--knowledge-domain all|rest_api|web|agent|dfx] \
+            [--fault-lib {explicit_legacy_fault_lib}] [--fault-overlay {fault_overlay}] [--faults auto|on|off]
   → 输入: contract.md（权威性分级表）+ .state/s1_index.json + .state/s1_scenarios/*.json
-          + .state/s2_code_facts.json + 故障库[+overlay]
-  → 匹配: 端点/方法 · 标签 · 历史(test_case_id→P0) · 关联字段(agentId 等)
+          + .state/s2_code_facts.json + TestKnowledgeBase registry/Fault packages[+overlay]
+  → 匹配: package/domain/category metadata · 场景域 · 标签 · 历史(test_case_id→P0) · 关联字段(agentId 等) · 流式信号
   → 调和: 每条故障的断言级别按 contract 权威性封顶（spec-required→L2；config-dependent/静默/未知→L0/L1）
-  → 输出: .state/fault_matches.json（场景→matched_faults，含 fault_ref/branch_class/oracle_refs/reconciliation）
+  → 输出: .state/knowledge_matches.json（主产物）+ .state/fault_matches.json（兼容产物，含 fault_ref/branch_class/oracle_refs/reconciliation）
 
 步骤2: 验证
   → 若 .state/fault_matches.json 存在 → stage3b 将据此补充故障导向用例

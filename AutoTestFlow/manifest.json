@@ -1,13 +1,16 @@
 {
   "name": "AutoTestFlow",
-  "version": "1.0.0",
-  "release_track": "release/autotestflow-v1.0",
-  "default_fault_knowledge_base": "TestKnowledgeBase/Fault/rest_api_faults.json",
+  "version": "1.1.0",
+  "release_track": "develop/iteration-2",
+  "default_knowledge_root": "TestKnowledgeBase",
+  "default_runtime_registry": "TestKnowledgeBase/registry.json",
+  "compatibility_fault_output": ".state/fault_matches.json",
+  "primary_knowledge_output": ".state/knowledge_matches.json",
   "legacy_fault_knowledge_base": "Specification_Repository/rest_api_common_faults.json",
-  "legacy_policy": "Specification_Repository is retained only for compatibility with historical demos and explicit old invocations. Future product iterations must use TestKnowledgeBase.",
+  "legacy_policy": "Specification_Repository is retained only for explicit historical demos and old invocations. AutoTestFlow must not automatically fall back to it during future product iteration.",
   "contract_policy": "contract.md remains the only strong oracle for executable assertions.",
   "validation": {
     "knowledge_base": "python AutoTestFlow/scripts/validate_knowledge_base.py",
-    "fault_match_smoke": "python AutoTestFlow/scripts/match_faults.py --output-dir <output_dir> --fault-lib TestKnowledgeBase/Fault/rest_api_faults.json"
+    "knowledge_match_smoke": "python AutoTestFlow/scripts/match_faults.py --output-dir <output_dir> --knowledge-root TestKnowledgeBase"
   }
 }
