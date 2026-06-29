@@ -1,0 +1,330 @@
+{
+  "schema_version": "1.0",
+  "name": "TestKnowledgeBase Runtime Registry",
+  "version": "1.2.0",
+  "status": "runtime_source_of_truth",
+  "description": "Machine-readable package registry consumed by AutoTestFlow. New fault packages should be added here instead of hard-coding package paths or category behavior in AutoTestFlow.",
+  "default_runtime": {
+    "package_ids": [
+      "fault.rest_api",
+      "fault.agent_scene",
+      "fault.web_frontend",
+      "fault.dfx_reliability"
+    ],
+    "contract_policy": "Knowledge decides what to test and how to prioritize; contract.md remains the only source for strong executable oracle assertions.",
+    "compatibility_output": ".state/fault_matches.json",
+    "primary_output": ".state/knowledge_matches.json"
+  },
+  "recording": {
+    "default_overlay": "Fault/project_faults.json",
+    "candidate_output": ".state/new_knowledge_candidates.json",
+    "legacy_candidate_output": ".state/new_faults_detected.json",
+    "eligible_result_classes": [
+      "sdk_defect"
+    ],
+    "promotion_policy": "Automatically collected candidates remain project-scoped until reviewed and promoted into a TestKnowledgeBase package."
+  },
+  "packages": [
+    {
+      "package_id": "fault.rest_api",
+      "type": "fault",
+      "domain": "rest_api",
+      "path": "Fault/rest_api_faults.json",
+      "active": true,
+      "default_branch_class": "exception",
+      "default_contract_kinds": [
+        "RESP_WRAP",
+        "ID_TYPE"
+      ],
+      "scenario_signals": {
+        "include_domains": [
+          "rest_api"
+        ],
+        "keywords": [
+          "api",
+          "http",
+          "json-rpc",
+          "接口",
+          "请求",
+          "响应"
+        ],
+        "always_when_domain": true
+      },
+      "category_rules": [
+        {
+          "category_prefix": "FC-REQ",
+          "branch_class": "exception",
+          "contract_kinds": [
+            "ERR",
+            "RESP_WRAP"
+          ],
+          "match": {
+            "requires_write": true
+          }
+        },
+        {
+          "category_prefix": "FC-PROTO",
+          "branch_class": "exception",
+          "contract_kinds": [
+            "ERR",
+            "ID_TYPE"
+          ]
+        },
+        {
+          "category_prefix": "FC-BUSINESS",
+          "branch_class": "boundary",
+          "contract_kinds": [
+            "RESP_WRAP",
+            "ERR"
+          ],
+          "match": {
+            "requires_write_or_reference": true
+          }
+        },
+        {
+          "category_prefix": "FC-RES",
+          "branch_class": "quality",
+          "contract_kinds": [
+            "RESP_WRAP",
+            "ID_TYPE"
+          ]
+        }
+      ]
+    },
+    {
+      "package_id": "fault.web_frontend",
+      "type": "fault",
+      "domain": "web",
+      "path": "Fault/web_frontend_faults.json",
+      "active": true,
+      "default_branch_class": "quality",
+      "default_contract_kinds": [
+        "RESP_WRAP"
+      ],
+      "scenario_signals": {
+        "include_domains": [
+          "web"
+        ],
+        "keywords": [
+          "web",
+          "frontend",
+          "page",
+          "browser",
+          "form",
+          "input",
+          "页面",
+          "前端",
+          "表单",
+          "输入框"
+        ]
+      },
+      "category_rules": [
+        {
+          "category_prefix": "FC-WEB-001",
+          "branch_class": "boundary",
+          "contract_kinds": [
+            "RESP_WRAP"
+          ],
+          "match": {
+            "keywords": [
+              "input",
+              "form",
+              "输入",
+              "表单"
+            ]
+          }
+        },
+        {
+          "category_prefix": "FC-WEB-002",
+          "branch_class": "boundary",
+          "contract_kinds": [
+            "RESP_WRAP"
+          ]
+        },
+        {
+          "category_prefix": "FC-WEB-003",
+          "branch_class": "quality",
+          "contract_kinds": [
+            "SSE",
+            "RESP_WRAP"
+          ],
+          "match": {
+            "requires_streaming": true
+          }
+        },
+        {
+          "category_prefix": "FC-WEB-004",
+          "branch_class": "quality",
+          "contract_kinds": [
+            "ERR",
+            "RESP_WRAP"
+          ],
+          "match": {
+            "keywords": [
+              "auth",
+              "token",
+              "鉴权",
+              "权限"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "package_id": "fault.agent_scene",
+      "type": "fault",
+      "domain": "agent",
+      "path": "Fault/agent_scene_faults.json",
+      "active": true,
+      "default_branch_class": "quality",
+      "default_contract_kinds": [
+        "RESP_WRAP",
+        "ID_TYPE"
+      ],
+      "scenario_signals": {
+        "include_domains": [
+          "agent"
+        ],
+        "keywords": [
+          "agent",
+          "llm",
+          "prompt",
+          "tool",
+          "a2a",
+          "智能体",
+          "工具调用",
+          "流式"
+        ]
+      },
+      "category_rules": [
+        {
+          "category_prefix": "FC-AGENT-001",
+          "branch_class": "boundary",
+          "contract_kinds": [
+            "RESP_WRAP"
+          ],
+          "match": {
+            "keywords": [
+              "prompt",
+              "token",
+              "输入",
+              "对话"
+            ]
+          }
+        },
+        {
+          "category_prefix": "FC-AGENT-002",
+          "branch_class": "quality",
+          "contract_kinds": [
+            "RESP_WRAP"
+          ],
+          "match": {
+            "keywords": [
+              "llm",
+              "输出",
+              "语义",
+              "幻觉"
+            ]
+          }
+        },
+        {
+          "category_prefix": "FC-AGENT-003",
+          "branch_class": "exception",
+          "contract_kinds": [
+            "ERR",
+            "RESP_WRAP"
+          ],
+          "match": {
+            "keywords": [
+              "tool",
+              "工具"
+            ]
+          }
+        },
+        {
+          "category_prefix": "FC-AGENT-004",
+          "branch_class": "quality",
+          "contract_kinds": [
+            "SSE",
+            "RESP_WRAP"
+          ],
+          "match": {
+            "requires_streaming": true
+          }
+        }
+      ]
+    },
+    {
+      "package_id": "fault.dfx_reliability",
+      "type": "fault",
+      "domain": "dfx",
+      "path": "Fault/dfx_reliability_faults.json",
+      "active": true,
+      "default_branch_class": "quality",
+      "default_contract_kinds": [
+        "RESP_WRAP"
+      ],
+      "scenario_signals": {
+        "include_domains": [
+          "rest_api",
+          "web",
+          "agent"
+        ],
+        "keywords": [
+          "timeout",
+          "dependency",
+          "resource",
+          "recovery",
+          "observability",
+          "超时",
+          "依赖",
+          "资源",
+          "恢复",
+          "可观测"
+        ],
+        "cross_cutting": true
+      },
+      "category_rules": [
+        {
+          "category_prefix": "FC-DFX-001",
+          "branch_class": "quality",
+          "contract_kinds": [
+            "ERR",
+            "RESP_WRAP"
+          ]
+        },
+        {
+          "category_prefix": "FC-DFX-002",
+          "branch_class": "quality",
+          "contract_kinds": [
+            "RESP_WRAP"
+          ]
+        },
+        {
+          "category_prefix": "FC-DFX-003",
+          "branch_class": "quality",
+          "contract_kinds": [
+            "ERR",
+            "RESP_WRAP"
+          ]
+        },
+        {
+          "category_prefix": "FC-DFX-004",
+          "branch_class": "quality",
+          "contract_kinds": [
+            "RESP_WRAP"
+          ]
+        }
+      ]
+    },
+    {
+      "package_id": "professional.acceptance",
+      "type": "professional_experience",
+      "domain": "professional_experience",
+      "path": "Professional_experience/acceptance_criteria.json",
+      "active": true,
+      "advisory_only": true,
+      "description": "Release gates and professional testing acceptance criteria. This package can influence priority and report warnings but must not create strong assertions without contract.md."
+    }
+  ]
+}

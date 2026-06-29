@@ -10,18 +10,21 @@ It replaces `Specification_Repository` for subsequent product iterations. The ol
 |---|---|
 | `Fault/` | Fault-driven testing knowledge for REST/API, Web, Agent, and DFX. |
 | `Professional_experience/` | Advisory testing strategy, release gates, AI evaluation readiness, and report quality standards. |
+| `registry.json` | Runtime package registry used by AutoTestFlow to discover knowledge packages and matching policy. |
 | `manifest.json` | Machine-readable ownership and replacement policy. |
 | `TRANSFORMATION_SCOPE.md` | Migration scope and runtime rules. |
 
 ## AutoTestFlow Integration
 
-AutoTestFlow now prefers:
+AutoTestFlow now reads:
 
 ```text
-TestKnowledgeBase/Fault/rest_api_faults.json
+TestKnowledgeBase/registry.json
 ```
 
-when `--fault-lib` is omitted. `Specification_Repository/rest_api_common_faults.json` is kept only as a legacy fallback.
+when knowledge matching is enabled. The registry points to REST/API, Web, Agent, and DFX packages and defines package-level matching hints. `Specification_Repository/rest_api_common_faults.json` is kept only for explicit legacy invocations and is not part of normal product iteration.
+
+For old demos, callers may still pass a concrete legacy path through `--fault-lib`; new runtime integration should use `--knowledge-root TestKnowledgeBase` or the default registry discovery.
 
 ## Validation
 

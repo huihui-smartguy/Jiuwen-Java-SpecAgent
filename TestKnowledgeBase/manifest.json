@@ -1,6 +1,6 @@
 {
   "name": "TestKnowledgeBase",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "status": "forward_source_of_truth",
   "replaces": "Specification_Repository",
   "replacement_policy": "Specification_Repository will not play a practical role in subsequent iterations. New fault patterns, professional acceptance criteria, overlays, and promotions must land in TestKnowledgeBase.",
@@ -8,6 +8,7 @@
     "fault": {
       "path": "TestKnowledgeBase/Fault",
       "purpose": "fault-driven test knowledge for REST/API, Web, Agent, and DFX scenarios",
+      "runtime_registry": "TestKnowledgeBase/registry.json",
       "default_runtime_file": "TestKnowledgeBase/Fault/rest_api_faults.json"
     },
     "professional_experience": {
