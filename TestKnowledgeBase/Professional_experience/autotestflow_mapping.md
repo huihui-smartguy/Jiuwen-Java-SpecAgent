@@ -11,7 +11,7 @@
 .state/ai_eval_readiness.json
 ```
 
-这两个文件可由未来的确定性脚本或 stage5 汇总器生成。本轮只提供知识库，不修改 AutoTestFlow 脚本。
+这些文件由 AutoTestFlow 的 `professional_acceptance.py` 生成，作为 advisory artifact 注入主链路，不破坏 contract-first。
 
 ## 2. 阶段映射
 
@@ -21,9 +21,9 @@
 | stage2 代码扫描 | 可观测性、错误处理、配置、依赖、鉴权、并发线索 | `.state/professional_acceptance.code_gaps.json` |
 | stage2.5 契约校准 | traceId、错误质量、SSE 终态、tool call、latency 观察项 | `contract.md` 观察项，不升级强断言 |
 | stage2.6 故障匹配 | 用专业经验控制故障配额和优先级 | `.state/fault_matches.json` 的 priority note |
-| stage3b 用例设计 | 测试金字塔、AI eval、红队、DFX、canary/readiness | `test_design.json` 的 `acceptance_refs` |
+| stage3b 用例设计 | 测试金字塔、AI eval、红队、DFX、canary/readiness | `.state/professional_case_guidance.json` + `test_design.json` 的 `acceptance_refs` |
 | stage4 执行 | trace、grader、成本、延迟、tool call、环境证据 | `.state/results/*.json` 的 evidence 字段 |
-| stage5 报告 | release readiness、AI readiness、coverage matrix | `report.md` 的专业验收矩阵 |
+| stage5 报告 | release readiness、AI readiness、coverage matrix | `.state/professional_acceptance.json` + `.state/ai_eval_readiness.json` + `report.md` 的专业验收矩阵 |
 
 ## 3. 推荐 schema
 
@@ -92,4 +92,3 @@ stage5 可增加以下结构：
 | AI eval | fail | 无红队样本 | 高 | 补 prompt injection 和 tool misuse eval |
 | 生产闭环 | warn | 无采样评估计划 | 中 | 配置线上采样与漂移告警 |
 ```
-

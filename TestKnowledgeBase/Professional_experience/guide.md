@@ -20,6 +20,17 @@
 
 ## 3. AutoTestFlow 消费规则
 
+### Phase A-D Runtime Integration
+
+| Phase | AutoTestFlow 接入点 | 产物 | 说明 |
+|---|---|---|---|
+| A | stage5 报告前 | `.state/professional_acceptance.json` | 输出专业验收、发布门禁、残余风险矩阵。 |
+| B | stage3b 用例设计前 | `.state/professional_case_guidance.json` | 指导 `acceptance_refs`、证据要求、AI eval、DFX、redteam 和 readiness。 |
+| C | stage1/stage2 后 | `.state/professional_acceptance.seed.json` / `.state/professional_acceptance.code_gaps.json` | 暴露需求和代码层面的可测性缺口。 |
+| D | AI/Agent readiness | `.state/ai_eval_readiness.json` | 检查 eval dataset、grader、redteam、tool-call trace、监控和漂移。 |
+
+所有产物都是 advisory gate，不能越过 `contract.md` 生成强断言。
+
 ### Stage1 需求分析
 
 - 使用 `acceptance_criteria.json` 中的 `test_strategy_readiness` 检查需求是否具备可测性。
@@ -70,4 +81,3 @@
 3. 新增公司实践必须进入 `company_practice_cards.json`，并标注 `confidence`。
 4. 不允许写入无法执行的泛泛建议，例如“提高测试质量”。必须能映射到门禁、指标或文件证据。
 5. 与故障库冲突时，以 `contract.md` 和故障库的 contract-first 调和结果为准。
-
