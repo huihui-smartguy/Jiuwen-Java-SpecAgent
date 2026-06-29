@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """
-match_faults.py - 阶段2.6：故障库匹配（可插拔规格库接入）
+match_faults.py - 阶段2.6：TestKnowledgeBase 知识/故障匹配
 
-在 stage2.5 产出 contract.md 之后、stage3a/3b 之前运行。把外部"故障库"
-（TestKnowledgeBase/Fault/rest_api_faults.json [+ 项目级 overlay]）按
-四类触发匹配到 s1 场景，并用 contract.md 的「字段权威性分级表」对每条故障的
+在 stage2.5 产出 contract.md 之后、stage3a/3b 之前运行。把 TestKnowledgeBase
+注册表或 Fault/*.json 包中的知识条目匹配到 s1 场景，并用 contract.md 的「字段权威性分级表」对每条故障的
 断言级别做契约优先封顶（spec-required→至多L2；config-dependent/契约静默/未知→降L0/L1）。
-产出 .state/fault_matches.json（"故障注入计划"），供 stage3b 生成带 fault_ref 的故障导向用例。
+产出 .state/knowledge_matches.json，并保留 .state/fault_matches.json 兼容下游 stage3b/stage5。
 
 纯确定性脚本（无 LLM、无网络），可单测、可复现。缺库/关闭/无 contract.md 时优雅退出，
 不产出任何文件，流水线与未接入故障库时字节级一致。
 
 用法：
-    python match_faults.py --output-dir <dir> [--fault-lib <path>] [--fault-overlay <path>]
+    python match_faults.py --output-dir <dir> [--knowledge-root TestKnowledgeBase]
+                           [--knowledge-domain all|rest_api|web|agent|dfx]
+                           [--fault-lib <explicit-legacy-path>] [--fault-overlay <path>]
                            [--faults auto|on|off] [--max-exception 3] [--max-quality 2]
 """
 
@@ -22,7 +23,12 @@ import os
 import re
 import sys
 from collections import defaultdict
-from glob import glob
+
+from knowledge_base import (
+    default_knowledge_root,
+    load_faults as load_knowledge_faults,
+    parse_domain_filter,
+)
 
 
 # ---------------- 通用 IO（与其它脚本保持一致） ----------------
@@ -155,54 +161,14 @@ def _substitute(obj, params: dict):
     return obj
 
 
-def load_faults(fault_lib_path: str, overlay_path: str | None):
-    """加载全局故障库（展平 fault_categories + history_faults），套用 overlay。
-
-    返回 (faults, meta)：faults 为统一结构的列表，每条含
-      _category（类目ID或 'HISTORY'）、_is_history（bool）。
-    """
-    lib = load_json(fault_lib_path)
-    meta = dict(lib.get("meta", {}))
-    faults = []
-
-    for cat in lib.get("fault_categories", []):
-        cid = cat.get("category_id", "")
-        for f in cat.get("faults", []):
-            f = dict(f)
-            f["_category"] = _norm_cat(cid)
-            f["_is_history"] = False
-            faults.append(f)
-
-    for h in lib.get("history_faults", []):
-        h = dict(h)
-        h["_category"] = "HISTORY"
-        h["_is_history"] = True
-        faults.append(h)
-
-    overlay_meta = None
-    if overlay_path and os.path.exists(overlay_path):
-        ov = load_json(overlay_path)
-        overlay_meta = dict(ov.get("meta", {}))
-        params = ov.get("parameter_config", {}) or {}
-
-        disabled = {d.get("ref_fault_id") for d in ov.get("disabled_faults", [])}
-        if disabled:
-            faults = [f for f in faults if f.get("fault_id") not in disabled]
-
-        overrides = {o.get("ref_fault_id"): o for o in ov.get("fault_overrides", [])}
-        for f in faults:
-            ov_entry = overrides.get(f.get("fault_id"))
-            if ov_entry and ov_entry.get("custom_test_strategy"):
-                f["test_strategy"] = _substitute(ov_entry["custom_test_strategy"], params)
-                f["_overridden"] = True
-
-        for pf in ov.get("project_specific_faults", []):
-            pf = _substitute(dict(pf), params)
-            pf["_category"] = "PROJECT"
-            pf["_is_history"] = False
-            faults.append(pf)
-
-    return faults, meta, overlay_meta
+def load_faults(
+    fault_lib_path,
+    overlay_path,
+    knowledge_root,
+    domains,
+):
+    """Load TestKnowledgeBase packages through the generalized adapter."""
+    return load_knowledge_faults(fault_lib_path, overlay_path, knowledge_root, domains)
 
 
 # ---------------- 场景加载 + 关联字段/流式判定 ----------------
@@ -213,6 +179,9 @@ _REF_FIELD_RE = re.compile(
 )
 _STREAM_KW = ("sse", "stream", "streaming", "流式", "流", "订阅", "subscribe", "推送")
 _READONLY_KW = ("查询", "get", "list", "获取", "读取", "发现", "card")
+_REST_KW = ("api", "http", "json-rpc", "rpc", "request", "response", "接口", "请求", "响应")
+_AGENT_KW = ("agent", "a2a", "llm", "prompt", "tool", "task", "message", "智能体", "工具", "对话")
+_WEB_KW = ("web", "frontend", "browser", "page", "form", "input", "click", "页面", "前端", "表单", "输入框")
 
 
 def _looks_streaming(text: str) -> bool:
@@ -226,6 +195,20 @@ def _is_reference_field(name: str) -> bool:
     if name.lower() == "id":
         return False  # 裸 id 不作为"关联资源"字段
     return bool(_REF_FIELD_RE.search(name))
+
+
+def _infer_scene_domains(haystack: str, code_facts: dict) -> list:
+    text = (haystack or "").lower()
+    domains = set()
+    if code_facts.get("entry_catalog") or any(k in text for k in _REST_KW):
+        domains.add("rest_api")
+    if any(k in text for k in _AGENT_KW):
+        domains.add("agent")
+    if any(k in text for k in _WEB_KW):
+        domains.add("web")
+    if not domains and code_facts.get("meta"):
+        domains.add("rest_api")
+    return sorted(domains or {"rest_api"})
 
 
 def build_scenes(output_dir: str, code_facts: dict) -> list:
@@ -280,6 +263,8 @@ def build_scenes(output_dir: str, code_facts: dict) -> list:
         scene["reference_fields"] = sorted(set(scene["reference_fields"]))
         hay = scene["name"] + " " + blob
         scene["is_streaming"] = _looks_streaming(hay)
+        scene["domains"] = _infer_scene_domains(hay, code_facts)
+        scene["text"] = hay
         # 纯查询场景（只读）：名字含查询/get/list 且不含写语义关键字
         nm = scene["name"].lower()
         if any(k in nm for k in _READONLY_KW) and not _looks_streaming(nm):
@@ -291,29 +276,37 @@ def build_scenes(output_dir: str, code_facts: dict) -> list:
 # ---------------- 故障 → 候选 specId 映射（表驱动启发式） ----------------
 
 def candidate_spec_kinds(fault: dict) -> list:
-    """根据 category/tags 给出候选 specId 种类（有序、去重）。
+    """根据 TestKnowledgeBase metadata/category/tags 给出候选 specId 种类（有序、去重）。
     种类：RESP_WRAP / ID_TYPE / ENUM / SSE / ERR / CARD。
     """
     cat = fault.get("_category", "")
     tags = set(fault.get("tags", []))
+    tags_lower = {t.lower() for t in tags}
     kinds = []
 
     def add(k):
         if k not in kinds:
             kinds.append(k)
 
+    for k in fault.get("_contract_kinds", []):
+        add(k)
+
     if cat == "FC-SSE" or "SSE" in tags:
         add("SSE")
-    if "枚举一致性" in tags or "枚举" in tags or "enum" in {t.lower() for t in tags}:
+    if "stream" in tags_lower or "streaming" in tags_lower or "流式" in tags:
+        add("SSE")
+    if "枚举一致性" in tags or "枚举" in tags or "enum" in tags_lower:
         add("ENUM")
-    if "类型一致性" in tags or "id" in {t.lower() for t in tags}:
+    if "类型一致性" in tags or "id" in tags_lower:
         add("ID_TYPE")
     if cat == "FC-PROTO" or "协议合规" in tags or "JSON-RPC" in tags:
         add("ERR")
         add("ID_TYPE")
-    if cat in ("FC-STATE",) or "状态机" in tags or "资源不存在" in tags or "关联资源校验" in tags:
+    if cat in ("FC-STATE", "FC-BUSINESS") or "状态机" in tags or "资源不存在" in tags or "关联资源校验" in tags:
         add("RESP_WRAP")
         add("ERR")
+    if cat in ("FC-REQ", "FC-WEB", "FC-AGENT", "FC-DFX"):
+        add("RESP_WRAP")
     if cat == "FC-REQ":
         add("ERR")
         add("RESP_WRAP")
@@ -468,9 +461,13 @@ _BRANCH_BY_CAT = {
     "FC-RES": "quality",
     "FC-PROTO": "exception",
     "FC-STATE": "boundary",
+    "FC-BUSINESS": "boundary",
     "FC-SSE": "quality",
     "FC-SEC": "quality",
     "FC-PERF": "quality",
+    "FC-WEB": "quality",
+    "FC-AGENT": "quality",
+    "FC-DFX": "quality",
 }
 
 
@@ -482,6 +479,8 @@ def branch_class_of(fault: dict) -> str:
         if "协议合规" in tags or "JSON-RPC" in tags:
             return "exception"
         return "quality"
+    if fault.get("_branch_class"):
+        return fault["_branch_class"]
     return _BRANCH_BY_CAT.get(fault.get("_category", ""), "quality")
 
 
@@ -492,45 +491,116 @@ def priority_of(fault: dict) -> str:
     return {"高": "P1", "中": "P2", "低": "P2"}.get(sev, "P2")
 
 
+_DOMAIN_VALUES = {"rest_api", "web", "agent", "dfx"}
+
+
+def _as_list(value) -> list:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    return [value]
+
+
+def _keyword_hit(keywords, text):
+    lower = (text or "").lower()
+    for kw in keywords or []:
+        if str(kw).lower() in lower:
+            return str(kw)
+    return None
+
+
+def _domain_applies(fault, scene):
+    scene_domains = set(scene.get("domains", []))
+    fault_domain = fault.get("_domain", "rest_api")
+    signals = fault.get("_scenario_signals", {}) or {}
+    include_domains = set(signals.get("include_domains") or [])
+    applicable_domains = {v for v in _as_list(fault.get("applicable_scenarios")) if v in _DOMAIN_VALUES}
+    reasons = []
+
+    allowed = applicable_domains or include_domains
+    if fault_domain == "dfx" or signals.get("cross_cutting"):
+        allowed = allowed or {"rest_api", "web", "agent"}
+        ok = bool(scene_domains & allowed)
+    elif allowed:
+        ok = fault_domain in scene_domains or bool(scene_domains & allowed)
+    else:
+        ok = fault_domain in scene_domains
+
+    if ok:
+        reasons.append(f"domain:{fault_domain}")
+    return ok, reasons
+
+
 def scene_applies(fault: dict, scene: dict) -> tuple:
     """判断 非历史 fault 是否适用于 scene；返回 (applies, reasons)。历史缺陷在主流程单独指派。"""
     cat = fault.get("_category", "")
     tags = set(fault.get("tags", []))
+    tags_lower = {t.lower() for t in tags}
+    match_rule = fault.get("_match_rule", {}) or {}
     reasons = []
 
-    is_sse_fault = (cat == "FC-SSE") or ("SSE" in tags)
-    is_ref_fault = ("关联资源校验" in tags) or ("资源不存在" in tags) or (fault.get("fault_id") == "F-REQ-011")
-
-    if cat in ("FC-SEC", "FC-PERF"):
-        # 安全/性能属 dfx 轨道（非契约必需）：Phase 1 不做场景化注入，留待 dfx 维度
+    domain_ok, domain_reasons = _domain_applies(fault, scene)
+    if not domain_ok:
         return False, reasons
+    reasons.extend(domain_reasons)
+
+    if cat in ("FC-SEC", "FC-PERF") and fault.get("_domain") == "rest_api" and not fault.get("_category_rule"):
+        return False, reasons
+
+    scene_text = scene.get("text", "") + " " + scene.get("name", "")
+    required_keywords = match_rule.get("keywords", [])
+    if required_keywords:
+        hit = _keyword_hit(required_keywords, scene_text)
+        if not hit:
+            return False, reasons
+        reasons.append(f"keyword:{hit}")
+
+    is_sse_fault = (
+        (cat == "FC-SSE")
+        or ("SSE" in tags)
+        or ("stream" in tags_lower)
+        or ("streaming" in tags_lower)
+        or match_rule.get("requires_streaming")
+    )
+    is_ref_fault = ("关联资源校验" in tags) or ("资源不存在" in tags) or (fault.get("fault_id") == "F-REQ-011")
 
     if is_sse_fault:
         if scene["is_streaming"]:
-            reasons.append("category:FC-SSE→streaming_scene")
+            reasons.append("streaming_scene")
             return True, reasons
         return False, reasons
 
-    if is_ref_fault:
+    if match_rule.get("requires_reference") or is_ref_fault:
         if scene["reference_fields"]:
             reasons.append(f"reference_field:{scene['reference_fields'][0]}")
             return True, reasons
+        if scene["is_write"] and (match_rule.get("requires_write_or_reference") or is_ref_fault):
+            reasons.append("write_scene")
+            return True, reasons
+        return False, reasons
+
+    if match_rule.get("requires_write") or cat == "FC-REQ":
         if scene["is_write"]:
             reasons.append("write_scene")
             return True, reasons
         return False, reasons
 
-    if cat == "FC-REQ":
+    if match_rule.get("requires_write_or_reference"):
         if scene["is_write"]:
-            reasons.append("category:FC-REQ→write_scene")
+            reasons.append("write_scene")
+            return True, reasons
+        if scene["reference_fields"]:
+            reasons.append(f"reference_field:{scene['reference_fields'][0]}")
             return True, reasons
         return False, reasons
 
-    if cat in ("FC-PROTO", "FC-RES", "FC-STATE"):
+    if cat in ("FC-PROTO", "FC-RES", "FC-STATE", "FC-BUSINESS", "FC-WEB", "FC-AGENT", "FC-DFX"):
         reasons.append(f"category:{cat}")
         return True, reasons
 
-    return False, reasons
+    reasons.append("package_default")
+    return True, reasons
 
 
 def _target_endpoint(scene: dict, code_facts: dict, fault: dict) -> dict:
@@ -539,9 +609,12 @@ def _target_endpoint(scene: dict, code_facts: dict, fault: dict) -> dict:
     if ec:
         e = ec[0]
         entry = f"{e.get('class','')}.{e.get('method','')}".strip(".")
-    verbs = fault.get("applicable_scenarios", [])
+    verbs = [
+        v for v in fault.get("applicable_scenarios", [])
+        if isinstance(v, str) and v.upper() in {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
+    ]
     return {
-        "http_method": verbs[0] if verbs else "POST",
+        "http_method": verbs[0].upper() if verbs else "POST",
         "rpc_method": scene.get("name", ""),
         "path": code_facts.get("meta", {}).get("base_path", ""),
         "entry": entry,
@@ -550,20 +623,35 @@ def _target_endpoint(scene: dict, code_facts: dict, fault: dict) -> dict:
 
 # ---------------- 主流程 ----------------
 
-def match(output_dir: str, fault_lib: str, overlay: str | None,
-          max_exception: int, max_quality: int) -> dict:
+def match(
+    output_dir: str,
+    fault_lib,
+    overlay,
+    max_exception: int,
+    max_quality: int,
+    knowledge_root=None,
+    domains=None,
+) -> dict:
     state = os.path.join(output_dir, ".state")
     contract_path = os.path.join(output_dir, "contract.md")
 
     if not os.path.exists(contract_path):
         print(f"[match_faults] 跳过：未找到 {contract_path}（纯需求模式或 stage2.5 未产出）")
         return {}
-    if not os.path.exists(fault_lib):
+    if fault_lib and not os.path.exists(fault_lib):
         print(f"[match_faults] 跳过：未找到故障库 {fault_lib}")
         return {}
+    if not fault_lib:
+        knowledge_root = knowledge_root or default_knowledge_root()
+        if not os.path.exists(knowledge_root):
+            print(f"[match_faults] 跳过：未找到知识库 {knowledge_root}")
+            return {}
 
     contract = parse_contract(contract_path)
-    faults, lib_meta, overlay_meta = load_faults(fault_lib, overlay)
+    faults, lib_meta, overlay_meta = load_faults(fault_lib, overlay, knowledge_root, domains)
+    if not faults:
+        print("[match_faults] 跳过：未加载到可匹配的 TestKnowledgeBase 条目")
+        return {}
 
     code_facts_path = os.path.join(state, "s2_code_facts.json")
     code_facts = load_json(code_facts_path) if os.path.exists(code_facts_path) else {}
@@ -582,8 +670,12 @@ def match(output_dir: str, fault_lib: str, overlay: str | None,
         rs.append(f"tag:{(fault.get('tags') or ['-'])[0]}")
         m = {
             "fault_id": fault.get("fault_id"),
+            "knowledge_id": fault.get("fault_id"),
             "name": fault.get("name", fault.get("description", "")),
             "severity": fault.get("severity", "中"),
+            "domain": fault.get("_domain", "rest_api"),
+            "knowledge_package": fault.get("_package_id"),
+            "category_id": fault.get("_category_id"),
             "match_reason": rs,
             "target_endpoints": [_target_endpoint(scene, code_facts, fault)],
             "target_scenes": [scene["id"]],
@@ -653,7 +745,11 @@ def match(output_dir: str, fault_lib: str, overlay: str | None,
 
     plan = {
         "meta": {
+            "knowledge_base_version": lib_meta.get("version"),
             "fault_lib_version": lib_meta.get("version"),
+            "knowledge_source": lib_meta.get("source"),
+            "knowledge_root": lib_meta.get("knowledge_root"),
+            "knowledge_packages": lib_meta.get("packages", []),
             "overlay_version": (overlay_meta or {}).get("version"),
             "contract_path": "contract.md",
             "generated_by": "match_faults.py",
@@ -667,6 +763,7 @@ def match(output_dir: str, fault_lib: str, overlay: str | None,
                 "enrichment_needed": sum(1 for m in matches if m.get("enrich", {}).get("needs_bind")),
             },
         },
+        "knowledge_matches": matches,
         "fault_matches": matches,
     }
     return plan
@@ -692,25 +789,14 @@ def write_alignment_report(output_dir: str, plan: dict):
         f.write("\n".join(lines) + "\n")
 
 
-def _default_fault_lib() -> str:
-    """发现约定：TestKnowledgeBase 是后续迭代默认源；Specification_Repository 仅作遗留兼容。"""
-    here = os.path.dirname(os.path.abspath(__file__))
-    repo_root = os.path.abspath(os.path.join(here, "..", ".."))
-    for cand in (
-        os.path.join(repo_root, "TestKnowledgeBase", "Fault", "rest_api_faults.json"),
-        os.path.join(repo_root, "Specification_Repository", "rest_api_common_faults.json"),
-        os.path.join(repo_root, ".claude", "skills", "AutoTestFlow", "shared",
-                     "fault_library", "rest_api_common_faults.json"),
-    ):
-        if os.path.exists(cand):
-            return cand
-    return ""
-
-
 def main():
-    parser = argparse.ArgumentParser(description="阶段2.6 故障库匹配（contract 优先调和）")
+    parser = argparse.ArgumentParser(description="阶段2.6 TestKnowledgeBase 知识/故障匹配（contract 优先调和）")
     parser.add_argument("--output-dir", required=True, help="输出目录（含 contract.md 与 .state/）")
-    parser.add_argument("--fault-lib", default=None, help="全局故障库路径（默认探测 TestKnowledgeBase/Fault/，Specification_Repository 仅遗留兼容）")
+    parser.add_argument("--knowledge-root", default=None, help="TestKnowledgeBase 根目录（默认自动探测仓内 TestKnowledgeBase）")
+    parser.add_argument("--knowledge-domain", default="all",
+                        help="知识域过滤：all/rest_api/web/agent/dfx，或逗号分隔 package_id")
+    parser.add_argument("--fault-lib", default=None,
+                        help="显式故障库路径（兼容旧 demo；默认不再自动回退 Specification_Repository）")
     parser.add_argument("--fault-overlay", default=None, help="项目级 overlay 路径（可选）")
     parser.add_argument("--faults", default="auto", choices=["auto", "on", "off"],
                         help="启用模式：auto=探测到库即启用 / on / off")
@@ -723,21 +809,32 @@ def main():
         print("[match_faults] --faults=off：跳过，不产出 fault_matches.json")
         return 0
 
-    fault_lib = args.fault_lib or _default_fault_lib()
-    if not fault_lib or not os.path.exists(fault_lib):
+    fault_lib = args.fault_lib
+    knowledge_root = args.knowledge_root or default_knowledge_root()
+    if fault_lib and not os.path.exists(fault_lib):
         if args.faults == "on":
-            print(f"[match_faults] 错误：--faults=on 但未找到故障库（{fault_lib or '未指定'}）", file=sys.stderr)
+            print(f"[match_faults] 错误：--faults=on 但未找到显式故障库 {fault_lib}", file=sys.stderr)
             return 1
-        print("[match_faults] auto：未发现故障库，跳过（与未接入时一致）")
+        print(f"[match_faults] auto：未发现显式故障库 {fault_lib}，跳过")
+        return 0
+    if not fault_lib and not os.path.exists(knowledge_root):
+        if args.faults == "on":
+            print(f"[match_faults] 错误：--faults=on 但未找到知识库 {knowledge_root}", file=sys.stderr)
+            return 1
+        print("[match_faults] auto：未发现 TestKnowledgeBase，跳过（与未接入时一致）")
         return 0
 
+    domains = parse_domain_filter(args.knowledge_domain)
     plan = match(args.output_dir, fault_lib, args.fault_overlay,
-                 args.max_exception, args.max_quality)
+                 args.max_exception, args.max_quality,
+                 knowledge_root=knowledge_root, domains=domains)
     if not plan:
         return 0
 
     out_path = os.path.join(args.output_dir, ".state", "fault_matches.json")
+    knowledge_out_path = os.path.join(args.output_dir, ".state", "knowledge_matches.json")
     save_json(out_path, plan)
+    save_json(knowledge_out_path, plan)
     if not args.no_alignment:
         write_alignment_report(args.output_dir, plan)
 
@@ -745,6 +842,7 @@ def main():
     print(f"Faults considered: {s['faults_considered']} | scenes: {s['scenes']} | "
           f"matched: {s['matched']} | downgraded: {s['downgraded']} | truncated: {s['truncated']}")
     print(f"Output: {out_path}")
+    print(f"Knowledge output: {knowledge_out_path}")
     return 0
 
 

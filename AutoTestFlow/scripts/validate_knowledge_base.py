@@ -54,9 +54,73 @@ def validate_manifest(root, parsed, errors):
     if manifest.get("replaces") != "Specification_Repository":
         add_error(errors, manifest_path, "replaces must name Specification_Repository")
 
-    default_lib = os.path.join(root, manifest.get("domains", {}).get("fault", {}).get("default_runtime_file", ""))
+    fault_domain = manifest.get("domains", {}).get("fault", {})
+    registry = fault_domain.get("runtime_registry")
+    if registry and not os.path.exists(os.path.join(root, registry)):
+        add_error(errors, manifest_path, "runtime_registry does not exist")
+
+    default_lib = os.path.join(root, fault_domain.get("default_runtime_file", ""))
     if not os.path.exists(default_lib):
         add_error(errors, manifest_path, "default_runtime_file does not exist")
+
+
+def validate_registry(root, parsed, errors):
+    registry_path = "TestKnowledgeBase/registry.json"
+    registry = parsed.get(registry_path)
+    if not registry:
+        manifest = parsed.get("TestKnowledgeBase/manifest.json") or {}
+        fault_domain = manifest.get("domains", {}).get("fault", {})
+        if fault_domain.get("runtime_registry"):
+            add_error(errors, registry_path, "runtime_registry is declared but registry is missing")
+        return
+
+    if registry.get("status") != "runtime_source_of_truth":
+        add_error(errors, registry_path, "status must be runtime_source_of_truth")
+    if not registry.get("version"):
+        add_error(errors, registry_path, "version is required")
+
+    packages = registry.get("packages")
+    if not isinstance(packages, list) or not packages:
+        add_error(errors, registry_path, "packages must be a non-empty list")
+        return
+
+    seen = set()
+    package_ids = set()
+    for pkg in packages:
+        pid = pkg.get("package_id")
+        if not pid:
+            add_error(errors, registry_path, "package_id is required")
+            continue
+        if pid in seen:
+            add_error(errors, registry_path, f"duplicate package_id {pid}")
+        seen.add(pid)
+        package_ids.add(pid)
+
+        path = pkg.get("path")
+        if not path:
+            add_error(errors, registry_path, f"{pid}: path is required")
+        elif not os.path.exists(os.path.join(root, "TestKnowledgeBase", path)):
+            add_error(errors, registry_path, f"{pid}: registered path does not exist: {path}")
+
+        if not pkg.get("domain"):
+            add_error(errors, registry_path, f"{pid}: domain is required")
+
+        if pkg.get("type") == "fault":
+            if not pkg.get("default_branch_class"):
+                add_error(errors, registry_path, f"{pid}: default_branch_class is required")
+            if not isinstance(pkg.get("default_contract_kinds", []), list):
+                add_error(errors, registry_path, f"{pid}: default_contract_kinds must be a list")
+            rules = pkg.get("category_rules", [])
+            if not isinstance(rules, list):
+                add_error(errors, registry_path, f"{pid}: category_rules must be a list")
+            for rule in rules:
+                if not rule.get("category_prefix"):
+                    add_error(errors, registry_path, f"{pid}: category_rule.category_prefix is required")
+
+    default_ids = (registry.get("default_runtime") or {}).get("package_ids", [])
+    for pid in default_ids:
+        if pid not in package_ids:
+            add_error(errors, registry_path, f"default_runtime references unknown package_id {pid}")
 
 
 def validate_fault_libraries(root, parsed, errors):
@@ -157,6 +221,7 @@ def main():
     errors = []
     parsed = validate_json_files(root, errors)
     validate_manifest(root, parsed, errors)
+    validate_registry(root, parsed, errors)
     validate_fault_libraries(root, parsed, errors)
     validate_professional_experience(parsed, errors)
 
@@ -165,6 +230,7 @@ def main():
         "ok": not errors,
         "test_knowledge_base": "TestKnowledgeBase",
         "default_fault_lib": "TestKnowledgeBase/Fault/rest_api_faults.json",
+        "runtime_registry": "TestKnowledgeBase/registry.json",
         "legacy_compatibility_only": "Specification_Repository",
         "json_files_checked": len(parsed),
         "errors": errors,
