@@ -55,6 +55,7 @@ AutoTestFlow/                       # Skill 本体
 │   ├── probe_contract.py           # stage2.5 探活校准 → contract.md
 │   ├── knowledge_base.py           # TestKnowledgeBase registry/glob adapter
 │   ├── match_faults.py             # stage2.6 知识/故障匹配（contract 优先封顶）→ knowledge_matches.json + fault_matches.json
+│   ├── professional_acceptance.py  # Professional_experience advisory gates → professional/AI readiness artifacts
 │   ├── merge_enriched.py
 │   ├── merge_test_design.py
 │   ├── select_p0.py
@@ -115,11 +116,12 @@ cp -r AutoTestFlow <你的项目>/.claude/skills/
    ├─ stage2.5 契约校准：probe_contract.py 探活真实 SUT → contract.md   ← 判据权威性闸
    ├─ stage2.6 TestKnowledgeBase 匹配（可选）：match_faults.py registry/glob discovery + contract 封顶 → knowledge_matches.json + fault_matches.json
    │            └─ 2.6b（可选，--fault-enrich on）LLM 增强：模糊绑定 / 占位替换 / contract_conflict
+   ├─ stage2.P Professional_experience（advisory）：professional_acceptance.py → seed/code_gaps/case_guidance
    ├─ stage3a  场景富化（GAP + 框架补充）
-   ├─ stage3b  测试用例设计（断言按 contract.md）             ← 人工裁决 ✅（故障覆盖完备性由故障库背书自动通过；FP 拆分/断言仍人工）
+   ├─ stage3b  测试用例设计（断言按 contract.md，读取 professional_case_guidance） ← 人工裁决 ✅
    ├─ stage4   就绪门（探活）→ 生成 Python pytest+httpx 用例 → 执行 + 采集交互轨迹
    │            └─ 执行边界5分类：harness_defect / sut_unsatisfied / sdk_defect / env_issue / pass
-   └─ stage5   汇总报告（含轨迹、5分类分布、需求-实现形态差异观察）+ record_faults.py 闭环（仅 sdk_defect → 去重 → overlay）
+   └─ stage5   汇总报告（含 professional acceptance / AI readiness / residual risk）+ record_faults.py 闭环
 ```
 
 `校准 → 设计 → 生成 → 就绪门 → 执行+轨迹 → 报告`：判据先校准、再设计断言；执行前先探活；
@@ -185,7 +187,25 @@ python AutoTestFlow/scripts/record_faults.py --output-dir <output_dir> \
 | `.state/fault_contract_alignment.md` | 故障-契约对齐报告 |
 | `.state/new_knowledge_candidates.json` | 本轮闭环候选（dry-run 输出） |
 | `.state/new_faults_detected.json` | 兼容候选输出 |
+| `.state/professional_acceptance.seed.json` | Phase C：测试计划和需求可测性种子 |
+| `.state/professional_acceptance.code_gaps.json` | Phase C：代码/可观测性/依赖证据缺口 |
+| `.state/professional_case_guidance.json` | Phase B：stage3b 用例设计指导与 `acceptance_refs` |
+| `.state/professional_acceptance.json` | Phase A：stage5 专业验收和发布门禁矩阵 |
+| `.state/ai_eval_readiness.json` | Phase D：AI/Agent eval、grader、redteam、tool-call、监控就绪度 |
 | 用例字段 `fault_ref` | 故障导向用例的溯源标记 |
+
+### 7.6 Professional_experience advisory gates
+
+`Professional_experience` 不参与 fault matching，也不生成强断言。它通过 `professional_acceptance.py` 生成 advisory artifacts，服务于测试计划、用例设计、执行证据、AI/Agent readiness 和 stage5 报告：
+
+```bash
+python AutoTestFlow/scripts/professional_acceptance.py \
+    --output-dir <output_dir> \
+    --knowledge-root TestKnowledgeBase \
+    --mode all
+```
+
+所有输出只产生 `pass / warn / fail / not_applicable / requires_human_review` 门禁结论；任何 L2 断言仍必须引用 `contract.md`。
 
 **无需 SUT 即可复现**（确定性脚本）：见 [`examples/a2a/fault_demo/README.md`](examples/a2a/fault_demo/README.md)，含 match / aggregate / record 与 `--faults off` 降级回归的完整命令与 golden。
 

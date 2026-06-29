@@ -211,6 +211,19 @@ def validate_professional_experience(parsed, errors):
         "standard_id",
     )
 
+    allowed_status = {"pass", "warn", "fail", "not_applicable", "requires_human_review"}
+    for item in criteria_doc.get("criteria", []):
+        sid = item.get("standard_id", "<unknown>")
+        for key in ("applies_to", "stage_scope", "evidence_required"):
+            if key in item and not isinstance(item.get(key), list):
+                add_error(errors, f"{base}/acceptance_criteria.json", f"{sid}: {key} must be a list")
+        if "auto_evaluable" in item and not isinstance(item.get("auto_evaluable"), bool):
+            add_error(errors, f"{base}/acceptance_criteria.json", f"{sid}: auto_evaluable must be boolean")
+        if "evidence_map" in item and not isinstance(item.get("evidence_map"), dict):
+            add_error(errors, f"{base}/acceptance_criteria.json", f"{sid}: evidence_map must be an object")
+        if item.get("default_status_when_missing") and item.get("default_status_when_missing") not in allowed_status:
+            add_error(errors, f"{base}/acceptance_criteria.json", f"{sid}: invalid default_status_when_missing")
+
 
 def main():
     parser = argparse.ArgumentParser(description="Validate TestKnowledgeBase governance rules")

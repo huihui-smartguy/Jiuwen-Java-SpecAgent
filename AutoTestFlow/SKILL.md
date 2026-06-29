@@ -123,6 +123,7 @@ AskUserQuestion(questions=[{
 | `--base` | 基准分支 | 仓库默认分支 |
 | `--knowledge-root` | TestKnowledgeBase 根目录，供阶段2.6 registry/glob discovery 使用 | 仓内 `TestKnowledgeBase` |
 | `--knowledge-domain` | 知识域过滤：`all` / `rest_api` / `web` / `agent` / `dfx`，或逗号分隔 package_id | `all` |
+| `--professional-gates` | Professional_experience advisory artifacts：`auto` / `on` / `off` | `auto` |
 | `--fault-lib` | 显式故障库路径，仅用于旧 demo 或单文件调试 | 可选；默认不自动回退 `Specification_Repository` |
 | `--fault-overlay` | 项目级故障库 overlay（覆盖/禁用/项目特有故障） | 可选 |
 | `--faults` | 故障库启用模式：`auto`（探测到库即启用）/ `on` / `off` | `auto` |
@@ -218,6 +219,7 @@ AskUserQuestion(questions=[{
 | 2.5 契约校准 | `templates/stage2_5_contract_calibrate.md` | `scripts/probe_contract.py` | `contract.md` + `.state/contract_samples.json` | — | ❌ |
 | 2.6 知识/故障匹配（可选） | —（纯脚本） | `scripts/match_faults.py` | `.state/knowledge_matches.json` + `.state/fault_matches.json` + `.state/fault_contract_alignment.md` | — | ❌ |
 | 2.6b 故障增强（可选） | `templates/stage2_6_fault_match.md` | — | 回写 `.state/fault_matches.json` | ✅ | ❌ |
+| 2.P 专业验收（advisory） | —（纯脚本） | `scripts/professional_acceptance.py` | `.state/professional_acceptance*.json` + `.state/professional_case_guidance.json` + `.state/ai_eval_readiness.json` | — | ❌ |
 | 2R 需求摘要（纯需求） | `templates/stage2R_req_summary.md` | — | `.state/stage_summary.json` | — | ❌ |
 | 3a-gap GAP场景 | `templates/stage3a_gap.md` | — | `.state/s3a_enriched/FS-GAP-*.json` | ✅ | ❌ |
 | 3a-fw 框架场景 | `templates/stage3a_framework.md` | 输入 `.state/framework_scenes.json`（stage2 派生） | `.state/s3a_framework.json` | ✅ | ❌ |
@@ -329,6 +331,26 @@ AskUserQuestion(questions=[{
     作 advisory 语义线索）；--beta-wiki=off（默认）→ 仍用稳定模板，行为字节级一致。详见「Beta（预研特性，默认关闭）」节。
 
 自动进入阶段3a
+```
+
+### 阶段2.P：Professional_experience 专业验收产物（advisory，纯脚本，前景 <5s）
+
+> 人工裁决：❌ | 条件：`--professional-gates≠off` 且存在 `TestKnowledgeBase/Professional_experience`
+> **定位**：把 Professional_experience 转成测试计划、用例设计、AI readiness 和报告门禁产物。它不是 fault matching，不生成 L2 断言。
+
+```
+步骤1: 编排器前景执行（不启动 Agent）
+  → 执行: python {skill_dir}/scripts/professional_acceptance.py \
+            --output-dir {output_dir} \
+            [--knowledge-root {knowledge_root}] --mode all
+  → 输入: Professional_experience/acceptance_criteria.json + 当前已生成的 contract/test_design/results/knowledge artifacts
+  → 输出:
+      .state/professional_acceptance.seed.json
+      .state/professional_acceptance.code_gaps.json
+      .state/professional_case_guidance.json
+      .state/professional_acceptance.json
+      .state/ai_eval_readiness.json
+  → 契约安全：只输出 advisory gate；不得提高 oracle_refs 的 assert_level
 ```
 
 ### 阶段1 / 2R / 3aR：纯需求模式（子Agent执行）
