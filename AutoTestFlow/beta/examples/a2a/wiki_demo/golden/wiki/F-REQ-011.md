@@ -1,6 +1,6 @@
 # F-REQ-011 · 引用不存在的关联资源
 
-> 溯源：`rest_api_common_faults.json` → `FC-REQ-001`（请求体缺陷）→ `F-REQ-011`
+> 溯源：`fault_library.json` → `FC-REQ-001`（请求体缺陷）→ `F-REQ-011`
 > 严重程度：高 ｜ 故障建议断言级别：L2（**最终以项目 `contract.md` 权威性封顶**，见下「契约锚点」）
 > 适用场景：POST、PUT、PATCH
 > 标签：关联资源校验、业务逻辑、参数校验、资源不存在

@@ -7,7 +7,7 @@
 ## 一、五条铁律
 
 1. **单一真相（Source of Truth）**
-   结构化故障库 `Specification_Repository/rest_api_common_faults.json`（[+ overlay]）是**唯一真相**。
+   结构化故障库 `TestKnowledgeBase/Fault/rest_api_faults.json`（[+ overlay]）是后续迭代的**唯一真相**。
    `wiki/*.md` 仅由它派生，**不是**独立知识源。
 
 2. **单向派生（One-way Derivation）**

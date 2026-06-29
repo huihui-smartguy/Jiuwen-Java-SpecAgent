@@ -3,7 +3,7 @@
 gen_wiki.py - Beta 预研（v1.0）：故障库 → LLM Wiki 仓内 NL 文章（Phase A，单向派生）
 
 依据 FaultsAnalysis/07-LLM_Wiki与故障库知识源分析.md §九 Phase A：把结构化故障库
-（Specification_Repository/rest_api_common_faults.json [+ 项目级 overlay]）**单向编译**为
+（TestKnowledgeBase/Fault/rest_api_faults.json [+ 项目级 overlay]）**单向编译**为
 仓内 Markdown 文章——每个 fault_id 一篇，外加每类一篇汇总 + 一篇索引。供 stage2.6b / stage6
 的 LLM 子 Agent 按 `fault_id` 确定性取用（文件名即 ID，提取准确率≈100%）。
 
@@ -19,7 +19,7 @@ gen_wiki.py - Beta 预研（v1.0）：故障库 → LLM Wiki 仓内 NL 文章（
 用法：
     python gen_wiki.py [--fault-lib <path>] [--fault-overlay <path>]
                        [--wiki-dir <path>] [--beta-wiki on|off]
-    # --fault-lib   默认自动探测 Specification_Repository/rest_api_common_faults.json
+    # --fault-lib   默认自动探测 TestKnowledgeBase/Fault/rest_api_faults.json
     # --wiki-dir    默认 <fault-lib 所在目录>/wiki
     # --beta-wiki   off 时直接退出（供编排器统一门控）；默认 on（脚本被显式调用即生成）
 """
@@ -241,7 +241,7 @@ def render_fault_article(fault: dict, siblings: list, history_refs: list) -> str
     lines = []
     lines.append(f"# {fid} · {name}")
     lines.append("")
-    lines.append(f"> 溯源：`rest_api_common_faults.json` → `{cat_id}`（{cat_name}）→ `{fid}`")
+    lines.append(f"> 溯源：`fault_library.json` → `{cat_id}`（{cat_name}）→ `{fid}`")
     lines.append(f"> 严重程度：{sev} ｜ 故障建议断言级别：{level}"
                  f"（**最终以项目 `contract.md` 权威性封顶**，见下「契约锚点」）")
     if scenes:
@@ -355,7 +355,7 @@ def render_index(cat_groups: list, lib_meta: dict, overlay_meta) -> str:
     lines.append("# LLM Wiki 索引 · 故障库派生 NL 文章（Beta 预研 v1.0）")
     lines.append("")
     lines.append("> 本目录由 `AutoTestFlow/beta/scripts/gen_wiki.py` 从 "
-                 "`Specification_Repository/rest_api_common_faults.json` [+ overlay] **单向派生**。")
+                 "`TestKnowledgeBase/Fault/rest_api_faults.json` [+ overlay] **单向派生**。")
     lines.append("> **单一真相是结构化 JSON**；本目录仅作 advisory NL 层，供 stage2.6b / stage6 的 LLM 子 Agent "
                  "按 `fault_id` 确定性取用。**不作 oracle、不进 `match_faults.py`**。")
     lines.append("> 重生成：`python AutoTestFlow/beta/scripts/gen_wiki.py`；校验：`python AutoTestFlow/beta/scripts/check_wiki.py`。")
@@ -384,8 +384,13 @@ def auto_detect_lib(explicit: str) -> str:
     here = os.path.dirname(os.path.abspath(__file__))
     # beta/scripts/ → 仓根 = 上三级
     repo_root = os.path.abspath(os.path.join(here, "..", "..", ".."))
-    cand = os.path.join(repo_root, "Specification_Repository", "rest_api_common_faults.json")
-    return cand if os.path.exists(cand) else ""
+    for cand in (
+        os.path.join(repo_root, "TestKnowledgeBase", "Fault", "rest_api_faults.json"),
+        os.path.join(repo_root, "Specification_Repository", "rest_api_common_faults.json"),
+    ):
+        if os.path.exists(cand):
+            return cand
+    return ""
 
 
 def _collect_history_refs(faults: list) -> dict:
@@ -411,7 +416,7 @@ def _collect_history_refs(faults: list) -> dict:
 
 def main():
     parser = argparse.ArgumentParser(description="Beta 预研：故障库 → LLM Wiki 仓内 NL 文章（Phase A，单向派生）")
-    parser.add_argument("--fault-lib", default="", help="故障库 JSON 路径（默认自动探测 Specification_Repository/）")
+    parser.add_argument("--fault-lib", default="", help="故障库 JSON 路径（默认自动探测 TestKnowledgeBase/Fault/，Specification_Repository 仅遗留兼容）")
     parser.add_argument("--fault-overlay", default="", help="项目级 overlay 路径（可选）")
     parser.add_argument("--wiki-dir", default="", help="wiki 输出目录（默认 <fault-lib 所在目录>/wiki）")
     parser.add_argument("--beta-wiki", choices=["on", "off"], default="on",

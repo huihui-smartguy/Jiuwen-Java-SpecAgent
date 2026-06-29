@@ -19,6 +19,8 @@ test_design.json                 # 2 条用例（TC_041 普通；TC_042 带 faul
 
 ## 复现命令
 
+> 说明：本 fixture 的 golden 产物来自早期 `Specification_Repository` 故障库，为保持历史回归可复现，命令显式 pin 旧库。新产品迭代默认使用 `TestKnowledgeBase/Fault/rest_api_faults.json`，无需传 `--fault-lib`。
+
 ```bash
 # 1) 阶段2.6 故障匹配（契约优先封顶）
 python AutoTestFlow/scripts/match_faults.py \

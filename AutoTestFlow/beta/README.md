@@ -21,7 +21,7 @@
 | **v1.0** | **故障库接入 LLM Wiki（Phase A：仓内派生 NL 文章）** | `--beta-wiki on\|off`（默认 off） | 预研中 |
 
 预研依据：`FaultsAnalysis/07-LLM_Wiki与故障库知识源分析.md` §九演进路线 **Phase A**——
-由结构化故障库**单向派生**仓内 NL 文章（`Specification_Repository/wiki/*.md`），供 **stage2.6b / stage6** 的
+由结构化故障库**单向派生**仓内 NL 文章（默认 `TestKnowledgeBase/Fault/wiki/*.md`），供 **stage2.6b / stage6** 的
 LLM 子 Agent 按 `fault_id` 确定性取用，作 **advisory 建议层**；**不作 oracle、不进 `match_faults.py`**。
 
 ## 三、v1.0（LLM Wiki Phase A）组成
@@ -40,7 +40,7 @@ AutoTestFlow/beta/
 │   └── wiki_schema.md                     # wiki 文章格式契约 + 生成契约
 └── examples/a2a/wiki_demo/                # 离线确定性 fixture + golden + 纸面 trace（无需真实 SUT/LLM）
 
-Specification_Repository/wiki/             # 【生成产物，committed】55 篇故障文章 + 8 篇分类汇总 + 1 篇索引
+TestKnowledgeBase/Fault/wiki/              # 【生成产物】由 TestKnowledgeBase/Fault/*.json 派生；Specification_Repository/wiki 为 legacy
 ```
 
 ## 四、怎么用（`--beta-wiki on`）
@@ -63,11 +63,11 @@ python AutoTestFlow/beta/scripts/check_wiki.py        # 产 .state/wiki_check.js
 ## 五、数据流（v1.0）
 
 ```
-Specification_Repository/rest_api_common_faults.json   ← 单一真相（matcher/record 的唯一输入，不变）
+TestKnowledgeBase/Fault/rest_api_faults.json           ← 后续单一真相（matcher/record 默认输入）
    │
    ├──► scripts/match_faults.py / record_faults.py      [确定性消费者：只吃 JSON，零改动]
    │
-   └──(beta/scripts/gen_wiki.py 单向派生)──► Specification_Repository/wiki/*.md（advisory NL 层）
+   └──(beta/scripts/gen_wiki.py 单向派生)──► TestKnowledgeBase/Fault/wiki/*.md（advisory NL 层）
           │  每篇溯源 fault_id（+category）；不声明无条件断言级别
           └──► stage2.6b(beta) / stage6(beta) 的 LLM 子 Agent   [LLM 消费者：按 fault_id 读 wiki]
                  判据仍由 contract.md 封顶；wiki 不作 oracle
@@ -79,7 +79,7 @@ Specification_Repository/rest_api_common_faults.json   ← 单一真相（matche
 
 - **毕业到稳定**：当某 Beta 特性经多 SUT 验证稳定、文档/测试齐备、无内核冲突 → 把 `beta/` 下对应代码并入稳定目录，
   开关从 `--beta-*` 提升为正式参数，更新 `DESIGN.md`/`SKILL.md`/ChangeLog。
-- **退役**：若预研结论为不采用 → 删除对应 `beta/` 子项与开关，`Specification_Repository/wiki/` 等派生产物一并移除；
+- **退役**：若预研结论为不采用 → 删除对应 `beta/` 子项与开关，`TestKnowledgeBase/Fault/wiki/` 等派生产物一并移除；
   因全程隔离 + 默认关闭，退役**不影响**稳定流水线。
 
 > 详细变更见 `ChangeLogs/v3.0-Beta预研_故障库接入LLM_Wiki.md`。

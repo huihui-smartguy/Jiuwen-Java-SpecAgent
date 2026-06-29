@@ -48,14 +48,19 @@ def _norm_field(field: str) -> str:
 def _default_fault_lib() -> str:
     here = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.abspath(os.path.join(here, "..", ".."))
-    cand = os.path.join(repo_root, "Specification_Repository", "rest_api_common_faults.json")
-    return cand if os.path.exists(cand) else ""
+    for cand in (
+        os.path.join(repo_root, "TestKnowledgeBase", "Fault", "rest_api_faults.json"),
+        os.path.join(repo_root, "Specification_Repository", "rest_api_common_faults.json"),
+    ):
+        if os.path.exists(cand):
+            return cand
+    return ""
 
 
 def _default_overlay() -> str:
     here = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.abspath(os.path.join(here, "..", ".."))
-    return os.path.join(repo_root, "Specification_Repository", "project_faults.json")
+    return os.path.join(repo_root, "TestKnowledgeBase", "Fault", "project_faults.json")
 
 
 def _existing_signatures(lib: dict, overlay: dict | None):
@@ -145,7 +150,7 @@ def main():
     parser = argparse.ArgumentParser(description="阶段5 子步：sdk_defect 闭环自积累")
     parser.add_argument("--output-dir", required=True, help="输出目录（含 .state/results/）")
     parser.add_argument("--fault-lib", default=None, help="全局故障库（去重 + 取下一个 F-HIST 序号）")
-    parser.add_argument("--overlay-path", default=None, help="项目级 overlay 路径（默认 Specification_Repository/project_faults.json）")
+    parser.add_argument("--overlay-path", default=None, help="项目级 overlay 路径（默认 TestKnowledgeBase/Fault/project_faults.json）")
     parser.add_argument("--target", default="overlay", choices=["overlay", "global"],
                         help="写入目标（默认 overlay，不污染全局精选库）")
     parser.add_argument("--write", action="store_true", help="实际写入（缺省为 dry-run）")
@@ -231,7 +236,7 @@ def main():
         doc = overlay or {
             "meta": {"version": "0.1.0", "scope": "project",
                      "description": "项目级故障库（自积累 + 覆盖/禁用，自动创建）"},
-            "extends": "rest_api_common_faults.json",
+            "extends": "TestKnowledgeBase/Fault/rest_api_faults.json",
             "history_faults": [],
         }
     doc.setdefault("history_faults", [])

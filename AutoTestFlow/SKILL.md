@@ -121,7 +121,7 @@ AskUserQuestion(questions=[{
 | `--pr` | PR编号，逗号分隔 | 可选（与 code_path/commit 三选一） |
 | `--commit` | Commit ID，逗号分隔 | 可选（与 code_path/pr 三选一） |
 | `--base` | 基准分支 | 仓库默认分支 |
-| `--fault-lib` | 故障库（规格库）路径，供阶段2.6 匹配 | 自动探测 `Specification_Repository/rest_api_common_faults.json`（可选） |
+| `--fault-lib` | 故障库（规格库）路径，供阶段2.6 匹配 | 自动探测 `TestKnowledgeBase/Fault/rest_api_faults.json`；`Specification_Repository` 仅遗留兼容 |
 | `--fault-overlay` | 项目级故障库 overlay（覆盖/禁用/项目特有故障） | 可选 |
 | `--faults` | 故障库启用模式：`auto`（探测到库即启用）/ `on` / `off` | `auto` |
 | `--fault-enrich` | 阶段2.6b 可选 LLM 增强（模糊绑定 / 占位替换 / contract_conflict 检出）：`on` / `off` / `auto` | `off` |
@@ -298,7 +298,7 @@ AskUserQuestion(questions=[{
 ### 阶段2.6：故障库匹配（可选，纯脚本，前景 <5s）
 
 > 人工裁决：❌ | 条件：标准模式 + 探测到故障库（`--faults≠off`）
-> **定位**：在 `contract.md` 就位后，把外部故障库（规格库）匹配进流水线，并按契约权威性封顶断言级别。
+> **定位**：在 `contract.md` 就位后，把外部故障库（规格库）匹配进流水线，并按契约权威性封顶断言级别。后续迭代以 `TestKnowledgeBase/Fault/` 为故障知识主干，`Specification_Repository/` 不再承担实际产品迭代职责。
 > **优雅降级**：未发现故障库 / `--faults=off` / 无 `contract.md` → 跳过且不产出任何文件，流水线与未接入时**字节级一致**。
 
 ```
@@ -568,7 +568,7 @@ AskUserQuestion(questions=[{
 ### v1.0：故障库接入 LLM Wiki（`--beta-wiki`，Phase A）
 
 依据 `FaultsAnalysis/07-LLM_Wiki与故障库知识源分析.md` §九 Phase A：由结构化故障库**单向派生**仓内 NL 文章
-（`Specification_Repository/wiki/*.md`），供 stage2.6b / stage6 的 LLM 子 Agent 按 `fault_id` 确定性取用，
+（默认 `TestKnowledgeBase/Fault/wiki/*.md`），供 stage2.6b / stage6 的 LLM 子 Agent 按 `fault_id` 确定性取用，
 作 **advisory 建议层**——**不作 oracle、不进 `match_faults.py`、断言级别仍由 `contract.md` 封顶**。
 
 ```
@@ -577,7 +577,7 @@ AskUserQuestion(questions=[{
 
 --beta-wiki on
   步骤A（编排器前景，纯脚本）: python {skill_dir}/beta/scripts/gen_wiki.py [--fault-lib ..][--fault-overlay ..]
-      → 由 JSON 单向派生 Specification_Repository/wiki/{fault_id}.md(+category/index)；幂等、缺库优雅退出。
+      → 由 JSON 单向派生 TestKnowledgeBase/Fault/wiki/{fault_id}.md(+category/index)；幂等、缺库优雅退出。
   步骤B（可选校验）: python {skill_dir}/beta/scripts/check_wiki.py
       → 护栏校验（覆盖/溯源/不漂移/不越权/非matcher）→ .state/wiki_check.json；不绿则不应启用 wiki。
   步骤C（模板切换）:
