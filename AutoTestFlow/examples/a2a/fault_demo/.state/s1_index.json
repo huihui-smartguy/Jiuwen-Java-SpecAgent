@@ -1,0 +1,11 @@
+{
+  "meta": { "source": "requirement", "doc_path": "a2a fault_demo" },
+  "function_points": [
+    { "id": "FP-001", "name": "发送消息(同步)", "entry": "POST /a2a SendMessage", "priority": "P0", "constraints": [], "source_ids": [] },
+    { "id": "FP-002", "name": "发送流式消息(SSE)", "entry": "POST /a2a SendStreamingMessage", "priority": "P0", "constraints": [], "source_ids": [] }
+  ],
+  "scenario_index": [
+    { "id": "FS-001", "name": "SendMessage 同步发送消息", "type": "flow", "priority": "P0", "fp_refs": ["FP-001"], "file": "s1_scenarios/FS-001.json" },
+    { "id": "FS-002", "name": "SendStreamingMessage SSE 流式消息", "type": "flow", "priority": "P0", "fp_refs": ["FP-002"], "file": "s1_scenarios/FS-002.json" }
+  ]
+}

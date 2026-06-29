@@ -1,0 +1,993 @@
+{
+  "meta": {
+    "version": "1.1.0",
+    "scope": "global",
+    "description": "REST API通用故障模式库（适用于所有REST/JSON-RPC项目）",
+    "last_updated": "2026-01-18",
+    "maintainer": "test_engineering_team"
+  },
+  "fault_categories": [
+    {
+      "category_id": "FC-REQ-001",
+      "category_name": "请求体缺陷",
+      "description": "请求体相关的常见故障模式",
+      "faults": [
+        {
+          "fault_id": "F-REQ-001",
+          "name": "body必选参数缺失",
+          "description": "请求body中缺少必选参数字段",
+          "severity": "高",
+          "test_strategy": {
+            "trigger_pattern": "移除请求body中的必选参数字段",
+            "expected_behavior": "返回400错误，错误码指示参数缺失",
+            "assertion_level": "L2",
+            "validation_points": [
+              "HTTP状态码 = 400",
+              "响应body包含error字段",
+              "error.code指示参数缺失",
+              "响应id字段回带"
+            ]
+          },
+          "applicable_scenarios": ["POST", "PUT", "PATCH"],
+          "tags": ["参数校验", "必选字段", "边界测试"]
+        },
+        {
+          "fault_id": "F-REQ-002",
+          "name": "body参数类型错误",
+          "description": "请求body中参数类型与预期不符",
+          "severity": "高",
+          "test_strategy": {
+            "trigger_pattern": "将string类型字段传入int值，或反之",
+            "expected_behavior": "返回400错误，错误码指示类型错误",
+            "assertion_level": "L2",
+            "validation_points": [
+              "HTTP状态码 = 400",
+              "error.code指示类型错误"
+            ]
+          },
+          "applicable_scenarios": ["POST", "PUT", "PATCH"],
+          "tags": ["参数校验", "类型检查", "异常输入"]
+        },
+        {
+          "fault_id": "F-REQ-003",
+          "name": "body参数边界值超限",
+          "description": "参数值超出定义的边界范围",
+          "severity": "中",
+          "test_strategy": {
+            "trigger_pattern": "传入小于最小值或大于最大值的参数",
+            "expected_behavior": "返回400错误或业务逻辑拒绝",
+            "assertion_level": "L2",
+            "validation_points": [
+              "错误码或状态字段指示边界违规",
+              "不创建资源或不执行操作"
+            ]
+          },
+          "applicable_scenarios": ["POST", "PUT", "PATCH"],
+          "tags": ["边界值", "参数校验", "边界测试"]
+        },
+        {
+          "fault_id": "F-REQ-004",
+          "name": "body参数格式错误",
+          "description": "参数格式不符合规范（如日期格式、邮箱格式、UUID格式）",
+          "severity": "中",
+          "test_strategy": {
+            "trigger_pattern": "传入格式错误的字符串（如非法日期'2024-13-45'）",
+            "expected_behavior": "返回400错误，指示格式错误",
+            "assertion_level": "L2",
+            "validation_points": [
+              "HTTP状态码 = 400",
+              "error.code指示格式错误"
+            ]
+          },
+          "applicable_scenarios": ["POST", "PUT", "PATCH"],
+          "tags": ["格式校验", "异常输入"]
+        },
+        {
+          "fault_id": "F-REQ-005",
+          "name": "可选参数配置后未生效",
+          "description": "可选参数传入后未按预期影响系统行为",
+          "severity": "中",
+          "test_strategy": {
+            "trigger_pattern": "传入可选参数，验证其是否按预期生效",
+            "expected_behavior": "可选参数应改变系统行为或输出",
+            "assertion_level": "L2",
+            "validation_points": [
+              "响应结果反映可选参数的影响",
+              "通过对比测试验证（有/无可选参数的差异）"
+            ]
+          },
+          "applicable_scenarios": ["POST", "PUT", "GET"],
+          "tags": ["可选参数", "配置生效", "功能测试"]
+        },
+        {
+          "fault_id": "F-REQ-006",
+          "name": "空字符串作为非空字段值",
+          "description": "传入空字符串但字段要求非空",
+          "severity": "高",
+          "test_strategy": {
+            "trigger_pattern": "必选参数传入空字符串''",
+            "expected_behavior": "返回400错误或业务拒绝",
+            "assertion_level": "L2",
+            "validation_points": [
+              "HTTP状态码 = 400 或 业务拒绝",
+              "error字段指示空值无效"
+            ]
+          },
+          "tags": ["空值处理", "参数校验"]
+        },
+        {
+          "fault_id": "F-REQ-007",
+          "name": "null值注入",
+          "description": "传入JSON null值作为参数",
+          "severity": "高",
+          "test_strategy": {
+            "trigger_pattern": "参数值设为null",
+            "expected_behavior": "返回400错误或业务拒绝，或按业务逻辑处理",
+            "assertion_level": "L2",
+            "validation_points": [
+              "明确处理null值",
+              "不导致服务崩溃或未定义行为"
+            ]
+          },
+          "tags": ["null处理", "异常输入"]
+        },
+        {
+          "fault_id": "F-REQ-008",
+          "name": "超长字符串注入",
+          "description": "传入超长字符串可能导致缓冲区溢出或性能问题",
+          "severity": "中",
+          "test_strategy": {
+            "trigger_pattern": "传入超过预期长度的字符串（如10000字符）",
+            "expected_behavior": "应正确处理或拒绝，不导致服务异常",
+            "assertion_level": "L2",
+            "validation_points": [
+              "HTTP状态码正常或返回400",
+              "不导致5xx错误",
+              "响应时间合理"
+            ]
+          },
+          "tags": ["长度限制", "边界测试", "安全"]
+        },
+        {
+          "fault_id": "F-REQ-009",
+          "name": "特殊字符注入",
+          "description": "传入特殊字符（如Unicode、转义字符、控制字符）",
+          "severity": "中",
+          "test_strategy": {
+            "trigger_pattern": "传入特殊字符或非ASCII字符",
+            "expected_behavior": "应正确处理或转义，不导致解析错误",
+            "assertion_level": "L2",
+            "validation_points": [
+              "不导致JSON解析错误",
+              "正确存储或返回",
+              "不导致服务异常"
+            ]
+          },
+          "tags": ["字符处理", "编码", "安全"]
+        },
+        {
+          "fault_id": "F-REQ-010",
+          "name": "数组字段空数组注入",
+          "description": "传入空数组作为数组类型参数",
+          "severity": "中",
+          "test_strategy": {
+            "trigger_pattern": "数组类型参数传入空数组[]",
+            "expected_behavior": "应明确处理空数组逻辑（拒绝或接受）",
+            "assertion_level": "L2",
+            "validation_points": [
+              "明确处理逻辑",
+              "不导致未定义行为",
+              "响应符合预期"
+            ]
+          },
+          "tags": ["空数组", "边界测试", "参数校验"]
+        },
+        {
+          "fault_id": "F-REQ-011",
+          "name": "引用不存在的关联资源",
+          "description": "请求参数中引用的关联资源不存在（如不存在的agentId、userId、sessionId、parentId等）",
+          "severity": "高",
+          "test_strategy": {
+            "trigger_pattern": "在请求参数的关联字段中传入不存在的资源ID（如metadata.agentId='nonexistent-{uuid}'）",
+            "expected_behavior": "应返回错误响应或终态FAILED，不执行无效操作",
+            "assertion_level": "L2",
+            "validation_points": [
+              "响应包含error字段或状态字段指示失败",
+              "错误码或message指示资源不存在或关联无效",
+              "不创建资源或执行无效操作",
+              "响应id字段回带"
+            ]
+          },
+          "applicable_scenarios": ["POST", "PUT", "PATCH"],
+          "tags": ["关联资源校验", "业务逻辑", "参数校验", "资源不存在"]
+        }
+      ]
+    },
+    {
+      "category_id": "FC-RES-001",
+      "category_name": "响应体缺陷",
+      "description": "响应体结构或内容不符合预期",
+      "faults": [
+        {
+          "fault_id": "F-RES-001",
+          "name": "响应id字段类型不一致",
+          "description": "响应中的id字段类型与请求不一致（如请求string，响应int）",
+          "severity": "高",
+          "test_strategy": {
+            "trigger_pattern": "发送包含字符串id的请求",
+            "expected_behavior": "响应id字段类型应与请求一致（string类型）",
+            "assertion_level": "L2",
+            "validation_points": [
+              "响应id字段存在",
+              "id字段类型 === string",
+              "id值 === 请求id"
+            ]
+          },
+          "tags": ["类型一致性", "契约验证", "历史缺陷"]
+        },
+        {
+          "fault_id": "F-RES-002",
+          "name": "响应结构嵌套错误",
+          "description": "响应body的实际结构与契约不符（如result.task而非result）",
+          "severity": "高",
+          "test_strategy": {
+            "trigger_pattern": "执行正常请求",
+            "expected_behavior": "响应结构应符合contract.md定义",
+            "assertion_level": "L2",
+            "validation_points": [
+              "响应body包含result字段",
+              "result包含期望的子字段",
+              "字段访问路径正确"
+            ]
+          },
+          "tags": ["结构一致性", "契约验证", "历史缺陷"]
+        },
+        {
+          "fault_id": "F-RES-003",
+          "name": "响应缺少必选字段",
+          "description": "响应body中缺少契约定义的必选字段",
+          "severity": "高",
+          "test_strategy": {
+            "trigger_pattern": "执行正常请求",
+            "expected_behavior": "响应应包含所有契约定义的必选字段",
+            "assertion_level": "L2",
+            "validation_points": [
+              "响应包含所有必选字段",
+              "字段值非null或符合预期"
+            ]
+          },
+          "tags": ["字段缺失", "契约验证"]
+        },
+        {
+          "fault_id": "F-RES-004",
+          "name": "枚举值格式不一致",
+          "description": "响应中的枚举值格式与契约不符（如TASK_STATE_COMPLETED vs COMPLETED）",
+          "severity": "中",
+          "test_strategy": {
+            "trigger_pattern": "执行会返回枚举值的请求",
+            "expected_behavior": "枚举值格式应符合contract.md定义",
+            "assertion_level": "L2",
+            "validation_points": [
+              "枚举值在允许值列表中",
+              "格式与契约一致（有无前缀）"
+            ]
+          },
+          "tags": ["枚举一致性", "契约验证", "历史缺陷"]
+        },
+        {
+          "fault_id": "F-RES-005",
+          "name": "响应字段类型错误",
+          "description": "响应字段类型与契约定义不符（如期望int，返回string）",
+          "severity": "高",
+          "test_strategy": {
+            "trigger_pattern": "执行正常请求",
+            "expected_behavior": "响应字段类型应符合contract.md定义",
+            "assertion_level": "L2",
+            "validation_points": [
+              "字段类型与契约一致",
+              "类型转换不导致客户端错误"
+            ]
+          },
+          "tags": ["类型一致性", "契约验证"]
+        },
+        {
+          "fault_id": "F-RES-006",
+          "name": "响应时间戳格式不一致",
+          "description": "响应中的时间戳格式与契约不符（如ISO8601 vs Unix时间戳）",
+          "severity": "中",
+          "test_strategy": {
+            "trigger_pattern": "执行返回时间戳的请求",
+            "expected_behavior": "时间戳格式应符合contract.md定义",
+            "assertion_level": "L2",
+            "validation_points": [
+              "时间戳格式可解析",
+              "格式与契约一致"
+            ]
+          },
+          "tags": ["时间戳", "格式一致性", "契约验证"]
+        },
+        {
+          "fault_id": "F-RES-007",
+          "name": "响应字段值超出范围",
+          "description": "响应字段值超出预期范围（如分页total过大）",
+          "severity": "中",
+          "test_strategy": {
+            "trigger_pattern": "执行可能返回大数值的请求",
+            "expected_behavior": "响应字段值应在合理范围内",
+            "assertion_level": "L2",
+            "validation_points": [
+              "字段值在预期范围内",
+              "不导致客户端解析异常"
+            ]
+          },
+          "tags": ["字段范围", "契约验证"]
+        },
+        {
+          "fault_id": "F-RES-008",
+          "name": "响应null字段处理不一致",
+          "description": "响应中的null字段处理方式不一致（如返回null vs 空字符串）",
+          "severity": "中",
+          "test_strategy": {
+            "trigger_pattern": "执行可能返回null值的请求",
+            "expected_behavior": "null字段处理应符合契约约定",
+            "assertion_level": "L2",
+            "validation_points": [
+              "null字段处理一致",
+              "不导致客户端解析错误"
+            ]
+          },
+          "tags": ["null处理", "契约验证"]
+        }
+      ]
+    },
+    {
+      "category_id": "FC-PROTO-001",
+      "category_name": "协议合规性缺陷",
+      "description": "违反HTTP或JSON-RPC协议规范的故障",
+      "faults": [
+        {
+          "fault_id": "F-PROTO-001",
+          "name": "JSON-RPC错误响应缺少id字段",
+          "description": "JSON-RPC错误响应未回带id字段（违反JSON-RPC 2.0规范）",
+          "severity": "高",
+          "test_strategy": {
+            "trigger_pattern": "触发任意JSON-RPC错误（如parse error, invalid request）",
+            "expected_behavior": "错误响应必须包含id字段",
+            "assertion_level": "L2",
+            "validation_points": [
+              "响应body包含id字段",
+              "id字段值与请求id一致或为null（仅当请求无法解析时）"
+            ]
+          },
+          "tags": ["协议合规", "JSON-RPC", "历史缺陷"]
+        },
+        {
+          "fault_id": "F-PROTO-002",
+          "name": "JSON-RPC非法请求体",
+          "description": "发送非法JSON请求体应返回parse error",
+          "severity": "高",
+          "test_strategy": {
+            "trigger_pattern": "发送格式错误的JSON（如缺少引号、括号不匹配）",
+            "expected_behavior": "返回parse error (-32700)",
+            "assertion_level": "L2",
+            "validation_points": [
+              "error.code = -32700",
+              "响应包含id字段"
+            ]
+          },
+          "tags": ["协议合规", "JSON-RPC", "异常输入"]
+        },
+        {
+          "fault_id": "F-PROTO-003",
+          "name": "JSON-RPC方法不存在",
+          "description": "调用未定义的method应返回method not found错误",
+          "severity": "高",
+          "test_strategy": {
+            "trigger_pattern": "发送method字段为不存在的方法名",
+            "expected_behavior": "返回method not found (-32601)",
+            "assertion_level": "L2",
+            "validation_points": [
+              "error.code = -32601",
+              "响应包含id字段"
+            ]
+          },
+          "tags": ["协议合规", "JSON-RPC", "异常输入"]
+        },
+        {
+          "fault_id": "F-PROTO-004",
+          "name": "HTTP方法错误",
+          "description": "使用错误的HTTP方法（如GET代替POST）",
+          "severity": "中",
+          "test_strategy": {
+            "trigger_pattern": "对POST端点发送GET请求",
+            "expected_behavior": "返回405 Method Not Allowed或业务拒绝",
+            "assertion_level": "L2",
+            "validation_points": [
+              "HTTP状态码 = 405 或 业务拒绝",
+              "不执行业务操作"
+            ]
+          },
+          "tags": ["HTTP协议", "异常输入"]
+        },
+        {
+          "fault_id": "F-PROTO-005",
+          "name": "JSON-RPC缺少jsonrpc字段",
+          "description": "请求体缺少jsonrpc版本字段",
+          "severity": "中",
+          "test_strategy": {
+            "trigger_pattern": "发送缺少jsonrpc字段的请求",
+            "expected_behavior": "返回Invalid Request (-32600)或业务拒绝",
+            "assertion_level": "L2",
+            "validation_points": [
+              "error.code = -32600 或 业务拒绝",
+              "响应符合协议规范"
+            ]
+          },
+          "tags": ["协议合规", "JSON-RPC"]
+        },
+        {
+          "fault_id": "F-PROTO-006",
+          "name": "Content-Type错误",
+          "description": "发送错误的Content-Type（如text/plain代替application/json）",
+          "severity": "中",
+          "test_strategy": {
+            "trigger_pattern": "发送Content-Type为text/plain的JSON请求",
+            "expected_behavior": "应拒绝或正确处理，不导致服务异常",
+            "assertion_level": "L2",
+            "validation_points": [
+              "不导致服务崩溃",
+              "正确处理或返回错误"
+            ]
+          },
+          "tags": ["HTTP协议", "Content-Type"]
+        },
+        {
+          "fault_id": "F-PROTO-007",
+          "name": "Accept头错误",
+          "description": "发送错误的Accept头（如不支持的内容类型）",
+          "severity": "中",
+          "test_strategy": {
+            "trigger_pattern": "发送Accept为application/xml但服务只支持JSON",
+            "expected_behavior": "应返回406 Not Acceptable或返回支持的格式",
+            "assertion_level": "L2",
+            "validation_points": [
+              "HTTP状态码 = 406 或 返回默认格式",
+              "响应格式可解析"
+            ]
+          },
+          "tags": ["HTTP协议", "Accept头"]
+        }
+      ]
+    },
+    {
+      "category_id": "FC-STATE-001",
+      "category_name": "状态与流程缺陷",
+      "description": "资源状态流转或业务流程相关的故障",
+      "faults": [
+        {
+          "fault_id": "F-STATE-001",
+          "name": "终态资源再操作",
+          "description": "对已处于终态的资源执行操作（如取消已完成的任务）",
+          "severity": "中",
+          "test_strategy": {
+            "trigger_pattern": "对终态资源执行变更操作",
+            "expected_behavior": "返回业务拒绝或特定错误码",
+            "assertion_level": "L2",
+            "validation_points": [
+              "状态未改变",
+              "返回错误码或状态字段指示终态不可操作"
+            ]
+          },
+          "tags": ["状态机", "业务逻辑", "边界测试"]
+        },
+        {
+          "fault_id": "F-STATE-002",
+          "name": "不存在的资源ID",
+          "description": "操作不存在的资源（如查询不存在的taskId）",
+          "severity": "中",
+          "test_strategy": {
+            "trigger_pattern": "传入不存在的资源ID（如随机UUID）",
+            "expected_behavior": "返回标准错误响应，回带id",
+            "assertion_level": "L2",
+            "validation_points": [
+              "响应包含error字段",
+              "错误码指示资源不存在",
+              "响应id字段回带"
+            ]
+          },
+          "tags": ["边界测试", "资源不存在", "历史缺陷"]
+        },
+        {
+          "fault_id": "F-STATE-003",
+          "name": "并发操作冲突",
+          "description": "对同一资源并发执行冲突操作",
+          "severity": "中",
+          "test_strategy": {
+            "trigger_pattern": "并发发送冲突操作（如同时取消和更新）",
+            "expected_behavior": "至少一个操作失败或返回冲突错误",
+            "assertion_level": "L2",
+            "validation_points": [
+              "至少一个操作返回冲突或失败",
+              "最终状态一致"
+            ]
+          },
+          "tags": ["并发", "状态机", "边界测试"]
+        },
+        {
+          "fault_id": "F-STATE-004",
+          "name": "状态流转顺序错误",
+          "description": "违反状态机流转顺序（如直接跳到终态）",
+          "severity": "高",
+          "test_strategy": {
+            "trigger_pattern": "尝试执行不允许的状态流转",
+            "expected_behavior": "返回业务拒绝或状态不变",
+            "assertion_level": "L2",
+            "validation_points": [
+              "状态保持当前状态",
+              "不执行非法流转",
+              "返回错误指示非法流转"
+            ]
+          },
+          "tags": ["状态机", "业务逻辑"]
+        },
+        {
+          "fault_id": "F-STATE-005",
+          "name": "资源过期访问",
+          "description": "访问已过期或失效的资源",
+          "severity": "中",
+          "test_strategy": {
+            "trigger_pattern": "访问已过期时间窗口的资源",
+            "expected_behavior": "返回资源不存在或已过期错误",
+            "assertion_level": "L2",
+            "validation_points": [
+              "响应指示资源过期",
+              "不暴露敏感数据"
+            ]
+          },
+          "tags": ["资源管理", "过期处理"]
+        },
+        {
+          "fault_id": "F-STATE-006",
+          "name": "幂等性违反",
+          "description": "幂等操作多次执行产生不同结果",
+          "severity": "高",
+          "test_strategy": {
+            "trigger_pattern": "多次执行幂等操作（如相同id的SendMessage）",
+            "expected_behavior": "多次执行应产生相同结果",
+            "assertion_level": "L2",
+            "validation_points": [
+              "多次执行返回相同结果",
+              "不创建重复资源",
+              "状态一致"
+            ]
+          },
+          "tags": ["幂等性", "业务逻辑"]
+        }
+      ]
+    },
+    {
+      "category_id": "FC-SSE-001",
+      "category_name": "SSE流式响应缺陷",
+      "description": "Server-Sent Events流式响应相关故障",
+      "faults": [
+        {
+          "fault_id": "F-SSE-001",
+          "name": "SSE事件类型无法识别",
+          "description": "SSE事件的event/kind字段值不符合契约",
+          "severity": "高",
+          "test_strategy": {
+            "trigger_pattern": "触发SSE流式响应",
+            "expected_behavior": "所有事件的event/kind字段应在契约定义的枚举值中",
+            "assertion_level": "L2",
+            "validation_points": [
+              "每个事件的event/kind字段存在",
+              "字段值在允许的枚举值列表中",
+              "末事件为终态事件"
+            ]
+          },
+          "tags": ["SSE", "契约验证", "历史缺陷"]
+        },
+        {
+          "fault_id": "F-SSE-002",
+          "name": "SSE流未到达终态",
+          "description": "SSE流在没有明确的终态事件的情况下结束",
+          "severity": "高",
+          "test_strategy": {
+            "trigger_pattern": "触发SSE流式响应",
+            "expected_behavior": "最后一个事件应为终态事件",
+            "assertion_level": "L2",
+            "validation_points": [
+              "事件序列不为空",
+              "最后一个事件的state字段为终态",
+              "无异常中断"
+            ]
+          },
+          "tags": ["SSE", "状态机", "契约验证"]
+        },
+        {
+          "fault_id": "F-SSE-003",
+          "name": "SSE事件字段缺失",
+          "description": "SSE事件缺少必选字段（如id, kind, data等）",
+          "severity": "高",
+          "test_strategy": {
+            "trigger_pattern": "触发SSE流式响应",
+            "expected_behavior": "所有事件应包含契约定义的必选字段",
+            "assertion_level": "L2",
+            "validation_points": [
+              "每个事件包含id字段",
+              "包含kind/event字段",
+              "包含data字段"
+            ]
+          },
+          "tags": ["SSE", "字段缺失", "契约验证"]
+        },
+        {
+          "fault_id": "F-SSE-004",
+          "name": "SSE事件顺序错误",
+          "description": "SSE事件顺序不符合预期（如终态事件在中间）",
+          "severity": "高",
+          "test_strategy": {
+            "trigger_pattern": "触发SSE流式响应",
+            "expected_behavior": "事件顺序应符合业务逻辑",
+            "assertion_level": "L2",
+            "validation_points": [
+              "事件顺序符合预期",
+              "终态事件在最后",
+              "无重复事件"
+            ]
+          },
+          "tags": ["SSE", "事件顺序", "业务逻辑"]
+        },
+        {
+          "fault_id": "F-SSE-005",
+          "name": "SSE连接异常中断",
+          "description": "SSE流异常中断（如网络中断、服务崩溃）",
+          "severity": "高",
+          "test_strategy": {
+            "trigger_pattern": "模拟网络中断或服务异常",
+            "expected_behavior": "客户端应能检测到中断并重连或报错",
+            "assertion_level": "L2",
+            "validation_points": [
+              "客户端检测到中断",
+              "能正确重连或报错",
+              "不导致客户端崩溃"
+            ]
+          },
+          "tags": ["SSE", "容错", "可靠性"]
+        },
+        {
+          "fault_id": "F-SSE-006",
+          "name": "SSE事件重复",
+          "description": "SSE流中出现重复事件",
+          "severity": "中",
+          "test_strategy": {
+            "trigger_pattern": "触发SSE流式响应",
+            "expected_behavior": "不应出现重复事件，或客户端应能处理",
+            "assertion_level": "L2",
+            "validation_points": [
+              "事件id唯一",
+              "无重复事件",
+              "客户端能处理重复"
+            ]
+          },
+          "tags": ["SSE", "事件唯一性"]
+        }
+      ]
+    },
+    {
+      "category_id": "FC-SEC-001",
+      "category_name": "安全相关缺陷",
+      "description": "安全漏洞或风险相关故障",
+      "faults": [
+        {
+          "fault_id": "F-SEC-001",
+          "name": "SQL注入风险",
+          "description": "输入参数未正确转义，可能导致SQL注入",
+          "severity": "高",
+          "test_strategy": {
+            "trigger_pattern": "在参数中注入SQL语句片段（如' OR '1'='1）",
+            "expected_behavior": "应返回参数校验错误或业务拒绝，不应执行SQL",
+            "assertion_level": "L2",
+            "validation_points": [
+              "HTTP状态码 = 400 或 业务拒绝",
+              "不返回数据库错误信息",
+              "不执行注入的SQL"
+            ]
+          },
+          "tags": ["安全", "注入攻击", "OWASP"]
+        },
+        {
+          "fault_id": "F-SEC-002",
+          "name": "XSS攻击风险",
+          "description": "输入参数未正确转义，可能导致XSS",
+          "severity": "中",
+          "test_strategy": {
+            "trigger_pattern": "在参数中注入HTML/JS脚本",
+            "expected_behavior": "应正确转义或返回校验错误",
+            "assertion_level": "L2",
+            "validation_points": [
+              "响应正确转义脚本",
+              "不执行注入的脚本",
+              "不返回原始脚本"
+            ]
+          },
+          "tags": ["安全", "XSS", "OWASP"]
+        },
+        {
+          "fault_id": "F-SEC-003",
+          "name": "未授权访问",
+          "description": "缺少认证或授权校验",
+          "severity": "高",
+          "test_strategy": {
+            "trigger_pattern": "不携带认证信息或使用无效token访问",
+            "expected_behavior": "应返回401 Unauthorized或403 Forbidden",
+            "assertion_level": "L2",
+            "validation_points": [
+              "HTTP状态码 = 401 或 403",
+              "不返回资源内容",
+              "不执行业务操作"
+            ]
+          },
+          "tags": ["安全", "认证授权", "OWASP"]
+        },
+        {
+          "fault_id": "F-SEC-004",
+          "name": "敏感信息泄露",
+          "description": "响应body中包含敏感信息（如密码、token、内部错误栈）",
+          "severity": "高",
+          "test_strategy": {
+            "trigger_pattern": "触发错误或正常请求",
+            "expected_behavior": "响应不应包含敏感字段或明文敏感信息",
+            "assertion_level": "L2",
+            "validation_points": [
+              "响应不包含密码字段",
+              "不包含完整token",
+              "不包含内部错误栈信息"
+            ]
+          },
+          "tags": ["安全", "信息泄露", "OWASP"]
+        },
+        {
+          "fault_id": "F-SEC-005",
+          "name": "路径遍历攻击",
+          "description": "输入参数可能导致路径遍历（如../../../etc/passwd）",
+          "severity": "高",
+          "test_strategy": {
+            "trigger_pattern": "在文件路径参数中注入路径遍历序列",
+            "expected_behavior": "应拒绝或规范化路径，不允许访问非授权文件",
+            "assertion_level": "L2",
+            "validation_points": [
+              "不返回非授权文件内容",
+              "路径被规范化或拒绝",
+              "不导致服务异常"
+            ]
+          },
+          "tags": ["安全", "路径遍历", "OWASP"]
+        },
+        {
+          "fault_id": "F-SEC-006",
+          "name": "命令注入",
+          "description": "输入参数可能导致系统命令执行",
+          "severity": "高",
+          "test_strategy": {
+            "trigger_pattern": "在参数中注入命令执行序列（如; rm -rf /）",
+            "expected_behavior": "应拒绝或转义，不应执行命令",
+            "assertion_level": "L2",
+            "validation_points": [
+              "不执行注入的命令",
+              "返回校验错误或拒绝",
+              "不返回系统错误信息"
+            ]
+          },
+          "tags": ["安全", "命令注入", "OWASP"]
+        },
+        {
+          "fault_id": "F-SEC-007",
+          "name": "速率限制缺失",
+          "description": "缺少API调用速率限制，可能导致滥用",
+          "severity": "中",
+          "test_strategy": {
+            "trigger_pattern": "短时间内发送大量请求",
+            "expected_behavior": "应返回429 Too Many Requests或限制访问",
+            "assertion_level": "L2",
+            "validation_points": [
+              "返回429状态码或延迟响应",
+              "不导致服务崩溃",
+              "限制生效"
+            ]
+          },
+          "tags": ["安全", "速率限制", "可靠性"]
+        },
+        {
+          "fault_id": "F-SEC-008",
+          "name": "CORS配置错误",
+          "description": "CORS配置过于宽松，可能导致跨域攻击",
+          "severity": "中",
+          "test_strategy": {
+            "trigger_pattern": "从非授权域名发送跨域请求",
+            "expected_behavior": "应拒绝或按配置处理，不返回敏感数据",
+            "assertion_level": "L2",
+            "validation_points": [
+              "CORS头按配置返回",
+              "不返回敏感数据给非授权域",
+              "Access-Control-Allow-Origin正确"
+            ]
+          },
+          "tags": ["安全", "CORS", "跨域"]
+        }
+      ]
+    },
+    {
+      "category_id": "FC-PERF-001",
+      "category_name": "性能相关缺陷",
+      "description": "性能问题或资源管理相关故障",
+      "faults": [
+        {
+          "fault_id": "F-PERF-001",
+          "name": "响应超时",
+          "description": "请求响应时间超过合理阈值",
+          "severity": "中",
+          "test_strategy": {
+            "trigger_pattern": "执行可能耗时长的操作",
+            "expected_behavior": "应在合理时间内响应或返回超时错误",
+            "assertion_level": "L2",
+            "validation_points": [
+              "响应时间在阈值内",
+              "或返回超时错误",
+              "不导致客户端长时间阻塞"
+            ]
+          },
+          "tags": ["性能", "超时", "可靠性"]
+        },
+        {
+          "fault_id": "F-PERF-002",
+          "name": "大响应体",
+          "description": "响应体过大可能导致客户端处理问题",
+          "severity": "中",
+          "test_strategy": {
+            "trigger_pattern": "请求可能返回大量数据的操作",
+            "expected_behavior": "应分页返回或限制大小，不返回超大响应",
+            "assertion_level": "L2",
+            "validation_points": [
+              "响应体大小在合理范围",
+              "支持分页或限制",
+              "不导致客户端内存溢出"
+            ]
+          },
+          "tags": ["性能", "大响应", "资源管理"]
+        },
+        {
+          "fault_id": "F-PERF-003",
+          "name": "内存泄漏",
+          "description": "长时间运行导致内存占用持续增长",
+          "severity": "高",
+          "test_strategy": {
+            "trigger_pattern": "长时间持续调用同一操作",
+            "expected_behavior": "内存占用应稳定，不持续增长",
+            "assertion_level": "L2",
+            "validation_points": [
+              "多次调用后内存稳定",
+              "不导致服务崩溃",
+              "资源正确释放"
+            ]
+          },
+          "tags": ["性能", "内存泄漏", "可靠性"]
+        },
+        {
+          "fault_id": "F-PERF-004",
+          "name": "资源未释放",
+          "description": "操作后资源未正确释放（如文件句柄、数据库连接）",
+          "severity": "高",
+          "test_strategy": {
+            "trigger_pattern": "多次执行资源占用操作",
+            "expected_behavior": "资源应在操作后释放",
+            "assertion_level": "L2",
+            "validation_points": [
+              "多次执行后资源计数稳定",
+              "不导致资源耗尽",
+              "连接/句柄正确关闭"
+            ]
+          },
+          "tags": ["性能", "资源管理", "可靠性"]
+        }
+      ]
+    }
+  ],
+  "history_faults": [
+    {
+      "fault_id": "F-HIST-001",
+      "source": "TC-A2A-001执行失败",
+      "description": "响应id字段类型不一致（int vs string）",
+      "severity": "高",
+      "discovered_date": "2026-01-18",
+      "test_case_id": "TC-A2A-001",
+      "test_strategy": {
+        "trigger_pattern": "发送包含字符串id的请求",
+        "expected_behavior": "响应id应为字符串类型",
+        "assertion_level": "L2",
+        "validation_points": [
+          "响应id字段类型 === 'string'",
+          "id值 === 请求id"
+        ]
+      },
+      "resolution_status": "open",
+      "tags": ["历史缺陷", "类型一致性", "契约验证"]
+    },
+    {
+      "fault_id": "F-HIST-002",
+      "source": "TC-A2A-003执行失败",
+      "description": "响应结构嵌套错误（result.task而非result）",
+      "severity": "高",
+      "discovered_date": "2026-01-18",
+      "test_case_id": "TC-A2A-003",
+      "test_strategy": {
+        "trigger_pattern": "执行GetTask查询",
+        "expected_behavior": "响应结构应为result.task而非result",
+        "assertion_level": "L2",
+        "validation_points": [
+          "响应包含result.task字段",
+          "task.id不为空"
+        ]
+      },
+      "resolution_status": "open",
+      "tags": ["历史缺陷", "结构一致性", "契约验证"]
+    },
+    {
+      "fault_id": "F-HIST-003",
+      "source": "TC-A2A-005执行失败",
+      "description": "JSON-RPC错误响应缺少id字段",
+      "severity": "高",
+      "discovered_date": "2026-01-18",
+      "test_case_id": "TC-A2A-005",
+      "test_strategy": {
+        "trigger_pattern": "发送非法JSON请求体",
+        "expected_behavior": "错误响应必须包含id字段",
+        "assertion_level": "L2",
+        "validation_points": [
+          "响应body包含id字段"
+        ]
+      },
+      "resolution_status": "open",
+      "tags": ["历史缺陷", "协议合规", "JSON-RPC"]
+    },
+    {
+      "fault_id": "F-HIST-004",
+      "source": "TC-A2A-002执行失败",
+      "description": "SSE事件kind字段无法识别",
+      "severity": "高",
+      "discovered_date": "2026-01-18",
+      "test_case_id": "TC-A2A-002",
+      "test_strategy": {
+        "trigger_pattern": "触发SSE流式响应",
+        "expected_behavior": "所有事件的kind字段应在契约定义的枚举值中",
+        "assertion_level": "L2",
+        "validation_points": [
+          "每个事件的kind字段存在",
+          "字段值在允许的枚举值列表中"
+        ]
+      },
+      "resolution_status": "open",
+      "tags": ["历史缺陷", "SSE", "契约验证"]
+    },
+    {
+      "fault_id": "F-HIST-005",
+      "source": "TC-A2A-004执行失败",
+      "description": "Agent Card endpoint字段缺失",
+      "severity": "高",
+      "discovered_date": "2026-01-18",
+      "test_case_id": "TC-A2A-004",
+      "test_strategy": {
+        "trigger_pattern": "访问Agent Card发现端点",
+        "expected_behavior": "Agent Card应包含url或endpoint字段",
+        "assertion_level": "L2",
+        "validation_points": [
+          "响应包含url或endpoint字段",
+          "字段值包含'/a2a'路径",
+          "字段不为空字符串"
+        ]
+      },
+      "resolution_status": "open",
+      "tags": ["历史缺陷", "A2A特有", "发现机制"]
+    }
+  ]
+}

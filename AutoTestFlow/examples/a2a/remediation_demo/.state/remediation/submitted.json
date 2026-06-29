@@ -1,0 +1,13 @@
+{
+  "generated_by": "submit_remediation.py",
+  "mode": "dry-run",
+  "pushed_branch": null,
+  "pr": null,
+  "issues": [],
+  "skipped": [
+    {
+      "action": "all",
+      "reason": "remediate=dry-run gate_confirmed=False（非 on 或未过门）"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "generated_by": "remediation_plan.py",
+  "total_sdk_defects": 2,
+  "max_defects": 5,
+  "selected": 2,
+  "defects": [
+    {
+      "case_id": "TC_041",
+      "spec_id": "SPEC-RESP-WRAP",
+      "field": "result.task.status.state",
+      "expected": "终态 FAILED（不存在的 agentId 不应成功）",
+      "actual": "COMPLETED",
+      "trace_file": ".state/trace/TC_041.jsonl",
+      "oracle_refs": [
+        "SPEC-RESP-WRAP"
+      ],
+      "fault_ref": "F-REQ-011"
+    },
+    {
+      "case_id": "TC_042",
+      "spec_id": "SPEC-ID-TYPE",
+      "field": "id",
+      "expected": "响应 id 以字符串类型回带（== 请求 id '1'）",
+      "actual": "数字 1（int）",
+      "trace_file": ".state/trace/TC_042.jsonl",
+      "oracle_refs": [
+        "SPEC-ID-TYPE"
+      ],
+      "fault_ref": "F-HIST-001"
+    }
+  ]
+}

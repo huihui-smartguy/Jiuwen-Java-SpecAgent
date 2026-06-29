@@ -1,0 +1,29 @@
+[
+  {
+    "case_id": "TC_041",
+    "name": "SendMessage 正常E2E",
+    "test_type": "scenario",
+    "case_kind": "正常E2E",
+    "priority": "P0",
+    "source_scene": "FS-001",
+    "steps": "1. 构造消息并通过 POST /a2a 同步发送\n2. 解包响应校验终态与 id 回带",
+    "oracle_refs": [
+      { "spec_id": "SPEC-RESP-WRAP", "assert_level": "L2", "field": "result.task.status.state", "authority": "spec-required" },
+      { "spec_id": "SPEC-ID-TYPE", "assert_level": "L2", "field": "id", "authority": "spec-required" }
+    ]
+  },
+  {
+    "case_id": "TC_042",
+    "name": "SendMessage-故障验证-关联资源不存在(agentId)",
+    "test_type": "scenario",
+    "case_kind": "异常E2E",
+    "priority": "P1",
+    "source_scene": "FS-001",
+    "fault_ref": "F-REQ-011",
+    "steps": "1. 构造 SendMessage，metadata.agentId 设为 'nonexistent-<uuid>'\n2. POST /a2a 发送并解包，检查失败终态",
+    "oracle_refs": [
+      { "spec_id": "SPEC-RESP-WRAP", "assert_level": "L2", "field": "result.task.status.state", "authority": "spec-required" },
+      { "spec_id": "SPEC-ID-TYPE", "assert_level": "L2", "field": "id", "authority": "spec-required" }
+    ]
+  }
+]

@@ -1,0 +1,207 @@
+{
+  "meta": {
+    "version": "1.0.0",
+    "last_updated": "2026-06-29",
+    "description": "AutoTestFlow 可消费的软件测试和 AI 测试专业验收标准。",
+    "assertion_policy": "本文件只提供门禁和观察标准。强断言必须来自 contract.md。"
+  },
+  "criteria": [
+    {
+      "standard_id": "PE-SW-FAST-FEEDBACK",
+      "name": "快速反馈层",
+      "dimension": "software_testing",
+      "source_refs": ["SRC-GOOGLE-TEST-PYRAMID", "SRC-GOOGLE-SWE-TESTING", "SRC-MICROSOFT-TESTING"],
+      "intent": "确保 PR 或小变更有快速、稳定、可定位的测试反馈。",
+      "acceptance_checks": [
+        "存在 PR 前可运行的 smoke/unit/contract/API 快速测试层。",
+        "关键测试失败能定位到模块、接口、contract spec_id 或 fault_ref。",
+        "flaky、慢测试、环境依赖失败必须在报告中单列。"
+      ],
+      "evidence_required": ["test_design.json", "case_results.json", "runtime_summary", "failure_classification"],
+      "release_gate": "must_for_pr"
+    },
+    {
+      "standard_id": "PE-SW-E2E-BALANCE",
+      "name": "E2E 用例比例和价值控制",
+      "dimension": "software_testing",
+      "source_refs": ["SRC-GOOGLE-TEST-PYRAMID"],
+      "intent": "避免测试套件退化为慢、脆弱、难定位的 E2E 堆叠。",
+      "acceptance_checks": [
+        "E2E 用例覆盖关键用户链路、跨模块高风险路径和真实入口。",
+        "重复验证同一底层逻辑的 E2E 应降级为更小粒度测试或合并。",
+        "E2E 失败必须有 trace 和定位线索。"
+      ],
+      "evidence_required": ["test_design.json", "scene_tc_mapping.json", "trace_files"],
+      "release_gate": "warn"
+    },
+    {
+      "standard_id": "PE-SW-CONTRACT-COVERAGE",
+      "name": "契约覆盖",
+      "dimension": "software_testing",
+      "source_refs": ["SRC-REPO-FAULTSANALYSIS", "SRC-MICROSOFT-TESTING"],
+      "intent": "保证测试断言覆盖当前 SUT 的核心契约。",
+      "acceptance_checks": [
+        "每条强断言用例至少包含一个 spec-required 的 oracle_ref。",
+        "核心响应包装、错误格式、状态流转、id 回带、权限边界必须有覆盖或说明。",
+        "contract 中未定义的行业经验点只能作为观察或人工裁决项。"
+      ],
+      "evidence_required": ["contract.md", "test_design.json", "oracle_refs"],
+      "release_gate": "must_for_release"
+    },
+    {
+      "standard_id": "PE-SW-FAULT-COVERAGE",
+      "name": "故障模式覆盖",
+      "dimension": "software_testing",
+      "source_refs": ["SRC-REPO-FAULTSANALYSIS", "SRC-NETFLIX-FIT"],
+      "intent": "用结构化故障知识补足需求驱动测试的失败模式盲区。",
+      "acceptance_checks": [
+        "高严重度 fault_ref 应有用例或明确不适用说明。",
+        "历史缺陷应优先回归，至少 P1，高风险历史缺陷可提升 P0。",
+        "故障断言必须经过 contract-first 调和。"
+      ],
+      "evidence_required": ["fault_matches.json", "test_design.json", "case_results.json"],
+      "release_gate": "must_for_release"
+    },
+    {
+      "standard_id": "PE-SW-OBSERVABILITY",
+      "name": "可观测性验收",
+      "dimension": "software_testing",
+      "source_refs": ["SRC-MICROSOFT-TESTING", "SRC-MICROSOFT-AI-OBSERVABILITY"],
+      "intent": "确保失败可诊断，分布式调用可关联。",
+      "acceptance_checks": [
+        "关键请求响应有 trace/correlation id 或等价关联字段。",
+        "外部依赖调用、工具调用、错误、延迟、重试和降级路径有日志或 trace。",
+        "报告能关联用例、请求、响应、日志、trace 和故障分类。"
+      ],
+      "evidence_required": ["trace_files", "logs", "case_results.json", "report.md"],
+      "release_gate": "warn"
+    },
+    {
+      "standard_id": "PE-SW-RELIABILITY-DFX",
+      "name": "可靠性与 DFX 验收",
+      "dimension": "reliability",
+      "source_refs": ["SRC-GOOGLE-SRE-RELIABILITY", "SRC-AWS-WA-RELIABILITY", "SRC-NETFLIX-FIT"],
+      "intent": "验证依赖失效、容量、恢复和降级能力。",
+      "acceptance_checks": [
+        "覆盖至少一种依赖失败场景，或说明该 SUT 无外部依赖。",
+        "高风险服务应覆盖超时、重试、熔断、降级和恢复。",
+        "容量、性能、MTTR 或恢复路径必须有可观测证据。"
+      ],
+      "evidence_required": ["dfx_cases", "fault_injection_scope", "metrics", "recovery_trace"],
+      "release_gate": "must_for_high_risk_release"
+    },
+    {
+      "standard_id": "PE-SW-CANARY-READINESS",
+      "name": "Canary 和渐进发布就绪",
+      "dimension": "release_engineering",
+      "source_refs": ["SRC-GOOGLE-SRE-RELIABILITY", "SRC-NETFLIX-KAYENTA"],
+      "intent": "高风险发布必须能通过指标比较和回滚机制限制影响面。",
+      "acceptance_checks": [
+        "定义 baseline/canary 或等价灰度对照。",
+        "关键指标包含错误率、延迟、资源、异常、业务成功率。",
+        "无数据、指标缺失或显著退化必须阻断或人工确认。"
+      ],
+      "evidence_required": ["metric_config", "baseline_metrics", "canary_metrics", "rollback_plan"],
+      "release_gate": "must_for_production_rollout"
+    },
+    {
+      "standard_id": "PE-AI-SUCCESS-CRITERIA",
+      "name": "AI 成功标准定义",
+      "dimension": "ai_testing",
+      "source_refs": ["SRC-ANTHROPIC-EVALS", "SRC-OPENAI-EVALS"],
+      "intent": "AI 测试开始前必须明确任务成功标准。",
+      "acceptance_checks": [
+        "定义具体、可度量、与用户任务相关的成功标准。",
+        "至少覆盖任务质量、相关性/忠实度、安全、延迟或成本中的适用维度。",
+        "每个成功标准有评分方法和通过阈值。"
+      ],
+      "evidence_required": ["eval_spec", "grader_config", "thresholds"],
+      "release_gate": "must_for_ai_release"
+    },
+    {
+      "standard_id": "PE-AI-EVAL-DATASET",
+      "name": "AI Eval 数据集",
+      "dimension": "ai_testing",
+      "source_refs": ["SRC-OPENAI-EVALS", "SRC-ANTHROPIC-EVALS", "SRC-META-LLAMA-EVAL"],
+      "intent": "AI 评估必须有代表性输入、ground truth 或 rubric。",
+      "acceptance_checks": [
+        "数据集 schema 明确，包含输入、预期标签/参考答案/rubric 元数据。",
+        "覆盖主路径、边界、对抗、历史缺陷和真实用户分布样本。",
+        "数据集版本可追溯，不与训练或 prompt 调优过程混淆。"
+      ],
+      "evidence_required": ["eval_dataset", "dataset_schema", "dataset_version"],
+      "release_gate": "must_for_ai_release"
+    },
+    {
+      "standard_id": "PE-AI-GRADER-RELIABILITY",
+      "name": "AI 评分器可靠性",
+      "dimension": "ai_testing",
+      "source_refs": ["SRC-OPENAI-EVALS", "SRC-ANTHROPIC-EVALS"],
+      "intent": "评分器本身必须可解释、可复核、低误判。",
+      "acceptance_checks": [
+        "能用 exact/string/code grader 时优先不用 LLM grader。",
+        "LLM grader 必须有清晰 rubric、输出格式、抽样人工复核和版本记录。",
+        "评分器失败、超时、不确定应单独分类，不直接判模型失败。"
+      ],
+      "evidence_required": ["grader_config", "grader_version", "human_review_samples"],
+      "release_gate": "must_for_ai_release"
+    },
+    {
+      "standard_id": "PE-AI-AGENT-TOOL-CALL",
+      "name": "Agent 工具调用验收",
+      "dimension": "ai_agent_testing",
+      "source_refs": ["SRC-MICROSOFT-AI-OBSERVABILITY", "SRC-OPENAI-EVALS", "SRC-ANTHROPIC-EVALS"],
+      "intent": "验证 Agent 能正确选择、参数化、执行和恢复工具调用。",
+      "acceptance_checks": [
+        "覆盖正确工具选择、参数 schema、权限边界、工具失败、重试和幂等。",
+        "记录 tool_call_id、输入、输出、错误、耗时和上游决策 trace。",
+        "工具调用失败不得导致无限循环、重复副作用或越权操作。"
+      ],
+      "evidence_required": ["tool_call_trace", "agent_trace", "case_results.json"],
+      "release_gate": "must_for_agent_release"
+    },
+    {
+      "standard_id": "PE-AI-SECURITY-REDTEAM",
+      "name": "AI 安全与红队验收",
+      "dimension": "ai_security",
+      "source_refs": ["SRC-OWASP-LLM-TOP10", "SRC-NIST-AI-RMF", "SRC-MICROSOFT-AI-OBSERVABILITY"],
+      "intent": "覆盖 LLM/Agent 特有安全风险。",
+      "acceptance_checks": [
+        "覆盖 prompt injection、敏感信息泄露、过度自治、不安全输出处理和插件/工具边界。",
+        "高风险应用必须有 scheduled red teaming 或等价周期性对抗测试计划。",
+        "安全失败应进入缺陷或风险台账，并区分模型问题、应用编排问题和工具权限问题。"
+      ],
+      "evidence_required": ["redteam_cases", "safety_eval_results", "risk_register"],
+      "release_gate": "must_for_ai_release"
+    },
+    {
+      "standard_id": "PE-AI-PRODUCTION-MONITORING",
+      "name": "AI 生产监控和漂移",
+      "dimension": "ai_operations",
+      "source_refs": ["SRC-MICROSOFT-AI-OBSERVABILITY", "SRC-NIST-AI-RMF"],
+      "intent": "上线后持续监控 AI 质量、安全、成本和性能。",
+      "acceptance_checks": [
+        "生产采样评估覆盖质量、安全、延迟、错误率和 token/cost。",
+        "配置 scheduled evaluation 以检测数据分布、模型、prompt 或工具变化导致的漂移。",
+        "关键安全或质量阈值失败必须有告警和处置路径。"
+      ],
+      "evidence_required": ["monitoring_config", "sampling_policy", "alert_rules", "drift_eval_schedule"],
+      "release_gate": "must_for_ai_production"
+    },
+    {
+      "standard_id": "PE-REPORT-ACTIONABLE",
+      "name": "测试报告可行动性",
+      "dimension": "report_quality",
+      "source_refs": ["SRC-META-SAPIENZ", "SRC-NETFLIX-KAYENTA", "SRC-REPO-FAULTSANALYSIS"],
+      "intent": "报告需要帮助工程团队修复、回滚或补测。",
+      "acceptance_checks": [
+        "每个失败都有分类、证据、复现输入、影响范围和建议下一步。",
+        "缺陷和观察项分开，不把环境问题或测试脚本问题混入产品缺陷。",
+        "报告包含 contract coverage、fault coverage、professional acceptance 和 residual risk。"
+      ],
+      "evidence_required": ["report.md", "case_results.json", "trace_files"],
+      "release_gate": "must_for_release"
+    }
+  ]
+}
+

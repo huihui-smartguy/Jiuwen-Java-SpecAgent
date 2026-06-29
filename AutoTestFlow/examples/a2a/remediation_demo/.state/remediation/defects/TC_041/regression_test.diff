@@ -1,0 +1,20 @@
+diff --git a/src/test/java/com/example/a2a/TaskServiceAgentIdIT.java b/src/test/java/com/example/a2a/TaskServiceAgentIdIT.java
+new file mode 100644
+index 0000000..878806b
+--- /dev/null
++++ b/src/test/java/com/example/a2a/TaskServiceAgentIdIT.java
+@@ -0,0 +1,14 @@
++package com.example.a2a;
++
++import org.junit.jupiter.api.Test;
++import static org.junit.jupiter.api.Assertions.assertEquals;
++
++/** 回归：不存在的 agentId 必须终态 FAILED（SPEC-RESP-WRAP / F-REQ-011）。 */
++public class TaskServiceAgentIdIT {
++    @Test
++    void nonexistentAgentIdYieldsFailed() {
++        AgentRegistry registry = id -> false;            // 任意 agentId 视为不存在
++        TaskService svc = new TaskService(registry);
++        assertEquals("FAILED", svc.handle("nonexistent-x", "hi").getState());
++    }
++}

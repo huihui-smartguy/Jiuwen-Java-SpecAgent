@@ -1,0 +1,16 @@
+diff --git a/src/main/java/com/example/a2a/JsonRpcResponse.java b/src/main/java/com/example/a2a/JsonRpcResponse.java
+index 185ed5f..49feb50 100644
+--- a/src/main/java/com/example/a2a/JsonRpcResponse.java
++++ b/src/main/java/com/example/a2a/JsonRpcResponse.java
+@@ -7,9 +7,8 @@ public class JsonRpcResponse {
+     private final Object result;
+ 
+     public JsonRpcResponse(Object id, Object result) {
+-        // BUG(TC_042 / SPEC-ID-TYPE / F-HIST-001): id 原样回带；上游以 int 传入，
+-        // 导致响应 id 为数字。契约要求 id 一律以字符串回带。
+-        this.id = id;
++        // 修复(TC_042 / SPEC-ID-TYPE): id 一律以字符串回带
++        this.id = id == null ? null : String.valueOf(id);
+         this.result = result;
+     }
+ 

@@ -1,0 +1,19 @@
+diff --git a/src/test/java/com/example/a2a/JsonRpcResponseIdTypeIT.java b/src/test/java/com/example/a2a/JsonRpcResponseIdTypeIT.java
+new file mode 100644
+index 0000000..d5aae6b
+--- /dev/null
++++ b/src/test/java/com/example/a2a/JsonRpcResponseIdTypeIT.java
+@@ -0,0 +1,13 @@
++package com.example.a2a;
++
++import org.junit.jupiter.api.Test;
++import static org.junit.jupiter.api.Assertions.assertTrue;
++
++/** 回归：响应 id 必须为字符串类型（SPEC-ID-TYPE / F-HIST-001）。 */
++public class JsonRpcResponseIdTypeIT {
++    @Test
++    void idIsSerializedAsString() {
++        JsonRpcResponse resp = new JsonRpcResponse(1, "ok");
++        assertTrue(resp.getId() instanceof String);
++    }
++}

@@ -1,0 +1,36 @@
+{
+  "generated_by": "remediation_plan.py --finalize",
+  "defects": [
+    {
+      "case_id": "TC_041",
+      "spec_id": "SPEC-RESP-WRAP",
+      "files_touched": [
+        "src/main/java/com/example/a2a/TaskService.java"
+      ],
+      "adds": 5,
+      "dels": 2,
+      "confidence": "high",
+      "localizable": true,
+      "needs_human": false,
+      "issue_title": "[spec-violation] SPEC-RESP-WRAP: 不存在的 agentId 返回 COMPLETED 而非 FAILED"
+    },
+    {
+      "case_id": "TC_042",
+      "spec_id": "SPEC-ID-TYPE",
+      "files_touched": [
+        "src/main/java/com/example/a2a/JsonRpcResponse.java"
+      ],
+      "adds": 2,
+      "dels": 3,
+      "confidence": "high",
+      "localizable": true,
+      "needs_human": false,
+      "issue_title": "[spec-violation] SPEC-ID-TYPE: 响应 id 以数字回带而非字符串"
+    }
+  ],
+  "totals": {
+    "sdk_defects": 2,
+    "localizable": 2,
+    "needs_human": 0
+  }
+}

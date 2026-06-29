@@ -1,0 +1,146 @@
+{
+  "meta": {
+    "version": "1.0.0",
+    "last_updated": "2026-06-29",
+    "description": "Professional_experience 外部来源登记表",
+    "selection_policy": "优先使用公司官方工程博客、官方文档、公开标准和仓内分析结论。"
+  },
+  "sources": [
+    {
+      "source_id": "SRC-GOOGLE-SWE-TESTING",
+      "organization": "Google",
+      "title": "Software Engineering at Google: Testing Overview",
+      "url": "https://abseil.io/resources/swe-book/html/ch11.html",
+      "domain": ["software_testing", "test_suite_design", "flaky_tests"],
+      "confidence": "high",
+      "used_for": ["developer-driven automated testing", "small/medium/large tests", "hermetic and deterministic tests"]
+    },
+    {
+      "source_id": "SRC-GOOGLE-TEST-PYRAMID",
+      "organization": "Google",
+      "title": "Just Say No to More End-to-End Tests",
+      "url": "https://testing.googleblog.com/2015/04/just-say-no-to-more-end-to-end-tests.html",
+      "domain": ["software_testing", "test_pyramid", "feedback_loop"],
+      "confidence": "high",
+      "used_for": ["fast reliable isolated feedback", "70/20/10 heuristic", "E2E risk management"]
+    },
+    {
+      "source_id": "SRC-GOOGLE-SRE-RELIABILITY",
+      "organization": "Google",
+      "title": "Google SRE Book: Testing for Reliability",
+      "url": "https://sre.google/sre-book/testing-reliability/",
+      "domain": ["reliability", "production_testing", "canary", "stress_testing"],
+      "confidence": "high",
+      "used_for": ["zero-MTTR test gate", "traditional vs production tests", "configuration/stress/canary tests"]
+    },
+    {
+      "source_id": "SRC-MICROSOFT-TESTING",
+      "organization": "Microsoft",
+      "title": "Engineering Fundamentals Playbook: Testing",
+      "url": "https://microsoft.github.io/code-with-engineering-playbook/automated-testing/",
+      "domain": ["software_testing", "engineering_fundamentals", "observability"],
+      "confidence": "high",
+      "used_for": ["code incomplete without tests", "PR blocking", "load/performance tests", "correlation IDs and logs"]
+    },
+    {
+      "source_id": "SRC-MICROSOFT-AI-OBSERVABILITY",
+      "organization": "Microsoft",
+      "title": "Microsoft Foundry: Observability in Generative AI",
+      "url": "https://learn.microsoft.com/en-us/azure/foundry/concepts/observability",
+      "domain": ["ai_testing", "evaluation", "monitoring", "tracing"],
+      "confidence": "high",
+      "used_for": ["AI lifecycle evaluation", "quality/safety gates", "agent metrics", "red teaming and production monitoring"]
+    },
+    {
+      "source_id": "SRC-AWS-WA-RELIABILITY",
+      "organization": "AWS",
+      "title": "AWS Well-Architected Framework: Reliability Pillar",
+      "url": "https://docs.aws.amazon.com/wellarchitected/latest/reliability-pillar/welcome.html",
+      "domain": ["reliability", "operations", "cloud_architecture"],
+      "confidence": "high",
+      "used_for": ["resilient architecture", "change management", "failure recovery process"]
+    },
+    {
+      "source_id": "SRC-NETFLIX-FIT",
+      "organization": "Netflix",
+      "title": "FIT: Failure Injection Testing",
+      "url": "https://netflixtechblog.com/fit-failure-injection-testing-35d8e2a9bb2",
+      "domain": ["fault_injection", "chaos_engineering", "resilience"],
+      "confidence": "high",
+      "used_for": ["controlled blast radius", "dependency failure scenarios", "continuous failure automation"]
+    },
+    {
+      "source_id": "SRC-NETFLIX-KAYENTA",
+      "organization": "Netflix",
+      "title": "Automated Canary Analysis at Netflix with Kayenta",
+      "url": "https://netflixtechblog.com/automated-canary-analysis-at-netflix-with-kayenta-3260bc7acc69",
+      "domain": ["release_engineering", "canary", "metrics_judgment"],
+      "confidence": "high",
+      "used_for": ["baseline vs canary comparison", "metric validation", "rollback gates"]
+    },
+    {
+      "source_id": "SRC-META-SAPIENZ",
+      "organization": "Meta",
+      "title": "Sapienz: Intelligent automated software testing at scale",
+      "url": "https://engineering.fb.com/2018/05/02/developer-tools/sapienz-intelligent-automated-software-testing-at-scale/",
+      "domain": ["automated_testing", "mobile_testing", "ci"],
+      "confidence": "high",
+      "used_for": ["automated test design at scale", "low false-positive reporting", "CI-integrated actionable reports"]
+    },
+    {
+      "source_id": "SRC-META-LLAMA-EVAL",
+      "organization": "Meta",
+      "title": "Introducing Llama 3.1: Model evaluations",
+      "url": "https://ai.meta.com/blog/meta-llama-3-1/",
+      "domain": ["ai_testing", "model_evaluation", "safety_tools"],
+      "confidence": "medium",
+      "used_for": ["benchmark plus human evaluation", "safety tools such as Llama Guard and Prompt Guard", "application-specific evaluation"]
+    },
+    {
+      "source_id": "SRC-OPENAI-EVALS",
+      "organization": "OpenAI",
+      "title": "Working with evals",
+      "url": "https://developers.openai.com/api/docs/guides/evals",
+      "domain": ["ai_testing", "evals", "graders"],
+      "confidence": "high",
+      "used_for": ["task description", "test data schema", "testing criteria", "ground truth labels", "eval runs"]
+    },
+    {
+      "source_id": "SRC-ANTHROPIC-EVALS",
+      "organization": "Anthropic",
+      "title": "Define success criteria and build evaluations",
+      "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests",
+      "domain": ["ai_testing", "success_criteria", "graders"],
+      "confidence": "high",
+      "used_for": ["specific measurable criteria", "multidimensional AI eval", "code/human/LLM grading hierarchy"]
+    },
+    {
+      "source_id": "SRC-NIST-AI-RMF",
+      "organization": "NIST",
+      "title": "AI Risk Management Framework",
+      "url": "https://www.nist.gov/itl/ai-risk-management-framework",
+      "domain": ["ai_risk", "trustworthy_ai", "governance"],
+      "confidence": "high",
+      "used_for": ["trustworthiness considerations", "AI risk management", "generative AI unique risk profile"]
+    },
+    {
+      "source_id": "SRC-OWASP-LLM-TOP10",
+      "organization": "OWASP",
+      "title": "OWASP Top 10 for Large Language Model Applications",
+      "url": "https://owasp.org/www-project-top-10-for-large-language-model-applications/",
+      "domain": ["ai_security", "llm_security", "agent_security"],
+      "confidence": "high",
+      "used_for": ["prompt injection", "insecure output handling", "excessive agency", "sensitive information disclosure"]
+    },
+    {
+      "source_id": "SRC-REPO-FAULTSANALYSIS",
+      "organization": "Jiuwen-Java-SpecAgent",
+      "title": "FaultsAnalysis directory",
+      "url": "../../FaultsAnalysis/README.md",
+      "domain": ["autotestflow", "fault_database", "contract_first"],
+      "confidence": "high",
+      "used_for": ["fault library injection rationale", "file-as-protocol", "contract-first reconciliation"]
+    }
+  ]
+}
+

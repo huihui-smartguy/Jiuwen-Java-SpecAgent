@@ -1,0 +1,18 @@
+diff --git a/src/main/java/com/example/a2a/TaskService.java b/src/main/java/com/example/a2a/TaskService.java
+index 2c75348..739a9bb 100644
+--- a/src/main/java/com/example/a2a/TaskService.java
++++ b/src/main/java/com/example/a2a/TaskService.java
+@@ -10,8 +10,11 @@ public class TaskService {
+     }
+ 
+     public TaskResult handle(String agentId, String text) {
+-        // BUG(TC_041 / SPEC-RESP-WRAP / F-REQ-011): 未校验 agentId 是否存在，
+-        // 对不存在的关联资源仍返回 COMPLETED；契约要求终态 FAILED。
++        // 修复(TC_041 / SPEC-RESP-WRAP): 校验关联资源 agentId 是否存在
++        if (agentId != null && !registry.exists(agentId)) {
++            // 不存在的关联资源 → 终态 FAILED
++            return new TaskResult("FAILED");
++        }
+         return new TaskResult("COMPLETED");
+     }
+ }

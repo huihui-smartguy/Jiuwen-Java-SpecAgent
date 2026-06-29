@@ -1,0 +1,82 @@
+{
+  "meta": {
+    "version": "1.1.0-demo",
+    "scope": "wiki_demo",
+    "description": "wiki_demo 离线 fixture：从全局故障库裁剪的 3 条故障（F-REQ-011 / F-PROTO-001 / F-HIST-001），用于 gen_wiki.py + check_wiki.py 的确定性自测",
+    "last_updated": "2026-06-24",
+    "maintainer": "beta_wiki_demo"
+  },
+  "fault_categories": [
+    {
+      "category_id": "FC-REQ-001",
+      "category_name": "请求体缺陷",
+      "description": "请求体相关的常见故障模式",
+      "faults": [
+        {
+          "fault_id": "F-REQ-011",
+          "name": "引用不存在的关联资源",
+          "description": "请求参数中引用的关联资源不存在（如不存在的agentId、userId、sessionId、parentId等）",
+          "severity": "高",
+          "test_strategy": {
+            "trigger_pattern": "在请求参数的关联字段中传入不存在的资源ID（如metadata.agentId='nonexistent-{uuid}'）",
+            "expected_behavior": "应返回错误响应或终态FAILED，不执行无效操作",
+            "assertion_level": "L2",
+            "validation_points": [
+              "响应包含error字段或状态字段指示失败",
+              "错误码或message指示资源不存在或关联无效",
+              "不创建资源或执行无效操作",
+              "响应id字段回带"
+            ]
+          },
+          "applicable_scenarios": ["POST", "PUT", "PATCH"],
+          "tags": ["关联资源校验", "业务逻辑", "参数校验", "资源不存在"]
+        }
+      ]
+    },
+    {
+      "category_id": "FC-PROTO-001",
+      "category_name": "协议合规性缺陷",
+      "description": "协议合规性相关的常见故障模式",
+      "faults": [
+        {
+          "fault_id": "F-PROTO-001",
+          "name": "JSON-RPC错误响应缺少id字段",
+          "description": "JSON-RPC错误响应未回带id字段（违反JSON-RPC 2.0规范）",
+          "severity": "高",
+          "test_strategy": {
+            "trigger_pattern": "触发任意JSON-RPC错误（如parse error, invalid request）",
+            "expected_behavior": "错误响应必须包含id字段",
+            "assertion_level": "L2",
+            "validation_points": [
+              "响应body包含id字段",
+              "id字段值与请求id一致或为null（仅当请求无法解析时）"
+            ]
+          },
+          "tags": ["协议合规", "JSON-RPC", "历史缺陷"]
+        }
+      ]
+    }
+  ],
+  "history_faults": [
+    {
+      "fault_id": "F-HIST-001",
+      "source": "TC-A2A-001执行失败",
+      "description": "响应id字段类型不一致（int vs string）",
+      "severity": "高",
+      "discovered_date": "2026-01-18",
+      "test_case_id": "TC-A2A-001",
+      "fault_ref": "F-REQ-011",
+      "test_strategy": {
+        "trigger_pattern": "发送包含字符串id的请求",
+        "expected_behavior": "响应id应为字符串类型",
+        "assertion_level": "L2",
+        "validation_points": [
+          "响应id字段类型 === 'string'",
+          "id值 === 请求id"
+        ]
+      },
+      "resolution_status": "open",
+      "tags": ["历史缺陷", "类型一致性", "契约验证", "ref:F-REQ-011"]
+    }
+  ]
+}

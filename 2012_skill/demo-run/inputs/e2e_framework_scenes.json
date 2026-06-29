@@ -1,0 +1,44 @@
+[
+  {
+    "id": "E2E_A2A_001",
+    "name": "同步发送后查询与列举：SendMessage(sync) → GetTask → ListTasks",
+    "related_keywords": ["SendMessage", "GetTask", "ListTasks", "blocking", "taskId"],
+    "framework_components": ["顺序", "数据依赖"],
+    "test_hints": "同步发送得到完整 Task 与 taskId；用该 taskId 查询应返回一致状态；ListTasks 应包含该 task"
+  },
+  {
+    "id": "E2E_A2A_002",
+    "name": "流式推送到终态：SendStreamingMessage 全流事件序列",
+    "related_keywords": ["SendStreamingMessage", "SSE", "TaskAccepted", "ArtifactUpdate", "TaskStatusUpdate"],
+    "framework_components": ["流式", "顺序", "终态"],
+    "test_hints": "SSE 事件序列应为 TaskAccepted → ArtifactUpdate(×N) → TaskStatusUpdate(COMPLETED)，终态后流关闭"
+  },
+  {
+    "id": "E2E_A2A_003",
+    "name": "断线重连续订：SendStreamingMessage → 断开 → SubscribeToTask 续收至终态",
+    "related_keywords": ["SubscribeToTask", "reconnect", "SSE", "resume"],
+    "framework_components": ["流式", "中断-续接", "数据依赖"],
+    "test_hints": "中途断开流，再以 taskId SubscribeToTask 应恢复 SSE 并续收后续事件直至终态，不丢关键事件"
+  },
+  {
+    "id": "E2E_A2A_004",
+    "name": "执行中取消：SendStreamingMessage → CancelTask → 状态 CANCELED 且流关闭",
+    "related_keywords": ["CancelTask", "CANCELED", "SSE close"],
+    "framework_components": ["流式", "取消", "终态"],
+    "test_hints": "对 WORKING 中的 task 取消，应返回 CANCELED；对已终态 task 再取消应返回标准错误"
+  },
+  {
+    "id": "E2E_A2A_005",
+    "name": "协议合规报错：非法 JSON / 未知 method → 标准错误码且不创建 task",
+    "related_keywords": ["JSON-RPC", "-32700", "-32601", "error", "id echo"],
+    "framework_components": ["分支", "异常"],
+    "test_hints": "非法 JSON 体返回 -32700；未知 method 返回 -32601；error response 必须回带原 request id；不创建 task"
+  },
+  {
+    "id": "E2E_A2A_006",
+    "name": "发现即调用：GET Agent Card → 用声明的 endpoint 发起 SendMessage",
+    "related_keywords": ["agent-card.json", "discovery", "capabilities", "endpoint"],
+    "framework_components": ["发现", "顺序", "数据依赖"],
+    "test_hints": "Agent Card 含 name/skills/capabilities/endpoint；用其中 endpoint 回调 SendMessage 应可达并返回 Task"
+  }
+]
