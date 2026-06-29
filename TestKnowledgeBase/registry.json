@@ -324,6 +324,34 @@
       "path": "Professional_experience/acceptance_criteria.json",
       "active": true,
       "advisory_only": true,
+      "runtime_schema": "professional_acceptance.v1",
+      "integration_phases": [
+        {
+          "phase": "A",
+          "stage": "stage5",
+          "artifact": ".state/professional_acceptance.json",
+          "purpose": "Generate professional acceptance, AI readiness, release readiness, and residual-risk report inputs."
+        },
+        {
+          "phase": "B",
+          "stage": "stage3b",
+          "artifact": ".state/professional_case_guidance.json",
+          "purpose": "Guide test case generation with acceptance_refs, evidence_required, AI eval, redteam, DFX, and readiness requirements."
+        },
+        {
+          "phase": "C",
+          "stage": "stage1/stage2",
+          "artifact": ".state/professional_acceptance.seed.json and .state/professional_acceptance.code_gaps.json",
+          "purpose": "Expose requirement and code testability gaps before case generation."
+        },
+        {
+          "phase": "D",
+          "stage": "AI/Agent readiness",
+          "artifact": ".state/ai_eval_readiness.json",
+          "purpose": "Track eval dataset, grader, redteam, tool-call trace, monitoring, and drift readiness."
+        }
+      ],
+      "contract_policy": "advisory_only: this package can create gates, warnings, acceptance refs, and report matrices, but must not create L2 assertions unless contract.md supplies the oracle.",
       "description": "Release gates and professional testing acceptance criteria. This package can influence priority and report warnings but must not create strong assertions without contract.md."
     }
   ]
