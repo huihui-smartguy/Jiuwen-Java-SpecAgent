@@ -24,6 +24,7 @@
 4. `{output_dir}/.state/results/*.json` — 各用例详细结果（含 status/class/trace_file/oracle_refs/skip_reason/sdk_defect，glob 后并行读取）
 5. `{output_dir}/.state/trace/*.jsonl`（如有，按需抽样读取末帧/关键帧，用于交互轨迹摘要）
 6. `{output_dir}/.state/knowledge_matches.json` / `{output_dir}/.state/fault_matches.json` + `{output_dir}/.state/new_knowledge_candidates.json` / `{output_dir}/.state/new_faults_detected.json`（如有，TestKnowledgeBase 覆盖与自积累，见第8部分；无则省略该节）
+7. `{output_dir}/.state/professional_acceptance.json` + `{output_dir}/.state/ai_eval_readiness.json`（如有，Professional_experience 专业验收和 AI readiness，见第9部分；无则先由编排器运行 `professional_acceptance.py --mode report` 或省略该节）
 
 ### 第二步：生成报告
 
@@ -160,6 +161,31 @@
 > TestKnowledgeBase 逼出的确认缺陷已并入第4部分（按 fault_ref 标注来源）；新积累候选见 `.state/new_knowledge_candidates.json`，兼容输出见 `.state/new_faults_detected.json`。
 ```
 
+#### 第9部分：Professional_experience 专业验收（仅当 `.state/professional_acceptance.json` 存在）
+
+> 编排器子步（在 report.md 生成前）：
+> `python {skill_dir}/scripts/professional_acceptance.py --output-dir {output_dir} --mode report`
+> → 生成 `.state/professional_acceptance.json` 与 `.state/ai_eval_readiness.json`。
+> Professional_experience 只产生 advisory gate，不产生强断言；缺失门禁应作为 release risk 或人工复核项，不混入 sdk_defect。
+
+```markdown
+## 9. Professional Acceptance / AI Readiness
+
+### 9.1 专业验收矩阵
+| standard_id | 维度 | release_gate | 状态 | 风险 | 缺失证据 | 下一步 |
+|-------------|------|--------------|------|------|----------|--------|
+
+### 9.2 AI / Agent readiness
+| 项目 | 状态 |
+|------|------|
+| AI/Agent 项目识别 | true/false |
+| overall_status | pass/warn/fail/not_applicable/requires_human_review |
+
+### 9.3 Residual risk
+| standard_id | status | risk | action |
+|-------------|--------|------|--------|
+```
+
 ### 第三步：写入输出
 
 Write `{output_dir}/report.md`
@@ -178,6 +204,8 @@ Write `{output_dir}/report.md`
 | 交互轨迹 | X 条（env_issue 无轨迹 X） |
 | 确认缺陷 | sdk_defect X 条 |
 | TestKnowledgeBase 覆盖 | 匹配 X / 故障用例 X / 新积累 X（未接入则 -） |
+| Professional Acceptance | pass X / warn X / fail X / requires_human_review X（未接入则 -） |
+| AI Readiness | pass / warn / fail / not_applicable / requires_human_review |
 | 契约观察 | spec-required X / config-dependent X / needs-runtime-verify X |
 | 静态缺陷/GAP | CD X / GAP X |
 | 输出文件 | report.md |

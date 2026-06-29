@@ -1,16 +1,28 @@
 {
   "name": "AutoTestFlow",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "release_track": "develop/iteration-2",
   "default_knowledge_root": "TestKnowledgeBase",
   "default_runtime_registry": "TestKnowledgeBase/registry.json",
   "compatibility_fault_output": ".state/fault_matches.json",
   "primary_knowledge_output": ".state/knowledge_matches.json",
+  "professional_acceptance": {
+    "script": "AutoTestFlow/scripts/professional_acceptance.py",
+    "artifacts": [
+      ".state/professional_acceptance.seed.json",
+      ".state/professional_acceptance.code_gaps.json",
+      ".state/professional_case_guidance.json",
+      ".state/professional_acceptance.json",
+      ".state/ai_eval_readiness.json"
+    ],
+    "policy": "advisory_only; Professional_experience may guide planning, case design, evidence, readiness, and reports, but strong assertions still require contract.md."
+  },
   "legacy_fault_knowledge_base": "Specification_Repository/rest_api_common_faults.json",
   "legacy_policy": "Specification_Repository is retained only for explicit historical demos and old invocations. AutoTestFlow must not automatically fall back to it during future product iteration.",
   "contract_policy": "contract.md remains the only strong oracle for executable assertions.",
   "validation": {
     "knowledge_base": "python AutoTestFlow/scripts/validate_knowledge_base.py",
-    "knowledge_match_smoke": "python AutoTestFlow/scripts/match_faults.py --output-dir <output_dir> --knowledge-root TestKnowledgeBase"
+    "knowledge_match_smoke": "python AutoTestFlow/scripts/match_faults.py --output-dir <output_dir> --knowledge-root TestKnowledgeBase",
+    "professional_acceptance_smoke": "python AutoTestFlow/scripts/professional_acceptance.py --output-dir <output_dir> --knowledge-root TestKnowledgeBase"
   }
 }
