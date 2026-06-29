@@ -1,6 +1,6 @@
 # Beta · LLM Wiki 文章格式契约（wiki_schema）
 
-> 定义 `gen_wiki.py` 派生的 `Specification_Repository/wiki/*.md` 的**格式契约**。
+> 定义 `gen_wiki.py` 派生的 `TestKnowledgeBase/Fault/wiki/*.md` 的**格式契约**。
 > 该契约是确定性的：同一份 JSON + overlay → 同一组字节级文章（`check_wiki.py` C3 强制）。
 
 ## 一、文件清单（由全库派生）
@@ -20,7 +20,7 @@
 ```
 # {fault_id} · {name}
 
-> 溯源：`rest_api_common_faults.json` → `{category_id}`（{category_name}）→ `{fault_id}`
+> 溯源：`fault_library.json` → `{category_id}`（{category_name}）→ `{fault_id}`
 > 严重程度：{severity} ｜ 故障建议断言级别：{assertion_level}（**最终以项目 `contract.md` 权威性封顶**，见下「契约锚点」）
 > 适用场景：{applicable_scenarios}            # 有则列
 > 标签：{tags}                                  # 有则列

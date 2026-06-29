@@ -1,6 +1,6 @@
 # F-HIST-001 · 响应id字段类型不一致（int vs strin
 
-> 溯源：`rest_api_common_faults.json` → `HISTORY`（历史缺陷）→ `F-HIST-001`
+> 溯源：`fault_library.json` → `HISTORY`（历史缺陷）→ `F-HIST-001`
 > 严重程度：高 ｜ 故障建议断言级别：L2（**最终以项目 `contract.md` 权威性封顶**，见下「契约锚点」）
 > 标签：历史缺陷、类型一致性、契约验证、ref:F-REQ-011
 > 本文由 `beta/scripts/gen_wiki.py` 从结构化故障库**单向派生**，仅作 advisory；**不作 oracle、不进 `match_faults.py`**。

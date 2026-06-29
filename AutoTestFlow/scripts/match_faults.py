@@ -3,7 +3,7 @@
 match_faults.py - 阶段2.6：故障库匹配（可插拔规格库接入）
 
 在 stage2.5 产出 contract.md 之后、stage3a/3b 之前运行。把外部"故障库"
-（Specification_Repository/rest_api_common_faults.json [+ 项目级 overlay]）按
+（TestKnowledgeBase/Fault/rest_api_faults.json [+ 项目级 overlay]）按
 四类触发匹配到 s1 场景，并用 contract.md 的「字段权威性分级表」对每条故障的
 断言级别做契约优先封顶（spec-required→至多L2；config-dependent/契约静默/未知→降L0/L1）。
 产出 .state/fault_matches.json（"故障注入计划"），供 stage3b 生成带 fault_ref 的故障导向用例。
@@ -693,10 +693,11 @@ def write_alignment_report(output_dir: str, plan: dict):
 
 
 def _default_fault_lib() -> str:
-    """发现约定：优先项目内 Specification_Repository/。"""
+    """发现约定：TestKnowledgeBase 是后续迭代默认源；Specification_Repository 仅作遗留兼容。"""
     here = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.abspath(os.path.join(here, "..", ".."))
     for cand in (
+        os.path.join(repo_root, "TestKnowledgeBase", "Fault", "rest_api_faults.json"),
         os.path.join(repo_root, "Specification_Repository", "rest_api_common_faults.json"),
         os.path.join(repo_root, ".claude", "skills", "AutoTestFlow", "shared",
                      "fault_library", "rest_api_common_faults.json"),
@@ -709,7 +710,7 @@ def _default_fault_lib() -> str:
 def main():
     parser = argparse.ArgumentParser(description="阶段2.6 故障库匹配（contract 优先调和）")
     parser.add_argument("--output-dir", required=True, help="输出目录（含 contract.md 与 .state/）")
-    parser.add_argument("--fault-lib", default=None, help="全局故障库路径（默认探测 Specification_Repository/）")
+    parser.add_argument("--fault-lib", default=None, help="全局故障库路径（默认探测 TestKnowledgeBase/Fault/，Specification_Repository 仅遗留兼容）")
     parser.add_argument("--fault-overlay", default=None, help="项目级 overlay 路径（可选）")
     parser.add_argument("--faults", default="auto", choices=["auto", "on", "off"],
                         help="启用模式：auto=探测到库即启用 / on / off")

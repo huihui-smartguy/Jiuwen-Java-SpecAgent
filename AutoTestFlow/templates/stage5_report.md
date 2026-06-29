@@ -144,7 +144,7 @@
 
 > 编排器子步（在 case_results.json 生成后、本报告生成前）：
 > `python {skill_dir}/scripts/record_faults.py --output-dir {output_dir}`（默认 dry-run）
-> → 仅把 `class=sdk_defect` 蒸馏为候选 `history_faults`，写 `.state/new_faults_detected.json`；`--write` 才落项目 overlay（不污染全局精选库）。
+> → 仅把 `class=sdk_defect` 蒸馏为候选 `history_faults`，写 `.state/new_faults_detected.json`；`--write` 默认落 `TestKnowledgeBase/Fault/project_faults.json` 或显式项目 overlay（不污染全局精选库）。
 > 数据源：`.state/fault_matches.json`（阶段2.6 注入计划）+ 带 `fault_ref` 的用例结果 + `.state/new_faults_detected.json`。**无故障库接入时整节省略。**
 
 ```markdown
