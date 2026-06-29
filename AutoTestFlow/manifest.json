@@ -1,7 +1,7 @@
 {
   "name": "AutoTestFlow",
-  "version": "4.1.0",
-  "release_track": "develop",
+  "version": "1.0.0",
+  "release_track": "release/autotestflow-v1.0",
   "default_fault_knowledge_base": "TestKnowledgeBase/Fault/rest_api_faults.json",
   "legacy_fault_knowledge_base": "Specification_Repository/rest_api_common_faults.json",
   "legacy_policy": "Specification_Repository is retained only for compatibility with historical demos and explicit old invocations. Future product iterations must use TestKnowledgeBase.",
