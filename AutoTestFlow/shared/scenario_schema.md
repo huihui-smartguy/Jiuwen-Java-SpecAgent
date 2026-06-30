@@ -311,14 +311,26 @@ flow_scenarios 中每个元素与单场景文件结构相同，额外字段：
 
 ```json
 {
-  "meta": { "source": "code", "module_role": "...", "code_path": "..." },
+  "meta": {
+    "source": "code",
+    "module_role": "...",
+    "code_path": "...",
+    "primary_profile": "java.spring | python.web_api | cpp.service_rpc | generic.source_tree",
+    "language": "java | python | cpp | unknown",
+    "frameworks": ["..."],
+    "profile_confidence": 0.0,
+    "scan_plan": ".state/code_scan_plan.json"
+  },
   "entry_catalog": [...],
   "exception_catalog": [...],
   "constraint_catalog": [...],
+  "serialization_facts": [...],
   "code_defects": [...],
   "code_only_capabilities": [...]
 }
 ```
+
+`primary_profile` 等 profile 字段为可选扩展；旧产物不含这些字段时下游脚本必须继续兼容。
 
 ### entry_catalog
 
@@ -329,6 +341,9 @@ flow_scenarios 中每个元素与单场景文件结构相同，额外字段：
 | signature | 完整方法签名 |
 | params | [{name, type, required, default}] |
 | source_file | 源文件路径 |
+| transport | 可选：HTTP/RPC/gRPC/SSE/WebSocket/needs-runtime-verify |
+| framework | 可选：Spring/FastAPI/Flask/Django/gRPC/其他 |
+| evidence | 可选：源码证据 file:line |
 
 ### exception_catalog
 
@@ -340,6 +355,17 @@ flow_scenarios 中每个元素与单场景文件结构相同，额外字段：
 | enclosing_method | 所在方法（class.method） |
 | location | 文件:行号 |
 | reachable_from | 可达的入口方法列表（class.method），用户可通过这些入口触发该异常 |
+| error_code | 可选：对外错误码、HTTP status 或 RPC status |
+
+### serialization_facts
+
+| 字段 | 说明 |
+|------|------|
+| fact_type | response_wrapper / id_type / enum_naming / streaming_event / error_shape / self_description |
+| target | 关联入口、响应类型或字段 |
+| shape | 静态推断的线缆形态 |
+| evidence | 源码证据 file:line，无法确定时填 needs-runtime-verify |
+| authority_hint | spec-required / deployment-config-dependent / needs-runtime-verify |
 
 ### constraint_catalog
 
@@ -374,16 +400,17 @@ flow_scenarios 中每个元素与单场景文件结构相同，额外字段：
 
 ## framework_scenes.json 结构（阶段2派生产物）
 
-阶段2 在静态扫描 Java 结构后**自动派生**框架 E2E 场景，写入 `.state/framework_scenes.json`。
+阶段2 在静态扫描源码结构后**自动派生**框架 E2E 场景，写入 `.state/framework_scenes.json`。
 本文件是 **stage3a-fw 子Agent 消费的内部产物**，替代了迭代6 由外部 helper skill 预生成的 `e2e_framework_scenes.md`——不再需要外部文件，也不需要手工预生成步骤。
-派生方法学见 `shared/java_scan_guide.md` 的「从 Java 结构派生框架 E2E 场景」。
+派生方法学见 `shared/code_scan_guide.md`；Java/Spring 细节见 `shared/java_scan_guide.md` profile 附录。
 
 ```json
 {
   "meta": {
     "source": "code",
     "derived_by": "stage2",
-    "note": "从 Java 结构静态派生；运行时仍以 stage2.5 contract.md 校准为准"
+    "source_profile": "java.spring | python.web_api | cpp.service_rpc | generic.source_tree",
+    "note": "从源码结构静态派生；运行时仍以 stage2.5 contract.md 校准为准"
   },
   "framework_scenes": [
     {

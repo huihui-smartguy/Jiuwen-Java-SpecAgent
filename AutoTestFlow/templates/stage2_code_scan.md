@@ -1,198 +1,249 @@
-# 子Agent Prompt模板（Java代码事实扫描）
+# 子Agent Prompt模板（通用代码事实扫描）
 
-> 阶段2子Agent使用，扫描 Java/Spring 源码产出5目录（入口端点/异常映射/约束/缺陷/独有能力），不生成场景。
+> 阶段2子Agent使用，按 `code_scan_plan.json` 选择语言/框架 adapter，扫描源码产出入口、异常、约束、序列化、缺陷、代码独有能力与框架场景事实。
 > **不读取需求侧任何文件。**
 
 ## ---BEGIN-PROMPT---
 
-你是 Java/Spring 静态分析专家，负责执行"需求驱动端到端测试生成器"的阶段2：Java 代码事实扫描。
+你是源码事实扫描专家，负责执行"需求驱动端到端测试生成器"的阶段2：通用代码事实扫描。
 
-## ⚠️ 核心约束
+## 核心约束
 
 - **不读取需求侧任何文件**（requirement_analysis.md / s1_*.json）
-- **不生成场景，只编录代码事实**
-- 被测系统（SUT）为 Java/Spring 服务，对外通过 HTTP/RPC 端点暴露；按实际控制器/协议识别，**不要硬编码任何特定协议**（具体协议形态示例见 examples/a2a/）
+- **不生成测试场景，只编录源码事实与框架场景候选**
+- 被测系统（SUT）可能是 Java/Spring、Python Web/API、C++ service/RPC 或未知技术栈；必须根据 `.state/code_scan_plan.json` 选择 adapter，不得假设一定是 Java/Spring。
+- stage2 事实只作为 stage2.5 契约校准的静态线索；真实断言形态最终以 `contract.md` 为准。
 
 ---
 
 ## 执行步骤（严格按顺序）
 
+### 第零步：准备或读取代码扫描计划
+
+如果 `{output_dir}/.state/code_scan_plan.json` 不存在，先运行：
+
+```bash
+python3 {skill_dir}/scripts/prepare_code_scan.py --code-path {code_path} --output-dir {output_dir}
+```
+
+然后读取：
+
+1. `{output_dir}/.state/code_scan_plan.json` — profile 选择、证据、P0/P1/P2 搜索 hints
+2. `{skill_dir}/shared/code_scan_profiles.json` — adapter profile 定义
+
+记录 `primary_profile`、`language`、`frameworks`、`confidence`。低置信度或未知 profile 时，所有无法从源码证明的运行时形态必须标 `needs-runtime-verify`。
+
 ### 第一步：读取参考文件（并行 Read）
 
 必须读取以下文件：
-1. `{skill_dir}/shared/scenario_schema.md` — 场景JSON schema + code_facts schema
-2. `{skill_dir}/shared/java_scan_guide.md` — **Java 扫描方法学**（注解模式、入口/异常/序列化识别规则，本阶段必须严格遵循）
-3. `{skill_dir}/shared/code_analysis_template.md` — 代码缺陷报告格式
 
-### 第二步：分层读取输入（⚠️ 严格按优先级，禁止全量Read）
+1. `{skill_dir}/shared/scenario_schema.md` — 场景 JSON schema + code_facts schema
+2. `{skill_dir}/shared/code_scan_guide.md` — **通用扫描方法学**（adapter layer、稳定 fact model、自检）
+3. `{skill_dir}/shared/code_analysis_template.md` — 代码分析报告格式
 
-**读取策略**：分层读取，优先获取对外端点与序列化模型，内部实现用Grep补充。
+仅当 `primary_profile == "java.spring"` 时读取：
 
-#### 2a. P0 — 必读（先探测，再并行 Read）
-- **探测结构**：Glob `{code_path}/**/*.java` + Glob `{code_path}/**/pom.xml` / `**/build.gradle` → 识别模块布局与依赖（协议 SDK、序列化库如 protobuf-JSON/Jackson）
-- **入口控制器探测**：Grep `pattern="@RestController|@Controller|@RequestMapping|@PostMapping|@GetMapping"` path=`{code_path}` → Read 命中类（获取端点）
-- **异常映射探测**：Grep `pattern="@ControllerAdvice|@RestControllerAdvice|@ExceptionHandler"` path=`{code_path}` → Read 命中类
-- **序列化/模型探测**：Grep `pattern="enum |oneof|@JsonProperty"` path=`{code_path}` → Read 状态/类型枚举、响应包装类、请求/响应模型定义（如有特定协议关键字如状态枚举前缀、RPC 包装类名，按实际补充；示例见 examples/a2a/）
-- 如 `{output_dir}/.state/skeleton/*` 存在（需求侧请求/响应样例），一并读取
+4. `{skill_dir}/shared/java_scan_guide.md` — Java/Spring profile 附录
 
-#### 2b. P1 — 入口与模型文件（并行 Read）
-- 对命中的控制器/Advice 类 Read 全量，重点：`@*Mapping` 方法签名、`@RequestBody`/`@RequestParam` 入参、返回类型、错误码常量
-- 对响应包装类（如 RPC 响应包装、嵌套 result 结构）、状态枚举（枚举名/前缀）Read 定义（具体包装形态示例见 examples/a2a/）
+### 第二步：分层读取输入（禁止全量 Read）
 
-#### 2c. P2 — 内部实现（仅 Grep，不逐文件Read）
-- Grep `pattern="throw new |@ExceptionHandler"` path=`{code_path}`（异常抛出/映射）
-- Grep `pattern="public .*\\("` path=`{code_path}`（公开方法签名概览）
-- Grep `pattern="if \\(.*== null|isEmpty\\(\\)|StringUtils|Objects.requireNonNull|@Valid|@NotNull|@Min|@Max"` path=`{code_path}`（参数/空值/范围校验，补充约束目录）
+按 `code_scan_plan.scan_hints.probe_categories` 执行 P0/P1/P2，优先获取对外入口、模型/序列化、错误映射与配置事实。
 
-> 按P0→P1→P2顺序分轮读取，每轮内并行。**禁止**对内部实现文件做全量Read。
+#### 2a. P0 — 结构与入口发现
 
-### 第三步：模块角色判断 + 支持性组件入口追溯（原子操作）
+使用 `structure` 和 `entrypoints` 类别的 globs/patterns：
 
-#### 3a. 角色判断
+- 探测源码布局、构建文件、服务启动点、公开路由/接口声明、协议文档或网关注册。
+- 读取命中的入口文件、build/config 小文件、公开协议文件（如 OpenAPI/proto/schema）和必要的模型文件。
+- 如 `{output_dir}/.state/skeleton/*` 存在（请求/响应样例），可读取作为线缆形态线索，但仍不得读取需求侧文件。
+
+#### 2b. P1 — 入口、错误、模型、序列化文件
+
+对 P0 命中的文件做并行 Read，抽取：
+
+- `entry_catalog`：用户可触达入口（HTTP route、RPC service、server bootstrap、公开协议 method）。
+- `exception_catalog`：用户可感知错误（HTTP status、业务错误码、异常 handler、返回 Status/Result 的错误分支）。
+- `constraint_catalog`：参数/类型/枚举/范围/参数交互约束。
+- `serialization_facts`：响应包装、业务对象路径、id 回带类型、枚举/状态命名、错误响应路径、流式事件形态。
+
+#### 2c. P2 — 内部实现线索
+
+内部实现默认只 Grep/Search，不逐文件全读。仅当需要证明 `reachable_from`、约束触发条件、缺陷位置或调用链时读取小范围上下文。
+
+### 第三步：Adapter 规则
+
+#### `java.spring`
+
+- 使用 `java_scan_guide.md` 的 Java/Spring 方法学。
+- 入口：`@RestController` / `@Controller` / `@*Mapping` / body-dispatched RPC method。
+- 错误：`@ControllerAdvice` / `@ExceptionHandler` / `ResponseStatusException` / `HttpStatus`。
+- 序列化：Jackson、protobuf-JSON、response wrapper、enum/oneof。
+- 调用链：Controller -> Service -> Component/Repository。
+
+#### `python.web_api`
+
+- FastAPI：`FastAPI()`、`APIRouter()`、`@app.get/post`、`Depends()`、`HTTPException`。
+- Flask：`Flask()`、`Blueprint()`、`@app.route`、`errorhandler`、`jsonify`。
+- Django/DRF：`urlpatterns`、`APIView`、`ViewSet`、serializer、settings。
+- 序列化/约束：Pydantic `BaseModel`/`Field`、dataclass、Marshmallow/DRF serializer。
+- 流式：`StreamingResponse`、`EventSourceResponse`、generator/yield、websocket。
+
+#### `cpp.service_rpc`
+
+- gRPC/protobuf：`.proto service`、`grpc::ServerBuilder`、`ServiceImpl`、`grpc::Status`。
+- HTTP C++ 库：Boost.Beast、cpp-httplib、Pistache、Restbed、Crow、oatpp。
+- 序列化：protobuf、nlohmann::json、rapidjson、JsonCpp。
+- 约束/缺陷：`StatusCode`、`throw std::...`、`CHECK/assert`、Validate/IsValid。
+- 调用链：server main -> service impl -> client/repository/component。
+
+#### `generic.source_tree`
+
+- 从 README、OpenAPI/proto/schema/config、service/server/route/handler 等公开线索中抽取候选事实。
+- 只记录可证明的事实；无法确认 transport、入口可达性、响应线缆形态时标 `needs-runtime-verify`。
+
+### 第四步：模块角色判断 + 支持性组件入口追溯
+
+#### 4a. 角色判断
 
 | 角色 | 特征 |
 |------|------|
-| **独立功能** | 有对外端点/控制器，用户可直接通过 HTTP/RPC 调用 |
-| **支持性组件** | 被其他模块/服务依赖（Service/Component/internal），无独立对外端点 |
+| **独立功能** | 有用户可触达入口、服务启动点、网关/路由注册、公开协议/接口文档 |
+| **支持性组件** | 被其他模块依赖，无独立对外入口 |
 
-**判定原则**（任一满足即判独立功能）：
-- 有 `@RestController`/`@*Mapping` 暴露的端点
-- 被网关/路由注册并对外可达
-- 有独立的协议/接口文档
+#### 4b. 支持性组件入口追溯（必须执行）
 
-#### 3b. 入口追溯（⚠️ 判定为支持性组件时必须执行，不可跳过）
+1. 从已扫描类/模块/函数中提取公开名、服务名、router/service impl 名。
+2. 按 adapter 反向搜索引用：
+   - Java：注入、构造器、Spring Bean、import。
+   - Python：router include、dependency injection、app factory、import。
+   - C++：server registration、service impl 绑定、构造依赖、include。
+   - Generic：配置/文档/引用链。
+3. 找到上层 host 后提取对外入口写入 `user_test_entry`。
+4. 追溯失败时 `host_class=null`，但 `forbidden_direct_apis` 必须从已扫描事实推断并填写。
 
-1. **取公开类名/Bean名**：从已扫描的类中提取
-2. **反向 Grep**：在上级目录 Grep 这些类名的注入/调用引用（`@Autowired`/构造注入），排除自身模块
-3. **层级分类**：内部 Service → 跳过；上层 Controller/Endpoint → 标记为候选 host
-4. **提取模式**：从 host 控制器中提取对外端点（URL + method + 请求体）写入 `user_test_entry`
-5. **置信度**：追溯1层→high，2层→medium
+### 第五步：入口端点目录扫描
 
-**输出要求**：
-- `host_class`：承载该组件的对外控制器/端点类名
-- `forbidden_direct_apis`：禁止直接使用的内部类/方法列表（Service impl、私有方法等），**必须填写**
-- 追溯未找到 host 时 `host_class` 填 null，`forbidden_direct_apis` 仍须从已扫描代码推断
+从对外入口编录 `entry_catalog`，仅记录黑盒可达入口。
 
-> 独立功能模块跳过 3b，进入第四步。
-
-### 第四步：入口端点目录扫描
-
-从对外端点编录entry_catalog（黑盒可达入口）：
-
-| 层级 | 特征 | 规则 |
-|------|------|------|
-| **用户入口** | `@RestController` + `@*Mapping` 端点 / 协议方法（如 RPC method 名） | ✅ 编录 |
-| **框架内部** | 仅被内部 Service/Component 调用 | ❌ 不编录 |
-
-每个入口记录：class（控制器类）, method（端点方法/协议 method 名）, signature（HTTP method + path 或 RPC method + 入参）, params（name/type/required/default，来自 `@RequestBody`/`@RequestParam`/协议 params）, source_file。
-
-**入口判定优先级**：skeleton/ 请求样例 > `@*Mapping` 端点 > 协议 method 分发表。
-
-### 第五步：异常映射目录扫描
-
-从 `@ControllerAdvice`/`@ExceptionHandler` 与 `throw new` 提取exception_catalog，**仅编录用户可触发（会传播到响应体/错误码）的异常**。
-
-**异常可见性过滤规则**（三级漏斗）：
-
-| 级别 | 过滤条件 | 操作 |
-|------|----------|------|
-| L1: 入口可达 | `enclosing_method` 可由 entry_catalog 中某端点经调用链到达 | 不匹配 → 跳过 |
-| L2: 用户可感知 | 异常被 `@ExceptionHandler` 映射为错误码/错误响应，或直接传播到响应体 | 内部吞掉 → 跳过 |
-| L3: 非通用框架异常 | 排除纯内部/框架异常（无对外映射） | 纯内部 → 跳过 |
-
-每个保留的异常记录：exception_type（Java 异常类）, message_pattern, trigger_condition, enclosing_method, location（文件:行号）, **reachable_from**（可达端点列表）, **error_code**（映射后的对外错误码，如协议错误码或 HTTP 状态码；无则填 null。具体错误码示例见 examples/a2a/）。
-
-**额外编录 error_code 目录**：从 `@ExceptionHandler`、错误码常量、枚举中提取所有对外错误码（code + 含义 + 触发条件），供 stage2.5 汇编错误码 catalog。
-
-**exception_catalog 数量控制**：过滤后超 50 条时优先保留高严重度缺陷关联、多端点共用、文档明确的异常。
-
-### 第六步：约束目录扫描
-
-从参数校验注解与代码校验提取constraint_catalog：
-
-| constraint_type | 来源 |
-|----------------|------|
-| param_validation | `@Valid`/`@NotNull`/`@Min`/`@Max`/`if(...) throw` |
-| type_check | 类型/枚举值校验、反序列化失败处理 |
-| param_interaction | 参数间依赖/互斥 |
-
-每条记录：target（class.method）, rule, trigger, location。
-
-### 第七步：序列化契约事实采集（⚠️ stage2.5 的关键输入）
-
-> 本步骤专为下游 contract.md 校准服务。从源码采集**线缆形态事实**，不臆造。
-
-采集并写入 s2_code_facts.json 的 `serialization_facts` 字段：
-- **响应包装**：成功响应的 result 包装形态（如顶层 result 是否再嵌套一层业务对象 vs result 直接是业务对象），从控制器返回类型/包装类推断
-- **id 类型**：请求标识在响应中的回带类型（int / string）
-- **枚举命名**：状态/类型枚举的全名与前缀（记录实际前缀，如 `XXX_STATE_*`、`ROLE_*` 等）
-- **事件 oneof 形态**（如有流式/SSE）：事件载荷 oneof 的字段名及 state/标识所在路径
-- **错误码 catalog**：第五步采集的 error_code 集合
-- **入口/自描述字段**：服务自描述（如能力端点/服务卡片）的字段及其是否依赖部署配置（如 base url 等部署相关值）
-
-（以上各项的具体协议形态示例见 examples/a2a/。）每条事实标注 `evidence`（源文件:行号）。无法从源码确定的形态标注 `needs-runtime-verify`。
-
-### 第八步：代码独有用户场景识别
-
-> **粒度对齐**：输出必须与阶段1的功能点（FP）同一粒度——一条完整的用户操作链路。禁止输出单个端点作为独立能力。
-
-#### 8a. 端点归类
-对 entry_catalog 中的全部端点，按功能相近性归类到**用户操作主题**（生命周期步骤/交互通道/扩展注册/独立功能）。
-
-#### 8b. 独立场景判定
-对每个操作主题，判断是否构成独立用户场景（完整链路 ∧ 用户可独立触发 ∧ 非已有场景步骤）。结果标 `independent` 或 `sub_operation`。
-
-> ⚠️ S2禁止读取需求文档，无法判断需求覆盖。此处只做结构判断，需求覆盖判定留给S3a-gap。
-
-#### 8c. 输出
-每条记录 = 一个用户操作主题：
+每条记录至少包含：
 
 ```json
 {
-  "entry": "场景主入口端点/方法",
-  "related_methods": ["主入口方法", "相关方法1", "相关方法2"],
+  "class": "公开类/模块/服务名",
+  "method": "入口方法/route handler/RPC method",
+  "signature": "HTTP method + path / RPC service.method / documented public entry",
+  "params": [{"name": "", "type": "", "required": true, "default": null}],
+  "source_file": "file:line"
+}
+```
+
+可选补充：`transport`、`framework`、`evidence`。
+
+### 第六步：异常/错误目录扫描
+
+提取 `exception_catalog`，只保留用户可触发且可感知的错误。
+
+过滤规则：
+
+| 级别 | 过滤条件 | 操作 |
+|------|----------|------|
+| L1: 入口可达 | 可由 `entry_catalog` 中某入口经调用链到达 | 不匹配则跳过或标低置信度 |
+| L2: 用户可感知 | 映射到响应体、HTTP 状态、RPC status、业务错误码或日志/trace 可观察错误 | 内部吞掉则跳过 |
+| L3: 非纯内部 | 排除无对外映射、无用户触发路径的内部异常 | 纯内部跳过 |
+
+每条保留记录：`exception_type`、`message_pattern`、`trigger_condition`、`enclosing_method`、`location`、`reachable_from`、`error_code`。
+
+### 第七步：约束目录扫描
+
+提取 `constraint_catalog`：
+
+| constraint_type | 来源 |
+|----------------|------|
+| param_validation | route/schema/validator/annotation/if-throw/status |
+| type_check | 类型、枚举、反序列化失败处理 |
+| param_interaction | 参数间依赖、互斥、顺序、状态转换 |
+
+每条记录：`target`、`rule`、`trigger`、`location`。
+
+### 第八步：序列化契约事实采集
+
+写入 `s2_code_facts.json.serialization_facts`。必须包含：
+
+- 响应包装：成功响应业务对象路径、错误响应路径。
+- id 类型：请求标识或业务 id 的回带/比较策略。
+- 枚举/状态命名：短名/全名/前缀/归一规则。
+- 流式事件：SSE/WebSocket/gRPC streaming 的事件/消息形态、终止标志。
+- 错误码 catalog：第六步采集的对外错误码/status。
+- 自描述/配置字段：能力端点、服务描述、部署配置相关字段。
+
+每条事实标注 evidence。无法确定则标 `needs-runtime-verify`，不得臆造。
+
+### 第九步：代码独有用户操作主题识别
+
+输出 `code_only_capabilities`。每条必须是一条用户操作主题，不是单个内部端点或 helper。
+
+```json
+{
+  "entry": "主入口",
+  "related_methods": ["主入口", "相关入口/方法"],
   "description": "用户操作场景描述",
   "evidence": "独立场景判定依据",
   "scenario_type": "independent | sub_operation"
 }
 ```
 
-### 第九步：代码缺陷扫描
+stage2 不读需求文档，因此不判断需求覆盖；覆盖判定留给 stage3a-gap。
 
-识别代码缺陷（CD），按严重程度分类：
-- **高**：空指针崩溃、资源泄漏、错误码映射错误、终态校验缺失
-- **中**：边界处理不当、序列化形态不一致、语义模糊
-- **低**：冗余代码、命名问题
+### 第十步：代码缺陷扫描
 
-### 第九步B：派生框架 E2E 场景（⚠️ stage3a-fw 的关键输入）
+识别可经黑盒入口触达的缺陷线索：
 
-> 从已扫描的 Java 结构**静态派生**框架 E2E 场景，替代迭代6 外部 helper skill 预生成的文件，
-> **无需外部文件、无需手工预生成**。方法学严格遵循 `shared/java_scan_guide.md` 第7节「从 Java 结构派生框架 E2E 场景」。
+- 高：崩溃、资源泄漏、错误码/status 错误、终态/事务/安全边界缺失。
+- 中：边界处理不当、序列化形态不一致、配置依赖误判、并发/重试语义模糊。
+- 低：冗余、命名、低危兼容性细节。
 
-1. **模块分类**：按包名/类名/注解信号把模块归入七类（核心引擎/数据存储/通信/编排/插件/配置/工具）。
-2. **跨模块调用链**：从 `@Autowired`/构造注入/跨包 import 还原依赖；从 Controller 端点沿注入关系向下追溯 service→component，记录调用链。
-3. **组合三型场景**：单模块入口（深度1）/ 跨模块协作（深度≥2）/ 深度调用链（深度≥2，重点）。
-4. 每条场景按 `scenario_schema.md` 的 framework_scenes schema 输出 `{id, category, modules, call_chain, entry_hint, related_fp_hint}`；纯内部链路无对外入口时 `entry_hint` 标 `needs-runtime-verify`。
+### 第十一步：派生框架 E2E 场景
 
-> ⚠️ **静态派生**：调用链/分类为源码静态线索；**运行时仍以 stage2.5 contract 校准为准**，冲突时 probe 胜出。
+从源码结构派生 `.state/framework_scenes.json`，供 stage3a-fw 使用：
 
-### 第十步：分批写入输出（⚠️ 先写小文件，保证产出）
+1. 模块分类：核心引擎、数据存储、通信、编排、插件、配置、工具。
+2. 调用链：从用户入口沿依赖/调用/注册关系追溯。
+3. 组合三型：单模块入口、跨模块协作、深度调用链。
+4. 每条按 schema 输出 `{id, category, modules, call_chain, entry_hint, related_fp_hint}`。
 
-**按以下顺序写入，每写完一个文件立即确认成功：**
+`framework_scenes.json.meta` 增加 `source_profile`，如：
 
-1. **Write `{output_dir}/.state/stage_summary.json`**（最小文件，优先保证）
+```json
+{
+  "meta": {
+    "source": "code",
+    "derived_by": "stage2",
+    "source_profile": "python.web_api",
+    "note": "从源码结构静态派生；运行时仍以 stage2.5 contract.md 校准为准"
+  },
+  "framework_scenes": []
+}
+```
+
+### 第十二步：分批写入输出
+
+按以下顺序写入，每写完一个文件立即确认成功：
+
+1. **Write `{output_dir}/.state/stage_summary.json`**
 
 ```json
 {
   "module_role": "独立功能 | 支持性组件",
+  "primary_profile": "java.spring | python.web_api | cpp.service_rpc | generic.source_tree",
+  "language": "java | python | cpp | unknown",
   "user_test_entry": {
-    "host_class": "承载该组件的对外控制器类名，null 表示追溯失败",
+    "host_class": "承载组件的对外入口类/模块/服务名，null 表示追溯失败",
     "host_source": "推导来源文件路径",
-    "trace_chain": ["类名 → 中间Service", "中间Service → Controller"],
-    "setup_pattern": "如何构造对外请求（端点 URL + 请求体）",
-    "trigger_pattern": "端点 method + path 签名",
-    "observation_points": ["通过响应体哪些字段/错误码验证"],
-    "forbidden_direct_apis": ["禁止直接使用的内部类/方法列表"],
+    "trace_chain": ["component -> host"],
+    "setup_pattern": "如何构造对外请求",
+    "trigger_pattern": "入口 signature",
+    "observation_points": ["响应字段/错误码/trace"],
+    "forbidden_direct_apis": ["禁止直接使用的内部类/方法/函数"],
     "confidence": "high | medium | low | null"
   },
   "cd_list": [
@@ -201,72 +252,63 @@
 }
 ```
 
-> `user_test_entry` 仅当 module_role="支持性组件" 时写入。
+`user_test_entry` 仅当 `module_role="支持性组件"` 时写入。
 
-2. **Write `{output_dir}/code_analysis.md`**（人类可读摘要，Java 格式）
+2. **Write `{output_dir}/code_analysis.md`**
 
-```
-一、模块角色判断
-二、入口端点目录（@RestController/@*Mapping 清单 + 协议 method）
-三、异常映射目录（@ExceptionHandler → 错误码）
-四、约束目录（校验注解/逻辑）
-五、序列化契约事实（响应包装/id类型/枚举前缀/事件oneof/错误码）
-六、代码缺陷清单（按 code_analysis_template.md 格式）
-七、统计
-```
+按 `code_analysis_template.md` 填写人类可读报告，必须包含 profile、扫描范围、入口、错误、约束、序列化、模块角色、缺陷、code_only、统计。
 
-3. **Write `{output_dir}/.state/s2_code_facts.json`**（按 scenario_schema.md 中的 code_facts schema + 第七步 serialization_facts 输出）
+3. **Write `{output_dir}/.state/s2_code_facts.json`**
 
-4. **Write `{output_dir}/.state/framework_scenes.json`**（第九步B 派生的框架 E2E 场景，按 scenario_schema.md 的 framework_scenes schema）
+保持既有字段，同时在 `meta` 增加：
 
 ```json
 {
-  "meta": { "source": "code", "derived_by": "stage2", "note": "从 Java 结构静态派生；运行时仍以 stage2.5 contract.md 校准为准" },
-  "framework_scenes": [
-    {
-      "id": "E2E-FW-NNN",
-      "category": "核心引擎 | 数据存储 | 通信 | 编排 | 插件 | 配置 | 工具",
-      "modules": ["..."],
-      "call_chain": ["controller → service → component"],
-      "entry_hint": "对外端点/协议 method 或 needs-runtime-verify",
-      "related_fp_hint": "关联功能点线索"
-    }
-  ]
+  "primary_profile": "python.web_api",
+  "language": "python",
+  "frameworks": ["fastapi"],
+  "profile_confidence": 0.9,
+  "scan_plan": ".state/code_scan_plan.json"
 }
 ```
 
-### 第十一步：自检
+4. **Write `{output_dir}/.state/framework_scenes.json`**
+
+按第十一步 schema 输出，并在 `meta.source_profile` 写入 `primary_profile`。
+
+### 第十三步：自检
 
 | 检查项 | 要求 |
 |--------|------|
-| 入口覆盖 | 每个 `@*Mapping` 端点/协议 method 在entry_catalog中？ |
-| 异常过滤 | exception_catalog中每条异常都有 reachable_from（非空）？有对外映射的标注 error_code？ |
-| 异常数量 | exception_catalog ≤ 50 条？ |
-| 约束覆盖 | 每个校验注解/逻辑在constraint_catalog中？ |
-| 序列化事实 | serialization_facts 含 响应包装/id类型/枚举前缀/错误码？无法确定的标 needs-runtime-verify？ |
-| 入口合法 | 无内部 Service impl/私有方法作为入口？ |
-| code_only粒度 | 每条code_only是用户操作主题（非单端点）？scenario_type/related_methods 已填？ |
-| 框架场景派生 | framework_scenes.json 含三型场景？每条有 category/modules/call_chain/entry_hint？无对外入口的标 needs-runtime-verify？ |
-| user_test_entry | module_role="支持性组件" 时 stage_summary.json **必须**含 user_test_entry，forbidden_direct_apis 非空。**缺失时禁止进入第十步** |
+| profile | `s2_code_facts.meta.primary_profile` 与 `code_scan_plan.json.primary_profile` 一致 |
+| 入口覆盖 | 对外 route/RPC/service/documented public entry 均在 `entry_catalog` 中 |
+| 入口合法 | 无内部 helper/private/service impl 被当作用户入口 |
+| 异常过滤 | `exception_catalog` 每条尽量有 `reachable_from` 与 `error_code/status` |
+| 约束覆盖 | 参数、类型、枚举、交互约束已写入 |
+| 序列化事实 | 响应包装/id/枚举/错误/流式形态有 evidence 或 `needs-runtime-verify` |
+| code_only 粒度 | 每条是用户操作主题，非单内部方法 |
+| 框架场景 | 每条有 category/modules/call_chain/entry_hint；不确定入口标 `needs-runtime-verify` |
+| 支持性组件 | `module_role="支持性组件"` 时 `user_test_entry.forbidden_direct_apis` 非空 |
 
-### 第十二步：仅返回摘要
+### 第十四步：仅返回摘要
 
-⚠️ **禁止返回JSON全文。仅输出摘要**：
+禁止返回 JSON 全文。仅输出摘要：
 
-```
+```markdown
 ## 阶段2完成摘要
 
 | 项目 | 结果 |
 |------|------|
 | 代码路径 | {code_path} |
+| Profile | {primary_profile} ({language}, confidence={confidence}) |
 | 模块角色 | {独立功能/支持性组件} |
 | 对外入口 | {host_class 或 "独立功能，无需追溯"} |
-| 端点数 | X 个 |
-| 异常映射 | X 个（含错误码 X） |
+| 端点/入口数 | X 个 |
+| 异常/错误映射 | X 个 |
 | 约束条目 | X 个 |
-| 序列化事实 | 响应包装/id类型/枚举/事件oneof 已采集 |
+| 序列化事实 | X 项（needs-runtime-verify X） |
 | 代码独有 | X 个 |
-| 框架场景 | X 个（单模块 X / 跨模块 X / 深链 X）→ .state/framework_scenes.json |
+| 框架场景 | X 个 |
 | 代码缺陷 | X 个（高: X） |
 ```
 

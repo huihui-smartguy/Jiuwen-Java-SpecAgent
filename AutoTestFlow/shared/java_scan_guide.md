@@ -1,6 +1,6 @@
-# Java/Spring 静态扫描指南
+# Java/Spring Profile 静态扫描附录
 
-> 本文件指导 stage2 子 Agent 如何**静态扫描一个 Java/Spring 被测服务（SUT）**，
+> 本文件是 `shared/code_scan_guide.md` 的 `java.spring` profile 附录，指导 stage2 子 Agent 如何**静态扫描一个 Java/Spring 被测服务（SUT）**，
 > 采集测试相关事实，产出 `code_analysis.md`（见 `code_analysis_template.md` 格式）。
 >
 > **定位**：本扫描结果是**派生 `contract.md` 的静态依据**。静态扫描可能与真实线缆形态有偏差，
@@ -136,9 +136,9 @@ rg -n "<关注配置键>" $SUT/src/main/resources/application*.{yml,yaml,propert
 
 ---
 
-## 7. 从 Java 结构派生框架 E2E 场景
+## 7. java.spring profile 的框架 E2E 场景派生
 
-> stage2 在采集六类事实之外，**额外从 Java 结构静态派生框架 E2E 场景**，写入 `.state/framework_scenes.json`
+> 当 `primary_profile=java.spring` 时，stage2 在采集六类事实之外，**额外从 Java/Spring 源码结构静态派生框架 E2E 场景**，写入 `.state/framework_scenes.json`
 > （schema 见 `shared/scenario_schema.md` 的 framework_scenes）。这是 stage3a-fw 子Agent 消费的内部产物，
 > 替代迭代6 由外部 helper skill 预生成的 `e2e_framework_scenes.md`——**无需外部文件、无需手工预生成步骤**。
 
