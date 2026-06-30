@@ -56,7 +56,7 @@ MAX_SSE_EVENTS = 5  # 流式探针最多读取的 SSE 事件数
 # A2A 示例探针集（DEFAULT EXAMPLE — 仅作示例，非唯一真相）
 # ---------------------------------------------------------------------------
 # 下面这组常量/构造器是针对 A2A/JSON-RPC 协议的**示例**默认探针集。
-# 针对其他 Java/Spring SUT 时，按其 contract 提供等价的 discovery/sample/malformed/
+# 针对其他 SUT 时，按其 contract 提供等价的 discovery/sample/malformed/
 # streaming 探针即可——本脚本的通用探针框架（_default_probe_plan / probe）与具体协议解耦。
 # ===========================================================================
 A2A_ENDPOINT = "/a2a"

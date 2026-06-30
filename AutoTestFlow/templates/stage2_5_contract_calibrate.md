@@ -1,6 +1,6 @@
 # 子Agent Prompt模板（契约校准 · NEW）
 
-> 阶段2.5子Agent使用，用**真实 SUT 探测 + Java 源码序列化事实**校准出唯一权威契约 `contract.md`。
+> 阶段2.5子Agent使用，用**真实 SUT 探测 + 源码序列化事实**校准出唯一权威契约 `contract.md`。
 > **本阶段是修复"参考臆测 → 用例同错"的关键环节**：下游所有 oracle 必须源自 contract.md，禁止臆造响应形态。
 
 ## ---BEGIN-PROMPT---
@@ -30,7 +30,7 @@
 ### 第一步：读取参考文件（并行 Read）
 
 1. `{skill_dir}/shared/scenario_schema.md` — schema
-2. `{output_dir}/.state/s2_code_facts.json` — Java 源码序列化事实（`serialization_facts`：响应包装/id类型/枚举前缀/事件oneof/错误码/卡片字段）
+2. `{output_dir}/.state/s2_code_facts.json` — 源码序列化事实（`serialization_facts`：响应包装/id类型/枚举前缀/事件oneof/错误码/卡片字段）
 3. `{output_dir}/code_analysis.md` — 人类可读的序列化契约事实章节（辅助）
 
 ### 第二步：真实 SUT 探测（可达则执行）

@@ -1,0 +1,172 @@
+{
+  "schema_version": "1.0",
+  "name": "AutoTestFlow Code Scan Profiles",
+  "description": "Profile catalog for stage2 source-code fact scanning. The fact model is stable; probe patterns are adapter-specific.",
+  "read_budget": {
+    "p0_max_files": 40,
+    "p1_max_files": 80,
+    "p2_internal_read_policy": "grep_only_unless_needed_for_evidence",
+    "large_file_policy": "Summarize generated or oversized files; do not read dependency/vendor trees."
+  },
+  "fallback_policy": {
+    "unknown_profile": "generic.source_tree",
+    "runtime_uncertainty_marker": "needs-runtime-verify",
+    "contract_policy": "Stage2 facts are static hints; stage2.5 contract.md remains the authority for executable oracle assertions."
+  },
+  "required_probe_categories": [
+    "structure",
+    "entrypoints",
+    "errors",
+    "serialization",
+    "constraints",
+    "streaming",
+    "configuration",
+    "dependencies"
+  ],
+  "profiles": [
+    {
+      "profile_id": "java.spring",
+      "language": "java",
+      "description": "Java service with Spring/Spring Boot style HTTP/RPC entrypoints.",
+      "entrypoint_kinds": ["Spring Controller", "Spring route annotation", "body-dispatched RPC method"],
+      "default_transports": ["http", "rpc", "sse"],
+      "file_globs": ["**/*.java", "**/pom.xml", "**/build.gradle", "**/build.gradle.kts"],
+      "probe_categories": {
+        "structure": {
+          "globs": ["**/*.java", "**/pom.xml", "**/build.gradle", "**/settings.gradle"],
+          "patterns": ["package ", "class ", "@SpringBootApplication"]
+        },
+        "entrypoints": {
+          "patterns": ["@RestController", "@Controller", "@RequestMapping", "@GetMapping", "@PostMapping", "@PutMapping", "@DeleteMapping", "@PatchMapping"]
+        },
+        "errors": {
+          "patterns": ["@ControllerAdvice", "@RestControllerAdvice", "@ExceptionHandler", "ResponseStatusException", "HttpStatus.", "throw new "]
+        },
+        "serialization": {
+          "patterns": ["@JsonProperty", "@JsonFormat", "@JsonInclude", "JsonFormat", "oneof", "Response", "Result", "Envelope", "Dto"]
+        },
+        "constraints": {
+          "patterns": ["@Valid", "@NotNull", "@Min", "@Max", "StringUtils", "Objects.requireNonNull", "isEmpty()"]
+        },
+        "streaming": {
+          "patterns": ["text/event-stream", "SseEmitter", "ServerSentEvent", "Flux<", "TEXT_EVENT_STREAM"]
+        },
+        "configuration": {
+          "patterns": ["@ConfigurationProperties", "@Value(", "application.yml", "application.properties"]
+        },
+        "dependencies": {
+          "patterns": ["@Autowired", "@Resource", "private final ", "import "]
+        }
+      },
+      "framework_scene_signals": ["@Service", "@Component", "@Repository", "@Configuration", "@Scheduled", "@FeignClient"]
+    },
+    {
+      "profile_id": "python.web_api",
+      "language": "python",
+      "description": "Python web/API service using FastAPI, Flask, Django/DRF, or similar route declarations.",
+      "entrypoint_kinds": ["FastAPI route", "Flask route", "Django URL/view", "ASGI/WSGI app"],
+      "default_transports": ["http", "sse", "websocket"],
+      "file_globs": ["**/*.py", "**/requirements.txt", "**/pyproject.toml", "**/Pipfile"],
+      "probe_categories": {
+        "structure": {
+          "globs": ["**/*.py", "**/requirements.txt", "**/pyproject.toml", "**/setup.py"],
+          "patterns": ["def ", "class ", "FastAPI(", "Flask(", "urlpatterns"]
+        },
+        "entrypoints": {
+          "patterns": ["FastAPI(", "APIRouter(", "@app.get", "@app.post", "@router.get", "@router.post", "@app.route", "urlpatterns", "APIView", "ViewSet", "@api_view"]
+        },
+        "errors": {
+          "patterns": ["HTTPException", "abort(", "ValidationError", "raise ", "exception_handler", "errorhandler"]
+        },
+        "serialization": {
+          "patterns": ["BaseModel", "pydantic", "dataclass", "marshmallow", "Serializer", "jsonify", "JSONResponse"]
+        },
+        "constraints": {
+          "patterns": ["Field(", "Query(", "Path(", "Body(", "validator", "constr", "conint", "if ", "raise HTTPException"]
+        },
+        "streaming": {
+          "patterns": ["StreamingResponse", "EventSourceResponse", "yield ", "text/event-stream", "websocket"]
+        },
+        "configuration": {
+          "patterns": ["os.environ", "BaseSettings", "Settings", ".env", "config.py", "settings.py"]
+        },
+        "dependencies": {
+          "patterns": ["Depends(", "dependency_overrides", "import ", "from "]
+        }
+      },
+      "framework_scene_signals": ["Depends(", "BackgroundTasks", "Celery", "SQLAlchemy", "Session", "Redis", "Kafka"]
+    },
+    {
+      "profile_id": "cpp.service_rpc",
+      "language": "cpp",
+      "description": "C++ service or RPC backend using gRPC/protobuf, HTTP libraries, or CMake-backed service binaries.",
+      "entrypoint_kinds": ["gRPC service", "protobuf service", "HTTP handler", "server main"],
+      "default_transports": ["grpc", "http", "streaming-rpc"],
+      "file_globs": ["**/*.cc", "**/*.cpp", "**/*.cxx", "**/*.h", "**/*.hpp", "**/*.proto", "**/CMakeLists.txt"],
+      "probe_categories": {
+        "structure": {
+          "globs": ["**/*.cc", "**/*.cpp", "**/*.h", "**/*.hpp", "**/*.proto", "**/CMakeLists.txt"],
+          "patterns": ["int main", "class ", "namespace ", "add_executable", "add_library"]
+        },
+        "entrypoints": {
+          "patterns": ["grpc::ServerBuilder", "ServiceImpl", "service ", "AddListeningPort", "httplib::Server", "Crow::", "Pistache", "Restbed", "oatpp"]
+        },
+        "errors": {
+          "patterns": ["grpc::Status", "StatusCode", "throw std::", "std::exception", "return Status", "set_code"]
+        },
+        "serialization": {
+          "patterns": ["protobuf", "SerializeToString", "ParseFromString", "nlohmann::json", "rapidjson", "Json::"]
+        },
+        "constraints": {
+          "patterns": ["if (", "CHECK", "DCHECK", "assert", "Validate", "IsValid"]
+        },
+        "streaming": {
+          "patterns": ["ServerWriter", "ServerReader", "ServerReaderWriter", "CompletionQueue", "Write("]
+        },
+        "configuration": {
+          "patterns": ["getenv", "FLAGS_", "gflags", "Config", "yaml", "json", "ini"]
+        },
+        "dependencies": {
+          "patterns": ["#include", "std::unique_ptr", "std::shared_ptr", "new ", "make_unique"]
+        }
+      },
+      "framework_scene_signals": ["Repository", "Client", "Stub", "Service", "Manager", "Executor", "Scheduler"]
+    },
+    {
+      "profile_id": "generic.source_tree",
+      "language": "unknown",
+      "description": "Fallback profile for unsupported or mixed-language source trees.",
+      "entrypoint_kinds": ["documented public entry", "route/config declaration", "main/server bootstrap"],
+      "default_transports": ["needs-runtime-verify"],
+      "file_globs": ["**/*"],
+      "probe_categories": {
+        "structure": {
+          "globs": ["README*", "**/*.{md,json,yaml,yml,toml,xml,proto}"],
+          "patterns": ["server", "service", "api", "endpoint", "route"]
+        },
+        "entrypoints": {
+          "patterns": ["route", "endpoint", "listen", "server", "handler", "service"]
+        },
+        "errors": {
+          "patterns": ["error", "exception", "status", "code", "fail"]
+        },
+        "serialization": {
+          "patterns": ["json", "schema", "response", "request", "protobuf", "serialize"]
+        },
+        "constraints": {
+          "patterns": ["required", "validate", "min", "max", "range", "constraint"]
+        },
+        "streaming": {
+          "patterns": ["stream", "event", "sse", "websocket"]
+        },
+        "configuration": {
+          "patterns": ["config", "settings", "env", "properties"]
+        },
+        "dependencies": {
+          "patterns": ["import", "include", "depends", "dependency", "module"]
+        }
+      },
+      "framework_scene_signals": ["core", "service", "repository", "client", "worker", "scheduler", "plugin"]
+    }
+  ]
+}
