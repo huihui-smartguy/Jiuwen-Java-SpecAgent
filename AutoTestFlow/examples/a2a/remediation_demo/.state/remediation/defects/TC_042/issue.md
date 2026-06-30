@@ -17,4 +17,4 @@
 ## 结论（推断该 bug 的正确性）
 该字段为 **spec-required**，且命中历史缺陷 `F-HIST-001`（曾以 `TC-A2A-001` 暴露），
 判定为**真实业务缺陷**。定位 `src/main/java/com/example/a2a/JsonRpcResponse.java#<init>`
-（id 未归一为字符串）。修复见关联 PR（含回归自测 `JsonRpcResponseIdTypeIT`）。
+（id 未归一为字符串）。修复方案见 `fix_solution.md`，实证复验由 stage7 写入 issue body。

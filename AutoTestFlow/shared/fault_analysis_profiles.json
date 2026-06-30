@@ -1,0 +1,71 @@
+{
+  "schema_version": "1.0",
+  "profiles": [
+    {
+      "id": "web_frontend",
+      "domain": "web_frontend",
+      "analysis_type": "fault_pattern_regression",
+      "recommended_action": "open_evidence_issue",
+      "fault_id_prefixes": ["F-WEB-"],
+      "category_prefixes": ["FC-WEB"],
+      "tag_keywords": ["前端", "页面", "输入框", "渲染", "XSS", "鉴权"],
+      "applicable_scenarios": ["web"]
+    },
+    {
+      "id": "rest_api",
+      "domain": "rest_api",
+      "analysis_type": "fault_pattern_regression",
+      "recommended_action": "open_evidence_issue",
+      "fault_id_prefixes": ["F-REQ-", "F-PROTO-", "F-BUSINESS-", "F-RES-", "F-STATE-", "F-SSE-", "F-HIST-"],
+      "category_prefixes": ["FC-REQ", "FC-PROTO", "FC-BUSINESS", "FC-RES", "FC-STATE", "FC-SSE"],
+      "tag_keywords": ["REST", "API", "HTTP", "JSON-RPC", "协议", "响应契约", "参数校验"],
+      "applicable_scenarios": ["rest_api", "api"]
+    },
+    {
+      "id": "agent_runtime",
+      "domain": "agent_runtime",
+      "analysis_type": "fault_pattern_regression",
+      "recommended_action": "open_evidence_issue",
+      "fault_id_prefixes": ["F-AGENT-"],
+      "category_prefixes": ["FC-AGENT"],
+      "tag_keywords": ["Agent", "LLM", "Prompt", "工具调用", "流式运行时", "幻觉"],
+      "applicable_scenarios": ["agent"]
+    },
+    {
+      "id": "dfx_reliability",
+      "domain": "dfx_reliability",
+      "analysis_type": "dfx_operational_risk",
+      "recommended_action": "open_evidence_issue",
+      "fault_id_prefixes": ["F-DFX-"],
+      "category_prefixes": ["FC-DFX"],
+      "tag_keywords": ["DFX", "可靠性", "依赖服务", "资源耗尽", "恢复", "降级", "可观测"],
+      "applicable_scenarios": ["dfx"]
+    },
+    {
+      "id": "security",
+      "domain": "security",
+      "analysis_type": "fault_pattern_regression",
+      "recommended_action": "open_evidence_issue",
+      "fault_id_prefixes": ["F-SEC-"],
+      "category_prefixes": ["FC-SEC"],
+      "tag_keywords": ["安全", "越权", "注入", "Token", "鉴权", "OWASP"],
+      "applicable_scenarios": ["security"]
+    },
+    {
+      "id": "observability",
+      "domain": "observability",
+      "analysis_type": "dfx_operational_risk",
+      "recommended_action": "open_evidence_issue",
+      "fault_id_prefixes": [],
+      "category_prefixes": [],
+      "tag_keywords": ["日志", "traceID", "探针", "埋点", "可观测"],
+      "applicable_scenarios": ["observability"]
+    }
+  ],
+  "default_profile": {
+    "id": "generic_future_fault",
+    "domain": "future_failure_mode",
+    "analysis_type": "fault_pattern_regression",
+    "recommended_action": "needs_human_review"
+  }
+}

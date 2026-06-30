@@ -1,13 +1,16 @@
 {
   "generated_by": "submit_remediation.py",
+  "schema_version": "2.1",
   "mode": "dry-run",
-  "pushed_branch": null,
-  "pr": null,
   "issues": [],
   "skipped": [
     {
-      "action": "all",
+      "action": "issue",
       "reason": "remediate=dry-run gate_confirmed=False（非 on 或未过门）"
     }
-  ]
+  ],
+  "deprecated": {
+    "pr_submission": "removed",
+    "push": "removed"
+  }
 }

@@ -213,20 +213,23 @@ python AutoTestFlow/scripts/professional_acceptance.py \
 
 ---
 
-## 8. 自动修复（auto-remediation, v2.0）
+## 8. Fault Analysis + 自动修复（v2.1）
 
-> **是什么**：报告（stage5）之后，对"测试不通过"中的 `sdk_defect`（contract 背书的真实违例）**可选地闭环修复**——深度分析 → 修被测仓**业务代码** + 加**回归自测** → **本地重建并复验转绿** → 开 **fork→upstream PR** + 在 upstream 开 **bug issue**（讲清"根据规格库哪些知识 + 哪些实测结果，推断该 bug 成立"）。
+> **是什么**：报告（stage5）之后，对 `sdk_defect`、带 `fault_ref` 的失败/不满足项、故障库匹配出的高价值目标做
+> **domain-aware fault analysis**。Stage6 产根因、证据、修复方案和 issue 草稿；只有 spec-required 且可定位的
+> contract defect 才额外产业务补丁和回归自测。Stage7 负责本地应用/构建/复验，并且**只提交 upstream evidence issue**；
+> 自动 PR 提交已移除。
 > **全程门控、默认关闭、不自我认证**：`--remediate=off`（默认）时不产任何修复文件，流水线与 v1.x 字节级一致。
 
 ### 8.1 开关与配置
 
 | 参数 | 说明 |
 |------|------|
-| `--remediate` | `off`（默认）/ `dry-run`（深析 + 本地复验，**不**推送/PR/issue）/ `on`（经**强制人工确认门**后真实提交） |
+| `--remediate` | `off`（默认）/ `dry-run`（分析 + 本地复验，**不**提交 issue）/ `on`（经**强制人工确认门**后提交 evidence issue；不再提交 PR） |
 | `--remediation-config` | 修复配置文件路径，默认探测 `<output_dir>/remediation.config.json` |
-| `--remediation-max-defects` | 单轮最多处理的 sdk_defect 数（默认 5） |
+| `--remediation-max-defects` | 单轮最多处理的 patchable contract defect 数（默认 5） |
 
-配置用 JSON 声明**被测对象 + 代码仓**：`sut.base_url`、`repo.{upstream_url,ref,fork_url,clone_path,business_code_roots,selftest_roots}`、`build.{build_cmd,selftest_cmd}`、`run.{restart_cmd,readiness_probe}`、`pr`/`issue`/`switches`。复制模板 `examples/remediation.config.example.json`（spring-ai-ascend），schema 见 `shared/remediation_config_schema.md`。
+配置用 JSON 声明**被测对象 + 代码仓**：`sut.base_url`、`repo.{upstream_url,ref,clone_path,local_branch_prefix,business_code_roots,selftest_roots}`、`build.{build_cmd,selftest_cmd}`、`run.{restart_cmd,readiness_probe}`、`issue`/`switches`。复制模板 `examples/remediation.config.example.json`（spring-ai-ascend），schema 见 `shared/remediation_config_schema.md`。
 
 ```bash
 /auto-test-flow 需求.md <java仓>/<模块> --sut-base-url http://host:port \
@@ -235,18 +238,18 @@ python AutoTestFlow/scripts/professional_acceptance.py \
 
 ### 8.2 阶段（stage5 之后，可选门控）
 
-- **stage6 缺陷深析**（只读，每个 sdk_defect 一个子 Agent）：定位根因 → 产 `patch.diff`(业务码) + `regression_test.diff`(开发仓自测) + `issue.md`(规格库 + 实测两段证据) + `confidence.json`。
-- **强制人工确认门**：`--remediate=on` 时，任何外发动作前必须经 `AskUserQuestion` 确认（展示每缺陷 spec / 文件 / ±行 / 置信 / issue 标题）；可选"仅记 issue 不提 PR / 仅 dry-run / 取消"。
-- **stage7 应用-构建-复验-提交**（纯脚本）：clone@ref → git apply → 构建 → 重启 SUT → **重跑失败用例须转绿** → 推 fork PR + 开 upstream issue。
+- **stage6 fault analysis**（只读，每目标一个子 Agent）：产 `evidence.json` + `root_cause.md` + `fix_solution.md` + `issue.md` + `confidence.json`；patchable 目标额外产 `patch.diff` + `regression_test.diff`。
+- **强制人工确认门**：`--remediate=on` 时，任何外发动作前必须经 `AskUserQuestion` 确认（展示目标 domain / 类型 / 文件 / ±行 / 置信 / issue 标题）；可选"提交 evidence issue / 仅 dry-run / 取消"。
+- **stage7 应用-构建-复验-issue**（纯脚本）：clone@ref → git apply → 构建 → 重启 SUT → 重跑失败用例 → 生成含修复方案和实证复验的 issue body → 开 upstream issue。
 
 ### 8.3 安全红线
 
-- **不自我认证**：绿由脚本**重跑未改动用例 + 重建后 SUT** 判定，未转绿不开 PR（`require_green_before_pr` 不可关闭）。
+- **不自我认证**：绿/红由脚本**重跑未改动用例 + 重建后 SUT** 判定，issue 中必须带实证状态（`require_evidence_before_issue` 不可关闭，兼容旧 `require_green_before_pr`）。
 - **不洗绿**：只改业务码使其符合契约；不弱化/删 AutoTestFlow 测试或既有断言、不改 `contract.md`；回归自测只新增。
-- **仅 `sdk_defect` 触发**；定位不到 → 只记 issue 不改码。
-- **门控 + 文件级 `switches.allow_*` 第二层保险**；PR 默认 draft；clone 仓与复验轨迹 gitignore；不读/印 token（用 ambient `gh auth`）。
+- **分析可扩展，patch 收敛**：未来故障模式通过 `shared/fault_analysis_profiles.json` 扩展；只有 spec-required contract defect 可进入 patch 子集。
+- **门控 + 文件级 `switches.allow_open_issue` 第二层保险**；不推 fork、不创建 PR；clone 仓与复验轨迹 gitignore；不读/印 token（用 ambient `gh auth`）。
 
-**无需真实 SUT/仓即可复现**：见 [`examples/a2a/remediation_demo/README.md`](examples/a2a/remediation_demo/README.md)（内置 fake_repo + no-op 构建 + 模拟复验，离线跑通 深析→应用→复验→dry-run 提交）。安全纪律见 [`shared/remediation_rules.md`](shared/remediation_rules.md) 与 `DESIGN.md` §7；特性总览见 [`ChangeLogs/v2.0-引入自动修复闭环.md`](../ChangeLogs/v2.0-引入自动修复闭环.md)。
+**无需真实 SUT/仓即可复现**：见 [`examples/a2a/remediation_demo/README.md`](examples/a2a/remediation_demo/README.md)（内置 fake_repo + no-op 构建 + 模拟复验，离线跑通 分析→应用→复验→dry-run issue 提交）。安全纪律见 [`shared/remediation_rules.md`](shared/remediation_rules.md) 与 `DESIGN.md` §7；特性总览见 [`ChangeLogs/v2.0-引入自动修复闭环.md`](../ChangeLogs/v2.0-引入自动修复闭环.md)。
 
 ---
 
@@ -281,6 +284,6 @@ python AutoTestFlow/beta/scripts/check_wiki.py          # 护栏校验（覆盖/
 | **stage4 跨栈** | Python 黑盒测 Java SUT，跨栈方案；需用户在可达 SUT 上端到端验证 |
 | **示例锚定** | A2A/agent-runtime 是示例（见 `examples/a2a/`）；其他 SUT 按校准出的 `contract.md` 专化 `reference/http_client.py` |
 | **人工裁决** | TestKnowledgeBase 已接入，后续默认知识源为 `TestKnowledgeBase/registry.json` + `TestKnowledgeBase/Fault/`；stage3b 的故障覆盖完备性维度可由知识库背书自动通过，stage1 与 FP 拆分/断言合理性仍人工 |
-| **自动修复(v2.0)** | `--remediate=off` 默认关闭；真实 clone + 构建 + SUT 重启 + `gh` PR/issue 仅在用户用**真实仓 + 构建工具链 + gh 鉴权**运行 `on/dry-run` 时走通。本仓含**离线确定性 demo**（`examples/a2a/remediation_demo/`，fake_repo + 模拟复验）验证编排与产物 |
+| **Fault analysis / 自动修复(v2.1)** | `--remediate=off` 默认关闭；真实 clone + 构建 + SUT 重启 + `gh issue` 仅在用户用**真实仓 + 构建工具链 + gh 鉴权**运行 `on` 且过门时走通；自动 PR 已移除。本仓含**离线确定性 demo**（`examples/a2a/remediation_demo/`，fake_repo + 模拟复验）验证编排与产物 |
 
 > 设计立场：Oracle（`contract.md`）必须可信、可追溯，生成器不得自我认证。详见 `DESIGN.md`。

@@ -18,4 +18,4 @@
 ## 结论（推断该 bug 的正确性）
 该字段为 **spec-required** 且 `contract.md` 形态明确，违例非"部署配置/有意实现差异"，
 判定为**真实业务缺陷**。定位 `src/main/java/com/example/a2a/TaskService.java#handle`
-（未校验 agentId 存在性）。修复见关联 PR（含回归自测 `TaskServiceAgentIdIT`）。
+（未校验 agentId 存在性）。修复方案见 `fix_solution.md`，实证复验由 stage7 写入 issue body。

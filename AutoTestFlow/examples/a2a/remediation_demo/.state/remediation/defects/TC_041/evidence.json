@@ -1,0 +1,26 @@
+{
+  "target_id": "TC_041",
+  "case_id": "TC_041",
+  "analysis_type": "patchable_contract_defect",
+  "domain": "rest_api",
+  "fault_id": "F-REQ-011",
+  "evidence_level": "contract_trace",
+  "contract_refs": [
+    {
+      "spec_id": "SPEC-RESP-WRAP",
+      "field": "result.task.status.state",
+      "authority": "spec-required"
+    }
+  ],
+  "trace_refs": [
+    {
+      "trace_file": ".state/trace/TC_041.jsonl",
+      "request": "POST /a2a SendMessage metadata.agentId=nonexistent-7f3a",
+      "actual": "result.task.status.state=COMPLETED"
+    }
+  ],
+  "source_refs": [
+    "src/main/java/com/example/a2a/TaskService.java"
+  ],
+  "decision": "patch_and_reverify"
+}

@@ -70,15 +70,19 @@
 
 新增维度时复用既有调度框架（零知识调度 / 文件即协议 / 子 Agent 隔离），只扩充对应的场景与用例生成模板，不改动编排骨架。
 
-## 7. 自动修复：以契约为准、机器复验、人工门控
+## 7. Fault Analysis / 自动修复：以契约为准、机器复验、人工门控
 
-报告（stage5）之后，对"测试不通过"中的 `sdk_defect`（`contract.md` 背书的真实违例）可选地闭环修复：深度分析 → 修被测**业务代码** + 加开发仓**回归自测** → 本地重建复验 → 提交 fork→upstream PR 并在 upstream 开 bug issue。该能力放大了 §2「不得自我认证」的风险，故以三条纪律约束（详见 `shared/remediation_rules.md`）：
+报告（stage5）之后，Stage6 可对 `sdk_defect`、带 `fault_ref` 的失败/不满足项、故障库匹配出的诊断目标做
+domain-aware fault analysis：产出根因、证据、修复方案与 issue 草稿。只有 `contract.md` 背书的 spec-required
+真实违例才进入 patch 子集：修被测**业务代码** + 加开发仓**回归自测** → Stage7 本地重建复验 → 在 upstream
+提交 evidence issue。自动 PR 提交已移除。该能力放大了 §2「不得自我认证」的风险，故以三条纪律约束
+（详见 `shared/remediation_rules.md`）：
 
 - **修向契约，不洗绿**：只修 SUT 业务代码使其符合 `contract.md` 的 spec-required 形态；绝不弱化/删除 AutoTestFlow 测试或既有自测断言、不改 `contract.md`；回归自测只新增。
-- **机器复验，非自证**：绿/红由确定性脚本**重跑未改动的失败用例 + 重建后的 SUT** 判定，LLM 不宣布"修好了"；未转绿不得开 PR（`require_green_before_pr` 不可关闭）。
-- **门控外发，最小影响**：总开关 `--remediate` 默认 `off`；一切 clone-push / PR / issue 前有**强制人工确认门**；仅 `sdk_defect` 触发，定位不到则只记 issue 不改码；配置 `switches.allow_*` 为文件级第二层保险。
+- **机器复验，非自证**：绿/红由确定性脚本**重跑未改动的失败用例 + 重建后的 SUT** 判定，LLM 不宣布"修好了"；issue 必须带实证复验状态（`require_evidence_before_issue` 不可关闭，兼容旧 `require_green_before_pr`）。
+- **门控外发，最小影响**：总开关 `--remediate` 默认 `off`；任何 `gh issue` 前有**强制人工确认门**；非 patchable 目标只产证据与修复建议，不强行改码；配置 `switches.allow_open_issue` 为文件级第二层保险。
 
-bug issue 必须给出两段证据——(a) **规格库/契约知识**（违例的 spec-required specId、命中的故障库条目与 validation_point）+ (b) **实测结果**（失败用例的请求/响应轨迹、期望 vs 实际）——以可追溯地论证缺陷成立。
+evidence issue 必须给出两段证据——(a) **规格库/契约知识**（违例的 spec-required specId、命中的故障库条目与 validation_point）+ (b) **实测结果**（失败用例的请求/响应轨迹、期望 vs 实际）——并附修复方案与 Stage7 实证复验状态，以可追溯地论证缺陷成立。
 
 ## 8. Beta 预研：门控、隔离、不得逾越内核
 
