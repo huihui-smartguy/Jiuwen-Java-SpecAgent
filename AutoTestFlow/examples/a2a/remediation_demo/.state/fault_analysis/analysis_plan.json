@@ -1,0 +1,164 @@
+{
+  "generated_by": "remediation_plan.py",
+  "schema_version": "2.1",
+  "profile_schema_version": "1.0",
+  "fault_libraries": [
+    {
+      "path": "TestKnowledgeBase/Fault/agent_scene_faults.json",
+      "version": "1.0.0",
+      "description": "Agent场景故障模式库（适用于所有AI Agent应用）"
+    },
+    {
+      "path": "TestKnowledgeBase/Fault/dfx_reliability_faults.json",
+      "version": "1.0.0",
+      "description": "DFX可靠性故障模式库（适用于Web/API/Agent通用场景）"
+    },
+    {
+      "path": "TestKnowledgeBase/Fault/rest_api_faults.json",
+      "version": "1.0.0",
+      "description": "REST API接口故障模式库（适用于所有REST/JSON-RPC项目）"
+    },
+    {
+      "path": "TestKnowledgeBase/Fault/web_frontend_faults.json",
+      "version": "1.0.0",
+      "description": "Web前端功能故障模式库（适用于所有Web应用的前端交互测试）"
+    },
+    {
+      "path": "Specification_Repository/rest_api_common_faults.json",
+      "version": "1.1.0",
+      "description": "REST API通用故障模式库（适用于所有REST/JSON-RPC项目）"
+    }
+  ],
+  "fault_matches_meta": {
+    "fault_lib_version": "1.1.0",
+    "overlay_version": null,
+    "contract_path": "contract.md",
+    "generated_by": "match_faults.py",
+    "contract_probe_status": "reachable",
+    "stats": {
+      "faults_considered": 55,
+      "scenes": 2,
+      "matched": 2,
+      "downgraded": 0,
+      "truncated": 53,
+      "enrichment_needed": 0
+    }
+  },
+  "max_patchable_defects": 5,
+  "max_analysis_targets": 20,
+  "totals": {
+    "results": 2,
+    "targets": 2,
+    "selected": 2,
+    "patchable": 2,
+    "issue_only_or_diagnostic": 0
+  },
+  "targets": [
+    {
+      "target_id": "TC_041",
+      "case_id": "TC_041",
+      "status": "sdk_defect",
+      "analysis_type": "patchable_contract_defect",
+      "domain": "rest_api",
+      "profile_id": "rest_api",
+      "fault_id": "F-REQ-011",
+      "spec_id": "SPEC-RESP-WRAP",
+      "field": "result.task.status.state",
+      "expected": "终态 FAILED（不存在的 agentId 不应成功）",
+      "actual": "COMPLETED",
+      "trace_file": ".state/trace/TC_041.jsonl",
+      "oracle_refs": [
+        "SPEC-RESP-WRAP"
+      ],
+      "contract_authority": "spec-required",
+      "evidence_level": "contract_trace",
+      "recommended_action": "patch_and_reverify",
+      "publishable": true,
+      "patchable": true,
+      "needs_human": false,
+      "output_dir": ".state/fault_analysis/targets/TC_041",
+      "remediation_dir": ".state/remediation/defects/TC_041",
+      "fault_context": {
+        "fault_id": "F-REQ-011",
+        "name": "引用不存在的关联资源",
+        "severity": "高",
+        "category": "FC-REQ-001",
+        "source": "global",
+        "library_path": "Specification_Repository/rest_api_common_faults.json",
+        "trigger": "在 metadata.agentId 传入不存在的资源ID",
+        "expected_behavior_raw": "应返回错误响应或终态 FAILED，不执行无效操作",
+        "oracle_refs": [
+          {
+            "spec_id": "SPEC-RESP-WRAP",
+            "field": "result.task.status.state",
+            "assert_level": "L2",
+            "authority": "spec-required",
+            "validation_point": "不存在的关联资源应终态 FAILED"
+          }
+        ],
+        "validation_points": [
+          "响应包含error字段或状态字段指示失败",
+          "错误码或message指示资源不存在或关联无效",
+          "不创建资源或执行无效操作",
+          "响应id字段回带"
+        ],
+        "match_reason": [
+          "reference_field:metadata.agentId",
+          "tag:关联资源校验"
+        ]
+      }
+    },
+    {
+      "target_id": "TC_042",
+      "case_id": "TC_042",
+      "status": "sdk_defect",
+      "analysis_type": "patchable_contract_defect",
+      "domain": "rest_api",
+      "profile_id": "rest_api",
+      "fault_id": "F-HIST-001",
+      "spec_id": "SPEC-ID-TYPE",
+      "field": "id",
+      "expected": "响应 id 以字符串类型回带（== 请求 id '1'）",
+      "actual": "数字 1（int）",
+      "trace_file": ".state/trace/TC_042.jsonl",
+      "oracle_refs": [
+        "SPEC-ID-TYPE"
+      ],
+      "contract_authority": "spec-required",
+      "evidence_level": "contract_trace",
+      "recommended_action": "patch_and_reverify",
+      "publishable": true,
+      "patchable": true,
+      "needs_human": false,
+      "output_dir": ".state/fault_analysis/targets/TC_042",
+      "remediation_dir": ".state/remediation/defects/TC_042",
+      "fault_context": {
+        "fault_id": "F-HIST-001",
+        "name": "响应id字段类型不一致（int vs string）",
+        "severity": "高",
+        "category": "HISTORY",
+        "source": "global",
+        "library_path": "Specification_Repository/rest_api_common_faults.json",
+        "trigger": "发送包含字符串 id 的请求",
+        "expected_behavior_raw": "响应 id 应为字符串类型且等于请求 id",
+        "oracle_refs": [
+          {
+            "spec_id": "SPEC-ID-TYPE",
+            "field": "id",
+            "assert_level": "L2",
+            "authority": "spec-required",
+            "validation_point": "响应 id 字段类型 === 'string' 且 == 请求 id"
+          }
+        ],
+        "validation_points": [
+          "响应id字段类型 === 'string'",
+          "id值 === 请求id"
+        ],
+        "match_reason": [
+          "history:TC-A2A-001",
+          "reference_field:id"
+        ]
+      }
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 {
   "generated_by": "remediation_plan.py --finalize",
   "schema_version": "2.1",
-  "defects": [
+  "targets": [
     {
       "target_id": "TC_041",
       "case_id": "TC_041",
@@ -45,10 +45,12 @@
       "artifact_dir": "defects/TC_042"
     }
   ],
+  "planned_targets": [],
   "totals": {
-    "sdk_defects": 2,
-    "localizable": 2,
+    "targets": 2,
+    "planned_only": 0,
+    "patchable": 2,
+    "publishable": 2,
     "needs_human": 0
-  },
-  "fault_analysis_manifest": ".state/fault_analysis/manifest.json"
+  }
 }

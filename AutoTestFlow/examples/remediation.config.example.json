@@ -1,6 +1,6 @@
 {
-  "_comment": "auto-remediation(v2.0) 配置模板 —— 以 spring-ai-ascend 为例。复制为 <output_dir>/remediation.config.json 或 <work_dir>/.autotestflow/remediation.config.json 后按需修改；<your-fork> 换成你有写权限的 fork。schema 见 shared/remediation_config_schema.md。",
-  "version": "2.0",
+  "_comment": "auto-remediation(v2.1) 配置模板 —— 以 spring-ai-ascend 为例。复制为 <output_dir>/remediation.config.json 或 <work_dir>/.autotestflow/remediation.config.json 后按需修改。Stage7 仅提交 evidence issue，不再推送分支或创建 PR。schema 见 shared/remediation_config_schema.md。",
+  "version": "2.1",
   "sut": {
     "name": "spring-ai-ascend",
     "base_url": "http://localhost:8080",
@@ -9,9 +9,8 @@
   "repo": {
     "upstream_url": "https://github.com/chaosxingxc-orion/spring-ai-ascend",
     "ref": "v0.1.0",
-    "fork_url": "https://github.com/<your-fork>/spring-ai-ascend",
-    "fork_remote_name": "fork",
     "clone_path": ".state/remediation/repo",
+    "local_branch_prefix": "autotestflow/fix",
     "business_code_roots": ["src/main/java", "src/main/resources"],
     "selftest_roots": ["src/test/java"],
     "default_branch": "main"
@@ -28,18 +27,10 @@
     "restart_in_background": true,
     "readiness_timeout_sec": 60
   },
-  "pr": {
-    "branch_prefix": "autotestflow/fix",
-    "target_branch": "main",
-    "labels": ["bug", "auto-remediation"],
-    "draft": true
-  },
   "issue": { "labels": ["bug", "spec-violation", "auto-remediation"] },
   "switches": {
-    "allow_push": false,
-    "allow_open_pr": false,
     "allow_open_issue": false,
-    "require_green_before_pr": true
+    "require_evidence_before_issue": true
   },
   "reverify": { "simulate": false, "simulated_after": {} }
 }

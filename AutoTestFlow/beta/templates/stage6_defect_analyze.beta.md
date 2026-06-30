@@ -6,7 +6,7 @@
 > Beta wiki 纪律见 `beta/shared/wiki_rules.md`：wiki **仅 advisory、不作 oracle、不替代 contract 判据**。
 >
 > 本模板由编排器对 `plan.json` 中**每个** sdk_defect 各启动一个子 Agent（`run_in_background=True`）。
-> 只读分析 + 产出文件，**不做任何外发副作用**（push/PR/issue 由 stage7 在强制门后执行）。
+> 只读分析 + 产出文件，**不做任何外发副作用**（evidence issue 由 stage7 在强制门后执行；自动 PR 已移除）。
 > 红线见 `shared/remediation_rules.md`：契约唯一权威、修 SUT 使其符合契约、**绝不弱化测试洗绿**。
 
 ## 输入（编排器替换；均为指针，禁止回灌大文件）
@@ -52,14 +52,16 @@
        引用时**须注明出处**（`wiki/{fault_ref}.md`，由结构化库派生），且**不得替代** contract 的 spec-required 锚点作为判据。
    - (b) **实测结果**：引 `{case_id}` + trace 的触发请求与违例响应帧 + `expected` vs `actual`。
    - 结论：为何是**真实** spec-required 违例（非 sut_unsatisfied/config-dependent），及代码定位。
-6. **pr.md**：标题/正文 + 变更摘要 + "复验证据（before 红 / after 绿）"占位（stage7 依 `reverify.json` 回填）。
-7. **confidence.json**：`{case_id,spec_id,localizable,confidence(high|medium|low),files_touched[],adds,dels,needs_human,issue_title,reason}`。
+6. **evidence.json**：结构化记录 contract 引用、fault_ref、trace 摘录、源码定位、patch/selftest 摘要。
+7. **fix_solution.md**：修复方案说明，含代码改动点、为什么符合 contract、复验方式。
+8. **issue.md（issue-only）**：正文不得引用“关联 PR”；必须包含修复方案与待 stage7 回填的实证复验位置。
+9. **confidence.json**：`{target_id,case_id,spec_id,fault_id,analysis_type,domain,evidence_level,recommended_action,publishable,patchable,localizable,confidence(high|medium|low),files_touched[],adds,dels,needs_human,issue_title,reason}`。
    - 【Beta · LLM Wiki】可在 `reason` 注明是否参考了 wiki（如 `wiki_ref:F-REQ-011`）；**confidence 评级仍以 contract+实测为准**。
 
 ## 输出与返回
 
 - 写入目录：`{output_dir}/.state/remediation/defects/{case_id}/`
-  （`root_cause.md`、`patch.diff`(可选)、`regression_test.diff`(可选)、`issue.md`、`pr.md`、`confidence.json`）。
+  （`root_cause.md`、`evidence.json`、`fix_solution.md`、`patch.diff`(可选)、`regression_test.diff`(可选)、`issue.md`、`confidence.json`）。
 - **仅返回一行摘要**（禁止回灌 diff/JSON 全文）：
   `[stage6:{case_id}] localizable=<bool> confidence=<lvl> files=<n> needs_human=<bool>`
 

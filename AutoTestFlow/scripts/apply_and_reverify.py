@@ -287,8 +287,8 @@ def main():
     case_ids = [d["case_id"] for d in plan.get("defects", [])]
     spec_of = {d["case_id"]: d.get("spec_id", "") for d in plan.get("defects", [])}
 
-    # 分支名（确定性，源自计划选中的 case）
-    prefix = cfg["pr"]["branch_prefix"]
+    # 本地验证分支名（确定性，源自计划选中的 case；不再用于 PR head）
+    prefix = cfg["repo"].get("local_branch_prefix") or cfg.get("pr", {}).get("branch_prefix", "autotestflow/fix")
     branch = ("%s/%s" % (prefix, case_ids[0])) if len(case_ids) == 1 \
         else "%s/%s" % (prefix, "-".join(sorted(case_ids)) or "remediation")
     rec["ref"] = cfg["repo"]["ref"]

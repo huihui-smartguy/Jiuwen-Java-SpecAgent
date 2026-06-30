@@ -1,6 +1,8 @@
 {
   "generated_by": "remediation_plan.py",
+  "schema_version": "2.1",
   "total_sdk_defects": 2,
+  "total_patchable_defects": 2,
   "max_defects": 5,
   "selected": 2,
   "defects": [
@@ -14,7 +16,12 @@
       "oracle_refs": [
         "SPEC-RESP-WRAP"
       ],
-      "fault_ref": "F-REQ-011"
+      "fault_ref": "F-REQ-011",
+      "analysis_type": "patchable_contract_defect",
+      "domain": "rest_api",
+      "evidence_level": "contract_trace",
+      "recommended_action": "patch_and_reverify",
+      "publishable": true
     },
     {
       "case_id": "TC_042",
@@ -26,7 +33,13 @@
       "oracle_refs": [
         "SPEC-ID-TYPE"
       ],
-      "fault_ref": "F-HIST-001"
+      "fault_ref": "F-HIST-001",
+      "analysis_type": "patchable_contract_defect",
+      "domain": "rest_api",
+      "evidence_level": "contract_trace",
+      "recommended_action": "patch_and_reverify",
+      "publishable": true
     }
-  ]
+  ],
+  "fault_analysis_plan": ".state/fault_analysis/analysis_plan.json"
 }

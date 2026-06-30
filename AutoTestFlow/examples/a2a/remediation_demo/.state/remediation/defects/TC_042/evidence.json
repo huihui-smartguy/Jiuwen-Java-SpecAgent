@@ -1,0 +1,26 @@
+{
+  "target_id": "TC_042",
+  "case_id": "TC_042",
+  "analysis_type": "patchable_contract_defect",
+  "domain": "rest_api",
+  "fault_id": "F-HIST-001",
+  "evidence_level": "contract_trace",
+  "contract_refs": [
+    {
+      "spec_id": "SPEC-ID-TYPE",
+      "field": "id",
+      "authority": "spec-required"
+    }
+  ],
+  "trace_refs": [
+    {
+      "trace_file": ".state/trace/TC_042.jsonl",
+      "request": "POST /a2a SendMessage id=\"1\"",
+      "actual": "response id=1 (number)"
+    }
+  ],
+  "source_refs": [
+    "src/main/java/com/example/a2a/JsonRpcResponse.java"
+  ],
+  "decision": "patch_and_reverify"
+}

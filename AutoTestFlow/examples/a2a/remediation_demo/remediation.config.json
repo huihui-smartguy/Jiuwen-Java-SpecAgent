@@ -1,5 +1,5 @@
 {
-  "version": "2.0",
+  "version": "2.1",
   "sut": {
     "name": "spring-ai-ascend-demo",
     "base_url": "http://localhost:18080",
@@ -8,9 +8,8 @@
   "repo": {
     "upstream_url": "fake_repo",
     "ref": "v0.1.0",
-    "fork_url": "https://github.com/your-fork/spring-ai-ascend-demo",
-    "fork_remote_name": "fork",
     "clone_path": ".state/remediation/repo",
+    "local_branch_prefix": "autotestflow/fix",
     "business_code_roots": ["src/main/java"],
     "selftest_roots": ["src/test/java"],
     "default_branch": "main"
@@ -27,18 +26,10 @@
     "restart_in_background": false,
     "readiness_timeout_sec": 5
   },
-  "pr": {
-    "branch_prefix": "autotestflow/fix",
-    "target_branch": "main",
-    "labels": ["bug", "auto-remediation"],
-    "draft": true
-  },
   "issue": { "labels": ["bug", "spec-violation", "auto-remediation"] },
   "switches": {
-    "allow_push": false,
-    "allow_open_pr": false,
     "allow_open_issue": false,
-    "require_green_before_pr": true
+    "require_evidence_before_issue": true
   },
   "reverify": {
     "simulate": true,
