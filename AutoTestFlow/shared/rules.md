@@ -130,7 +130,7 @@ stage4 生成/执行任何用例**之前**，编排器必须探活 SUT：
 | **1 用例 = 1 Agent** | 硬性约束，违反即任务失败回滚；即使用例来自同一设计文件也独立 Agent |
 | **批次大小** | `--case-batch-size` 控制并发（默认 5），滑动窗口满载 |
 | **Agent 间无状态** | 仅经文件协议传递；结果各自记录到 `case_results.json` |
-| **轨迹一等公民** | 每条用例落 `trace/<case>.jsonl`，会话日志落 `trace/session.log`（设置 `A2A_TRACE_DIR` 启用）|
+| **轨迹一等公民** | 每条用例落 `trace/<case>.jsonl`，会话日志落 `trace/session.log`（优先设置 `AUTOTESTFLOW_TRACE_DIR`，兼容 `A2A_TRACE_DIR`）|
 
 ---
 

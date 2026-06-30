@@ -16,6 +16,7 @@
 - 结合被测代码的源事实（序列化形态、端点定义），固化为 `contract.md`：真实响应包装、字段路径、枚举、错误码、事件形态。
 - 每条契约项标注 `spec-required`（规约必须）vs `deployment-config-dependent`（部署配置相关），区分"协议要求"与"当前部署的具体表现"。
 - SUT 不可达时退化为静态源推导，并把相关条目全部标 `needs-runtime-verify`，明确告知断言尚未被真实形态背书。
+- 多 SUT 模式下，`--sut-manifest` 声明多个 target；每个 target 独立生成 `targets/<target_id>/contract.md`、结果与 trace。不同 target 的契约**不得合并**，root 报告只做聚合，避免跨 SUT oracle 污染。
 
 ## 2. 判据权威性：contract.md 是唯一 Oracle
 
@@ -24,6 +25,7 @@
 - 任何断言点必须能在 `contract.md` 找到对应的真实形态证据；找不到则标 `needs-runtime-verify`，不得凭需求措辞臆造响应结构。
 - 生成器**不得自我认证**：当用例断言与 SUT 实际行为冲突时，先核对 `contract.md`——形态本身错则回到契约校准修正契约，而**不是**删弱断言把结果"洗绿"。
 - `contract.md` 与需求文档形态不一致处，以 `contract.md` 为准生成断言，并在报告中记为"需求-实现形态差异"观察项。
+- 在 multi-SUT 运行中，"唯一权威"的作用域是 target-local：`targets/<target_id>/contract.md` 只约束该 target 的测试。跨 target 的依赖关系只影响启动/就绪顺序与报告分组，不自动产生跨 SUT 强断言。
 
 ## 3. 人工裁决补位规格库
 

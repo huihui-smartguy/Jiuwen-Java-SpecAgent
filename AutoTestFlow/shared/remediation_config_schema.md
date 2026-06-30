@@ -1,7 +1,8 @@
 # 修复配置文件 schema（remediation.config.json，v2.1）
 
 > 声明**被测对象(SUT)与其代码仓**，供 stage6 fault analysis 与 stage7 本地复验 / evidence issue 使用。
-> 解析顺序：`--remediation-config <path>` → `<output_dir>/remediation.config.json`
+> multi-SUT 解析顺序：manifest target 的 `remediation.config_path` → `targets/<target_id>/remediation.config.json`。
+> legacy 单 target 解析顺序：`--remediation-config <path>` → `<output_dir>/remediation.config.json`
 > → `<work_dir>/.autotestflow/remediation.config.json`。缺失即等同 `--remediate=off`（跳过 stage6/7）。
 > 模板见 `examples/remediation.config.example.json`。
 
@@ -9,7 +10,7 @@
 
 | 段 | 字段 | 必填 | 说明 |
 |----|------|:---:|------|
-| `sut` | `base_url` | ✅ | 被测服务基址（应与 stage4 的 `--sut-base-url` 一致；复验重启后据此探活+重跑） |
+| `sut` | `base_url` | ✅ | 被测服务基址（multi-SUT 时应与 manifest target `runtime.base_url` 一致；legacy 时与 deprecated `--sut-base-url` 一致；复验重启后据此探活+重跑） |
 | `sut` | `readiness_probe` | | `{method,path,expect_status_lt}` 就绪探针 |
 | `repo` | `upstream_url` | ✅ | 上游代码仓；stage7 issue 在此仓提交。本地路径亦可（离线/自测） |
 | `repo` | `ref` | ✅ | SUT 构建所用的 tag/branch/sha（如 `v0.1.0`），复验基线 |

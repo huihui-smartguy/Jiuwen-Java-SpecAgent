@@ -18,12 +18,13 @@
 ## 🎯 用例信息
 
 - Case ID: {case_id}
+- Target ID: {target_id}
 - 用例名称: {case_name}
 - 测试维度 test_type: {test_type}（`scenario` 才执行；`dfx` 为规划占位，应直接跳过执行）
 - 测试步骤: {steps}
 - 预期结果: {expected}
 - oracle 引用: {oracle_refs}（contract.md 的 specId + 断言层级 + 权威性）
-- 输出路径: {output_dir}/test_{case_id_lower}.py
+- 输出路径: {target_output_dir}/test_{case_id_lower}.py
 - 工作目录: {work_dir}
 - SUT 基址: {sut_base_url}
 - 门禁脚本: {validate_script}
@@ -37,10 +38,10 @@
 
 **必须读取**：
 
-1. **`{output_dir}/contract.md`** — **唯一权威 oracle**。所有断言的期望值（响应包装路径、id 类型、枚举前缀、事件流形态、错误码、自描述字段）**必须**取自此处对应的 specId，**禁止猜测响应形态**。
+1. **`{target_output_dir}/contract.md`** — **唯一权威 oracle**。所有断言的期望值（响应包装路径、id 类型、枚举前缀、事件流形态、错误码、自描述字段）**必须**取自此处对应的 specId，**禁止猜测响应形态**。
 2. `{skill_dir}/reference/http_client.py` — 通用黑盒 HTTP 客户端 `HttpClient`（原语：`get` / `post_json` / `stream` / `raw_post`）+ 协议无关容差 helper（`id_eq` / `normalize_state` / `parse_sse_lines`）+ 交互轨迹记录器（仅可使用其列出的方法）。
-3. `{output_dir}/.state/skeleton/`（如有）— 需求文档中的真实请求/响应样例。
-4. `{output_dir}/.state/stage_summary.json`（如有）— 含 `user_test_entry` 时按其对外端点驱动；`forbidden_direct_apis` 禁止使用。
+3. `{target_output_dir}/.state/skeleton/`（如有）— 需求文档中的真实请求/响应样例。
+4. `{target_output_dir}/.state/stage_summary.json`（如有）— 含 `user_test_entry` 时按其对外端点驱动；`forbidden_direct_apis` 禁止使用。
 
 > 协议特化的请求体构造与响应字段访问（如 A2A 的 result.task 解包、事件 oneof 解析）以 contract.md specId 为准；具体用法示例见 examples/a2a/，本阶段一律用通用 `http_client` 原语 + 通用 helper。
 
@@ -48,13 +49,13 @@
 
 通用 `http_client` 提供四个 HTTP 原语（`get`/`post_json`/`stream`/`raw_post`）、协议无关容差 helper（`id_eq` 类型容差比较 / `normalize_state` 枚举去前缀 / `parse_sse_lines` 事件流解析）和交互轨迹记录器（recorder）。`conftest.py` 提供 `http_client` / `base_url` fixture 与 `scenario`/`dfx`/`sse` markers。
 
-将以下文件**复制到 `{output_dir}` 下**（若目标已存在则跳过，不覆盖）：
-- `{skill_dir}/reference/http_client.py` → `{output_dir}/http_client.py`
-- `{skill_dir}/reference/conftest.py` → `{output_dir}/conftest.py`
+将以下文件**复制到 `{target_output_dir}` 下**（若目标已存在则跳过，不覆盖）：
+- `{skill_dir}/reference/http_client.py` → `{target_output_dir}/http_client.py`
+- `{skill_dir}/reference/conftest.py` → `{target_output_dir}/conftest.py`
 
 ```bash
-cp -n {skill_dir}/reference/http_client.py {output_dir}/http_client.py
-cp -n {skill_dir}/reference/conftest.py {output_dir}/conftest.py
+cp -n {skill_dir}/reference/http_client.py {target_output_dir}/http_client.py
+cp -n {skill_dir}/reference/conftest.py {target_output_dir}/conftest.py
 ```
 
 用例通过 `http_client` fixture 注入客户端；**禁止**手写 HTTP 细节、禁止 import Java 内部类。
@@ -83,7 +84,7 @@ cp -n {skill_dir}/reference/conftest.py {output_dir}/conftest.py
 ```bash
 python3 - <<'PY'
 import sys
-sys.path.insert(0, "{output_dir}")
+sys.path.insert(0, "{target_output_dir}")
 from http_client import HttpClient
 try:
     # 探活：GET 一个就绪/发现端点（路径按 SUT 实际填写，如 / 或 health/discovery/自描述端点）
@@ -99,7 +100,7 @@ PY
 
 ### 第五步：生成完整测试代码
 
-使用 Write 创建 `{output_dir}/test_{case_id_lower}.py`：
+使用 Write 创建 `{target_output_dir}/test_{case_id_lower}.py`：
 1. 文档注释（用例信息 + 步骤 + 预期 + 引用的 specId）
 2. import：`from http_client import id_eq, normalize_state, parse_sse_lines`（仅 import 真实存在的 helper；协议特化解包请按 contract 路径内联，勿 import 不存在的 task_of/event_* 等）
 3. 测试函数：注入 `http_client` fixture（轨迹记录器自动生效），可加 `@pytest.mark.scenario`/`sse`
@@ -113,13 +114,13 @@ PY
 ### 第六步：运行 pytest（READY 时必须执行）
 
 ```bash
-python {validate_script} {output_dir}/test_{case_id_lower}.py    # 门禁
-python -m py_compile {output_dir}/test_{case_id_lower}.py          # 语法
-cd {output_dir} && BASE_URL={sut_base_url} A2A_TRACE_DIR={output_dir}/.state/trace \
+python {validate_script} {target_output_dir}/test_{case_id_lower}.py    # 门禁
+python -m py_compile {target_output_dir}/test_{case_id_lower}.py          # 语法
+cd {target_output_dir} && BASE_URL={sut_base_url} AUTOTESTFLOW_TRACE_DIR={target_output_dir}/.state/trace \
     python -m pytest test_{case_id_lower}.py -v -s -rA --log-cli-level=INFO --tb=short
 ```
 
-设置 `A2A_TRACE_DIR` 后，client 的 recorder 会把请求/响应/事件流逐帧落盘到 `{output_dir}/.state/trace/{test_name}.jsonl` + `session.log`（无需手写）。
+设置 `AUTOTESTFLOW_TRACE_DIR` 后，client 的 recorder 会把请求/响应/事件流逐帧落盘到 `{target_output_dir}/.state/trace/{test_name}.jsonl` + `session.log`（无需手写）。
 
 ### 第七步：5分类失败处理 + 有界自我修复循环（最多 {max_fix_attempts} 轮）
 
@@ -143,7 +144,7 @@ pytest 通过即 **pass**。失败/报错时，先**判定失败归类**（5 类
 ### 第八步：质量自检 + 写结果
 
 #### 8a. 自检清单（全部通过才继续）
-- [ ] 已复制 http_client.py + conftest.py 到 {output_dir}
+- [ ] 已复制 http_client.py + conftest.py 到 {target_output_dir}
 - [ ] 所有断言期望值溯源到 contract.md 的 specId（非臆造）
 - [ ] 形态解析用了 helper（id_eq/normalize_state/parse_sse_lines）+ contract 指定路径，未硬假设 result/id/事件流形态
 - [ ] deployment-config-dependent / needs-runtime-verify 字段仅做存在性/放宽断言
@@ -151,15 +152,16 @@ pytest 通过即 **pass**。失败/报错时，先**判定失败归类**（5 类
 - [ ] 含逐步断言 + ≥1 条破坏性断言
 - [ ] 已过 readiness 门禁（READY 才跑 pytest；DOWN 记 env_issue 并保留代码）
 - [ ] 失败已按 5 分类处理：harness_defect 已修 / sut_unsatisfied 已 skip 标注 / sdk_defect 已记 / env_issue 已保留
-- [ ] 交互轨迹已落盘（A2A_TRACE_DIR 生效，trace_file 存在或注明 env_issue 未跑）
+- [ ] 交互轨迹已落盘（AUTOTESTFLOW_TRACE_DIR 生效，trace_file 存在或注明 env_issue 未跑）
 
 #### 8b. 写入结果文件
 
-路径：`{output_dir}/.state/results/{case_id}.json`
+路径：`{target_output_dir}/.state/results/{case_id}.json`
 
 ```json
 {
     "status": "passed | harness_defect | sut_unsatisfied | sdk_defect | env_issue",
+    "target_id": "{target_id}",
     "class": "harness_defect | sut_unsatisfied | sdk_defect | env_issue | null",
     "fix_rounds": 0,
     "trace_file": ".state/trace/{test_name}.jsonl（env_issue 未跑时为 null）",
