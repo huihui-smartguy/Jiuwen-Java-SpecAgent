@@ -11,12 +11,12 @@ import logging
 import pytest
 
 import http_client
-from http_client import HttpClient, base_url_from_env
+from http_client import HttpClient, base_url_from_env, trace_dir_from_env
 
 
 # ---------------------------------------------------------------------------
 # 日志：把 logger "autotestflow" 的请求/响应/SSE 行打到 stdout（配合 -s/--log-cli-level）；
-# 若设置 A2A_TRACE_DIR，再加一个 {dir}/session.log 文件 handler。只配置一次。
+# 若设置 AUTOTESTFLOW_TRACE_DIR（兼容 A2A_TRACE_DIR），再加一个 {dir}/session.log 文件 handler。只配置一次。
 # ---------------------------------------------------------------------------
 def _configure_logging():
     log = logging.getLogger("autotestflow")
@@ -33,7 +33,7 @@ def _configure_logging():
         sh.setFormatter(fmt)
         log.addHandler(sh)
 
-    trace_dir = os.environ.get("A2A_TRACE_DIR")
+    trace_dir = trace_dir_from_env()
     if trace_dir:
         try:
             os.makedirs(trace_dir, exist_ok=True)
@@ -72,7 +72,7 @@ def _trace(request):
     """每个用例：开始时绑定 case 名；结束时（若开启 trace）打印该用例轨迹文件路径。"""
     http_client.set_current_case(request.node.name)
     yield
-    trace_dir = os.environ.get("A2A_TRACE_DIR")
+    trace_dir = trace_dir_from_env()
     if trace_dir:
         path = os.path.join(trace_dir, "%s.jsonl" % request.node.name)
         print("[trace] %s -> %s" % (request.node.name, path))

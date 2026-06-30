@@ -5,7 +5,7 @@
   - `HttpClient`：只依赖 HTTP/SSE 形态，不触碰被测系统(SUT)内部组件，
     提供 get / post_json / stream / raw_post 四个原语；
   - 交互轨迹记录器（recorder）：把 test-agent ↔ SUT 的请求/响应/SSE 逐帧
-    打印 + 落盘（设置 A2A_TRACE_DIR 时写 trace/<case>.jsonl）。
+    打印 + 落盘（优先 AUTOTESTFLOW_TRACE_DIR，兼容 A2A_TRACE_DIR）。
 
 设计纪律（沿用已验证的 A2A 客户端）：
   - httpx **惰性导入**：本模块即便未安装 httpx 也能被 import（供 --dry-run / 静态校验）。
@@ -55,9 +55,14 @@ def set_current_case(name: str) -> None:
         pass
 
 
+def trace_dir_from_env() -> Optional[str]:
+    """Return the configured trace directory, preferring the generic env var."""
+    return os.environ.get("AUTOTESTFLOW_TRACE_DIR") or os.environ.get("A2A_TRACE_DIR")
+
+
 def _trace_path() -> Optional[str]:
-    """若设置 A2A_TRACE_DIR 则返回 {dir}/{case}.jsonl（并确保目录存在），否则 None。"""
-    d = os.environ.get("A2A_TRACE_DIR")
+    """若设置 trace dir 则返回 {dir}/{case}.jsonl（并确保目录存在），否则 None。"""
+    d = trace_dir_from_env()
     if not d:
         return None
     try:

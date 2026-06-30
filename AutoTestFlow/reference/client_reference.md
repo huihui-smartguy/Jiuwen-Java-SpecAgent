@@ -10,7 +10,7 @@
 
 - 环境变量 `BASE_URL`（默认 `http://localhost:8080`）指向运行中的 SUT。
 - 依赖：`httpx>=0.27`、`pytest`（流式用同步 httpx 的 `stream` 即可）。
-- 设置 `A2A_TRACE_DIR` 时，每条用例落 `trace/<case>.jsonl`，会话日志落 `trace/session.log`。
+- 设置 `AUTOTESTFLOW_TRACE_DIR` 时，每条用例落 `trace/<case>.jsonl`，会话日志落 `trace/session.log`；`A2A_TRACE_DIR` 作为旧示例兼容。
 
 ## 1. conftest fixtures（用例直接注入，勿手写 HTTP 细节）
 

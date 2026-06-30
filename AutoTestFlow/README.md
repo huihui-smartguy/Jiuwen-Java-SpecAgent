@@ -12,9 +12,9 @@
 |------|------|
 | **定位** | 需求驱动的测试智能体，按"测试维度"抽象 |
 | **测试维度** | `scenario`（场景化，**已实现**）+ `dfx`（性能/可靠性/安全/兼容性等，**规划中、并行轨道**） |
-| **输入** | 需求文档 + 一个被测源码模块路径 + 运行中 SUT 的 base-url +（可选）TestKnowledgeBase |
-| **输出** | 校准契约 + 测试场景 + 测试设计 + Python 黑盒用例 + 执行报告（含交互轨迹） |
-| **被测对象** | Java/Spring、Python Web/API、C++ service/RPC 或未知源码树的 SUT。被测协议/端点/响应契约的真实形态以 stage2.5 校准出的 `contract.md` 为准 |
+| **输入** | 需求文档 + SUT manifest（Markdown + YAML，支持一个或多个 target）+（可选）TestKnowledgeBase |
+| **输出** | 每个 target 的校准契约 + 测试场景 + 测试设计 + Python 黑盒用例 + target 报告，以及根级汇总报告 |
+| **被测对象** | Java/Spring、Python Web/API、C++ service/RPC 或未知源码树的 SUT target。每个 target 的协议/端点/响应契约真实形态以 target-local `contract.md` 为准 |
 | **测试栈** | stage4 生成 Python `pytest` + `httpx` 黑盒用例，只经对外协议观测 |
 
 > 通用性边界：场景/设计/契约校准/执行流程与具体协议无关；黑盒脚手架 `reference/http_client.py`
@@ -46,16 +46,20 @@ AutoTestFlow/                       # Skill 本体
 │   ├── code_scan_profiles.json     # Java/Python/C++/generic profile catalog
 │   ├── java_scan_guide.md          # Java/Spring profile 附录
 │   ├── code_analysis_template.md   # stage2 输出模板
-│   └── scenario_schema.md          # 场景 JSON schema
+│   ├── scenario_schema.md          # 场景 JSON schema
+│   └── sut_manifest_schema.md      # 多 SUT manifest schema
 ├── reference/                      # 通用黑盒复用资产（按 contract.md 专化）
 │   ├── http_client.py              # 通用黑盒 HTTP 客户端 + 交互记录器
 │   ├── conftest.py                 # pytest fixtures + 轨迹日志
 │   └── client_reference.md         # 客户端方法表与判据约定
 ├── examples/
-│   └── a2a/                        # A2A 示例锚点（客户端专化 + 参考资产）
+│   ├── a2a/                        # A2A 示例锚点（客户端专化 + 参考资产）
+│   └── multi_sut/                  # 多 SUT manifest 示例
 ├── scripts/                        # 确定性脚本（scan-prep / probe / match / merge / select / aggregate / record）
 │   ├── prepare_code_scan.py        # stage2 profile adapter 预扫描计划
-│   ├── probe_contract.py           # stage2.5 探活校准 → contract.md
+│   ├── sut_manifest.py             # Markdown+YAML manifest 解析 / legacy 单 SUT 归一化
+│   ├── sut_runtime.py              # target readiness + managed runtime command guard
+│   ├── probe_contract.py           # stage2.5 target 探活校准 → target-local contract.md
 │   ├── knowledge_base.py           # TestKnowledgeBase registry/glob adapter
 │   ├── match_faults.py             # stage2.6 知识/故障匹配（contract 优先封顶）→ knowledge_matches.json + fault_matches.json
 │   ├── professional_acceptance.py  # Professional_experience advisory gates → professional/AI readiness artifacts
@@ -88,14 +92,14 @@ cp -r AutoTestFlow <你的项目>/.claude/skills/
 ## 5. 调用示例
 
 ```
-/auto-test-flow 需求.md <sut源码>/<模块> --sut-base-url http://host:port
+/auto-test-flow 需求.md --sut-manifest autotestflow.suts.md
 ```
 
 | 参数 | 说明 |
 |------|------|
 | `需求.md` | 需求文档路径（必填） |
-| `<sut源码>/<模块>` | 被测源码模块路径（stage2 自动识别 Java/Spring、Python Web/API、C++ service/RPC 或 fallback；省略则纯需求模式） |
-| `--sut-base-url` | 运行中 SUT 的 base-url（stage2.5 探活 + stage4 就绪门 + 执行） |
+| `--sut-manifest` | Markdown + YAML SUT manifest（标准模式主入口；可声明多个 target、源码路径、运行方式、readiness、probe plan、依赖与 remediation 配置） |
+| `--sut-base-url` | **Deprecated compatibility only**：兼容旧单 target 调用；内部归一化为 `target_id=default` 的 manifest |
 | `--knowledge-root` | TestKnowledgeBase 根目录，供 stage2.6 registry/glob discovery 使用（默认仓内 `TestKnowledgeBase`） |
 | `--knowledge-domain` | 知识域过滤：`all` / `rest_api` / `web` / `agent` / `dfx`，或逗号分隔 package_id |
 | `--fault-lib` | 显式故障库路径，仅用于旧 demo 或临时单文件调试；默认不再自动回退 `Specification_Repository` |
@@ -107,24 +111,31 @@ cp -r AutoTestFlow <你的项目>/.claude/skills/
 > 完整参数（`--output-dir` / `--case-batch-size` / `--p0-count` / `--pr` / `--commit` 等）以 `SKILL.md`《参数》为准；此处仅列常用项。
 > 故障库（规格库）的详细用法见下文 **§7 故障库（规格库）使用**。
 
+Manifest 示例见 [`examples/multi_sut/sut-manifest.md`](examples/multi_sut/sut-manifest.md)，schema 见
+[`shared/sut_manifest_schema.md`](shared/sut_manifest_schema.md)。每个 target 会被归一化到
+`<output_dir>/targets/<target_id>/`，并拥有独立的 `contract.md`、`.state/results/`、`.state/trace/`
+和 `report.md`，根级 `report.md` 只做聚合。
+
 ---
 
 ## 6. 端到端流程
 
 ```
-需求.md + 源码模块 + SUT +（可选）TestKnowledgeBase
+需求.md + SUT manifest +（可选）TestKnowledgeBase
    │
    ├─ stage1   需求侧场景分析（flow/framework/quality）        ← 人工裁决 ✅（FP 拆分/场景边界把关）
-   ├─ stage2   通用代码扫描 → code_scan_plan.json + code_analysis.md（profile adapter）
-   ├─ stage2.5 契约校准：probe_contract.py 探活真实 SUT → contract.md   ← 判据权威性闸
-   ├─ stage2.6 TestKnowledgeBase 匹配（可选）：match_faults.py registry/glob discovery + contract 封顶 → knowledge_matches.json + fault_matches.json
+   ├─ target loop（每个 targets/<target_id>/ 独立执行）
+   │  ├─ stage2   通用代码扫描 → code_scan_plan.json + code_analysis.md（profile adapter）
+   │  ├─ stage2.5 契约校准：probe_contract.py --target-id → target-local contract.md ← 判据权威性闸
+   │  ├─ stage2.6 TestKnowledgeBase 匹配（可选）：registry/glob discovery + target contract 封顶
    │            └─ 2.6b（可选，--fault-enrich on）LLM 增强：模糊绑定 / 占位替换 / contract_conflict
-   ├─ stage2.P Professional_experience（advisory）：professional_acceptance.py → seed/code_gaps/case_guidance
-   ├─ stage3a  场景富化（GAP + 框架补充）
-   ├─ stage3b  测试用例设计（断言按 contract.md，读取 professional_case_guidance） ← 人工裁决 ✅
-   ├─ stage4   就绪门（探活）→ 生成 Python pytest+httpx 用例 → 执行 + 采集交互轨迹
+   │  ├─ stage2.P Professional_experience（advisory）：professional_acceptance.py → seed/code_gaps/case_guidance
+   │  ├─ stage3a  场景富化（GAP + 框架补充）
+   │  ├─ stage3b  测试用例设计（断言按 target contract.md） ← 人工裁决 ✅
+   │  ├─ stage4   target 就绪门 → 生成 Python pytest+httpx 用例 → 执行 + 采集交互轨迹
    │            └─ 执行边界5分类：harness_defect / sut_unsatisfied / sdk_defect / env_issue / pass
-   └─ stage5   汇总报告（含 professional acceptance / AI readiness / residual risk）+ record_faults.py 闭环
+   │  └─ stage5   target 报告 + record_faults.py 闭环
+   └─ root report 聚合全部 target 的覆盖、风险、env_issue 与缺陷摘要
 ```
 
 `校准 → 设计 → 生成 → 就绪门 → 执行+轨迹 → 报告`：判据先校准、再设计断言；执行前先探活；
@@ -155,15 +166,15 @@ cp -r AutoTestFlow <你的项目>/.claude/skills/
 
 ```bash
 # 默认（自动读取 TestKnowledgeBase registry/glob）
-/auto-test-flow 需求.md <sut源码>/<模块> --sut-base-url http://host:port
+/auto-test-flow 需求.md --sut-manifest autotestflow.suts.md
 
 # 指定知识域 + 项目 overlay + LLM 增强
-/auto-test-flow 需求.md <sut源码>/<模块> --sut-base-url http://host:port \
+/auto-test-flow 需求.md --sut-manifest autotestflow.suts.md \
     --knowledge-domain rest_api,dfx \
     --fault-overlay <proj>/fault_library/project_faults.json --fault-enrich on
 
 # 关闭
-/auto-test-flow 需求.md <sut源码>/<模块> --sut-base-url http://host:port --faults off
+/auto-test-flow 需求.md --sut-manifest autotestflow.suts.md --faults off
 ```
 
 ### 7.3 闭环自积累
@@ -185,16 +196,16 @@ python AutoTestFlow/scripts/record_faults.py --output-dir <output_dir> \
 
 | 产物 | 说明 |
 |------|------|
-| `.state/knowledge_matches.json` | TestKnowledgeBase 主产物（匹配 + 契约调和 + 配额） |
-| `.state/fault_matches.json` | 兼容产物，供现有 stage3b/stage5 读取 |
-| `.state/fault_contract_alignment.md` | 故障-契约对齐报告 |
-| `.state/new_knowledge_candidates.json` | 本轮闭环候选（dry-run 输出） |
-| `.state/new_faults_detected.json` | 兼容候选输出 |
-| `.state/professional_acceptance.seed.json` | Phase C：测试计划和需求可测性种子 |
-| `.state/professional_acceptance.code_gaps.json` | Phase C：代码/可观测性/依赖证据缺口 |
-| `.state/professional_case_guidance.json` | Phase B：stage3b 用例设计指导与 `acceptance_refs` |
-| `.state/professional_acceptance.json` | Phase A：stage5 专业验收和发布门禁矩阵 |
-| `.state/ai_eval_readiness.json` | Phase D：AI/Agent eval、grader、redteam、tool-call、监控就绪度 |
+| `targets/<target_id>/.state/knowledge_matches.json` | TestKnowledgeBase 主产物（匹配 + 契约调和 + 配额） |
+| `targets/<target_id>/.state/fault_matches.json` | 兼容产物，供 target-local stage3b/stage5 读取 |
+| `targets/<target_id>/.state/fault_contract_alignment.md` | 故障-契约对齐报告 |
+| `targets/<target_id>/.state/new_knowledge_candidates.json` | 本轮闭环候选（dry-run 输出） |
+| `targets/<target_id>/.state/new_faults_detected.json` | 兼容候选输出 |
+| `targets/<target_id>/.state/professional_acceptance.seed.json` | Phase C：测试计划和需求可测性种子 |
+| `targets/<target_id>/.state/professional_acceptance.code_gaps.json` | Phase C：代码/可观测性/依赖证据缺口 |
+| `targets/<target_id>/.state/professional_case_guidance.json` | Phase B：stage3b 用例设计指导与 `acceptance_refs` |
+| `targets/<target_id>/.state/professional_acceptance.json` | Phase A：stage5 专业验收和发布门禁矩阵 |
+| `targets/<target_id>/.state/ai_eval_readiness.json` | Phase D：AI/Agent eval、grader、redteam、tool-call、监控就绪度 |
 | 用例字段 `fault_ref` | 故障导向用例的溯源标记 |
 
 ### 7.6 Professional_experience advisory gates
@@ -232,11 +243,10 @@ python AutoTestFlow/scripts/professional_acceptance.py \
 | `--remediation-config` | 修复配置文件路径，默认探测 `<output_dir>/remediation.config.json` |
 | `--remediation-max-defects` | 单轮最多处理的 patchable contract defect 数（默认 5） |
 
-配置用 JSON 声明**被测对象 + 代码仓**：`sut.base_url`、`repo.{upstream_url,ref,clone_path,local_branch_prefix,business_code_roots,selftest_roots}`、`build.{build_cmd,selftest_cmd}`、`run.{restart_cmd,readiness_probe}`、`issue`/`switches`。复制模板 `examples/remediation.config.example.json`（spring-ai-ascend），schema 见 `shared/remediation_config_schema.md`。
+配置用 JSON 声明**被测对象 + 代码仓**：`sut.base_url`、`repo.{upstream_url,ref,clone_path,local_branch_prefix,business_code_roots,selftest_roots}`、`build.{build_cmd,selftest_cmd}`、`run.{restart_cmd,readiness_probe}`、`issue`/`switches`。多 SUT 模式优先读取 manifest target 的 `remediation.config_path` 或 `targets/<target_id>/remediation.config.json`；全局 `--remediation-config` 仅用于 legacy 单 target 运行。复制模板 `examples/remediation.config.example.json`（spring-ai-ascend），schema 见 `shared/remediation_config_schema.md`。
 
 ```bash
-/auto-test-flow 需求.md <sut源码>/<模块> --sut-base-url http://host:port \
-    --remediate on --remediation-config <proj>/remediation.config.json
+/auto-test-flow 需求.md --sut-manifest autotestflow.suts.md --remediate on
 ```
 
 ### 8.2 阶段（stage5 之后，可选门控）
@@ -268,7 +278,7 @@ python AutoTestFlow/scripts/professional_acceptance.py \
 # 启用：先派生 wiki，再让 stage2.6b/stage6 用 beta 模板读 wiki 作 advisory
 python AutoTestFlow/beta/scripts/gen_wiki.py            # 故障库 JSON → wiki/*.md（单向派生、幂等）
 python AutoTestFlow/beta/scripts/check_wiki.py          # 护栏校验（覆盖/溯源/不漂移/不越权/非matcher）
-/auto-test-flow 需求.md <sut源码>/<模块> --sut-base-url http://host:port \
+/auto-test-flow 需求.md --sut-manifest autotestflow.suts.md \
     --faults on --fault-enrich on --beta-wiki on
 
 # 关闭（默认）：--beta-wiki off → 用稳定模板、不读 wiki，与 v2.x 字节级一致
