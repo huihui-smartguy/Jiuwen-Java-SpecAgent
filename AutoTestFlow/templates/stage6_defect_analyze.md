@@ -9,14 +9,14 @@
 
 - 缺陷：`case_id={case_id}` `spec_id={spec_id}` `field={field}`
 - 期望/实际：`expected={expected}` `actual={actual}`
-- 证据：`trace_file={trace_file}` `oracle_refs={oracle_refs}` `fault_ref={fault_ref}`
+- 证据：`trace_file={trace_file}` `oracle_refs={oracle_refs}` `fault_ref={fault_ref}` `fault_oracle_summary={fault_oracle_summary}`
 - 路径：`output_dir={output_dir}` `clone_path={clone_path}` `contract_path={contract_path}`
 - 代码根：`business_code_roots={business_code_roots}` `selftest_roots={selftest_roots}`
 
 ## 你要自行读取的文件（按需，命名读取，勿全量回灌）
 
 1. `{contract_path}` —— 违例 `spec_id` 所在行 + §7「字段权威性分级表」。**只有 spec-required 违例才修**。
-2. `{output_dir}/.state/results/{case_id}.json` —— `sdk_defect{spec_id,field,expected,actual}`。
+2. `{output_dir}/.state/results/{case_id}.json` —— `sdk_defect{spec_id,field,expected,actual}`；若有 `fault_oracle_summary`，同时读取 required oracle 的失败/不可观察明细。
 3. `{output_dir}/{trace_file}` —— 真实请求/响应/SSE 帧；摘录**触发请求** + **证明 actual 的响应帧**。
 4. `{output_dir}/.state/fault_matches.json` —— 若 `fault_ref` 命中：取其 `fault_id/name/severity`、
    `oracle_refs[].validation_point`、`expected_behavior_raw`（**规格库知识**半边证据）。
@@ -37,7 +37,7 @@
 5. **issue.md（强制两段证据）**：
    - (a) **规格库/契约知识**：引 `{contract_path}` 的 `spec_id`(spec-required) + 字段；若有 `fault_ref` 引
      `fault_id/name` + `validation_point` + `expected_behavior_raw`。
-   - (b) **实测结果**：引 `{case_id}` + trace 的触发请求与违例响应帧 + `expected` vs `actual`。
+   - (b) **实测结果**：引 `{case_id}` + trace 的触发请求与违例响应帧 + `expected` vs `actual`；若是 fault oracle 触发的 `sdk_defect`，明确写出失败的 oracle id/check/kind。
    - 结论：为何是**真实** spec-required 违例（非 sut_unsatisfied/config-dependent），及代码定位。
 6. **evidence.json**：结构化记录 contract 引用、fault_ref、trace 摘录、源码定位、patch/selftest 摘要。
 7. **fix_solution.md**：修复方案说明，含代码改动点、为什么符合 contract、复验方式。

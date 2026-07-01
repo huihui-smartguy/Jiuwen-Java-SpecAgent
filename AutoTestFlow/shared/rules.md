@@ -12,6 +12,7 @@
 3. **交互轨迹强制采集** —— 记录器已内置于 `reference/http_client.py`，每条用例必须产出可读请求/响应/SSE 轨迹。
 4. **就绪门后才执行** —— stage4 执行前必须探活 SUT，不就绪即 `env_issue` 并保留代码，绝不“洗绿”。
 5. **断言必须能发现缺陷** —— 禁止无效断言，每条断言都要能捕获被测服务的真实偏差。
+6. **故障用例必须过过程/否定 oracle** —— 带 `fault_ref` 的用例是缺陷探针，不是普通 E2E；最终响应成功后仍必须通过 required `fault_oracles`，否则不得写 `pass`。
 
 ---
 
@@ -77,7 +78,7 @@
 
 ---
 
-## 4. 执行边界五分类（不得用弱化断言“洗绿”）
+## 4. 执行边界分类（不得用弱化断言“洗绿”）
 
 每条执行结果必须归入且仅归入以下一类：
 
@@ -87,11 +88,19 @@
 | **sut_unsatisfied** | SUT 行为不满足某非协议必需的期望（功能未实现/可选能力缺失/业务约束未达） | **忽略 skip**：不计失败、不改断言；记录观察，不视为缺陷 |
 | **sdk_defect** | SUT 违反协议必需约束 / 返回 5xx / 栈异常 / 契约违例（contract 确认形态应正确） | 标记为**确认缺陷**，记录证据进缺陷清单 |
 | **env_issue** | 连接失败 / SUT 未就绪 / 依赖缺失（httpx、网络、服务未起） | 命中**就绪门**；标记，**保留代码**，不修改断言，不计失败 |
-| **pass** | 断言全通过 | 计为通过 |
+| **requires_human_review** | `fault_ref` 用例的 required 过程/否定 oracle 缺失、unsupported 或 trace 不可观察 | 标记人工复核；不计为 pass，不沉淀为确认缺陷 |
+| **pass** | 非故障用例断言全通过；或 `fault_ref` 用例断言全通过且 required `fault_oracles` 全通过 | 计为通过 |
 
 > **红线**：不得通过弱化由 contract 背书的断言（如把 L2 降成 L0、删去值语义判定）来让用例转绿。
 > 转绿的唯一合法路径是“断言确实臆测错了，按 contract 校准”或“确属 harness_defect 自我修复”，
 > 而非“判据本身不可信但强行放行”。`sut_unsatisfied` 与 `sdk_defect` 的区分**以 contract.md 是否将该约束列为 spec-required 为界**（见 §6）。
+
+### 4.1 fault_ref 用例的过程/否定 oracle
+
+- Stage2.6/Stage3b 必须为每个 `fault_ref` 用例提供 `fault_oracles`，且至少包含 1 条 `required=true` 的 `process` 或 `negative` oracle。
+- Stage4 在 pytest 通过后必须运行 `scripts/evaluate_fault_oracles.py`。只有 `fault_oracle_summary.classification=="passed"` 时，fault case 才能保持 `status=passed`。
+- 如果最终响应成功但 trace 中出现 forbidden error frame、unexpected 5xx、重复终态事件、id 未回带、资源/状态变化等 required oracle 失败，按证据归为 `sdk_defect` 或 `sut_unsatisfied`。
+- 如果 required oracle 缺失、unsupported 或无法从黑盒 trace/follow-up 观察验证，归为 `requires_human_review` 或 `sut_unsatisfied`，不得静默放行。
 
 ---
 
@@ -130,7 +139,7 @@ stage4 生成/执行任何用例**之前**，编排器必须探活 SUT：
 | **1 用例 = 1 Agent** | 硬性约束，违反即任务失败回滚；即使用例来自同一设计文件也独立 Agent |
 | **批次大小** | `--case-batch-size` 控制并发（默认 5），滑动窗口满载 |
 | **Agent 间无状态** | 仅经文件协议传递；结果各自记录到 `case_results.json` |
-| **轨迹一等公民** | 每条用例落 `trace/<case>.jsonl`，会话日志落 `trace/session.log`（优先设置 `AUTOTESTFLOW_TRACE_DIR`，兼容 `A2A_TRACE_DIR`）|
+| **轨迹一等公民** | 每条用例落 `trace/<case>.jsonl`，会话日志落 `trace/session.log`（优先设置 `AUTOTESTFLOW_TRACE_DIR`，兼容 `A2A_TRACE_DIR`）；`fault_ref` 用例还需由 fault oracle evaluator 读取 trace |
 
 ---
 
@@ -146,3 +155,4 @@ stage4 生成/执行任何用例**之前**，编排器必须探活 SUT：
 | 无服务时仍判失败/缺陷 | 探活不就绪 → env_issue，保留代码 |
 | 把部署配置相关字段当硬断言 | 按 deployment-config-dependent 记为观察项 |
 | 缺业务/架构判据时凭感觉放行 | 走 §3 人工裁决补位规格库 |
+| fault_ref 用例最终响应成功就写 pass | 必须先通过 required `fault_oracles`；失败/不可观察按分类记录 |

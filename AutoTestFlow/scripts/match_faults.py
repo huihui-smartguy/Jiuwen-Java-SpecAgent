@@ -428,6 +428,122 @@ def build_oracle_refs(fault: dict, contract: dict):
     return oracle_refs, reconciliation
 
 
+def _strategy_text(fault: dict) -> str:
+    strat = fault.get("test_strategy") or {}
+    return " ".join([
+        str(strat.get("trigger_pattern", "")),
+        str(strat.get("expected_behavior", "")),
+        " ".join(str(v) for v in strat.get("validation_points", []) or []),
+        " ".join(str(t) for t in fault.get("tags", []) or []),
+        str(fault.get("name", "")),
+        str(fault.get("description", "")),
+    ])
+
+
+def _expected_http_status(text: str):
+    for pat in (r"HTTP状态码\s*[=:：]?\s*(\d{3})", r"返回\s*(\d{3})", r"\b(400|401|403|404|408|409|413|429|500|502|503|504)\b"):
+        m = re.search(pat, text or "")
+        if m:
+            return int(m.group(1))
+    return None
+
+
+def _expected_error_code(oracle_refs: list, text: str):
+    for o in oracle_refs:
+        sid = o.get("spec_id", "")
+        if sid.startswith("SPEC-ERR-"):
+            code = sid.replace("SPEC-ERR-", "")
+            if code.isdigit():
+                return -int(code)
+    m = re.search(r"error\.code[^\-\d]*(-?\d+)", text or "", flags=re.IGNORECASE)
+    return int(m.group(1)) if m else None
+
+
+def _fault_authority(oracle_refs: list) -> str:
+    if any(o.get("authority") == "spec-required" and o.get("assert_level") == "L2" for o in oracle_refs):
+        return "spec-required"
+    return "fault-required"
+
+
+def build_fault_oracles(fault: dict, oracle_refs: list, contract: dict) -> list:
+    """Normalize fault-library expectations into machine-checkable trace oracles.
+
+    Every fault-driven case must include at least one required process/negative oracle
+    so a successful final response cannot mask intermediate defects.
+    """
+    text = _strategy_text(fault)
+    lower = text.lower()
+    tags = {str(t).lower() for t in fault.get("tags", []) or []}
+    authority = _fault_authority(oracle_refs)
+    expected_status = _expected_http_status(text)
+    expected_error = _expected_error_code(oracle_refs, text)
+    has_expected_error = expected_status is not None or expected_error is not None
+    cat = fault.get("_category", "")
+
+    oracles = []
+
+    def add(kind, check, expected=None, source="", required=True, spec_id=None, field=None):
+        item = {
+            "id": f"{fault.get('fault_id', 'FAULT')}:{check}:{len(oracles) + 1}",
+            "kind": kind,
+            "check": check,
+            "required": bool(required),
+            "authority": authority,
+            "assert_level": "L2" if authority in {"spec-required", "fault-required"} else "L1",
+            "source": source or "TestKnowledgeBase",
+            "on_unobservable": "requires_human_review" if required else "record_observation",
+        }
+        if expected is not None:
+            item["expected"] = expected
+        if spec_id:
+            item["spec_id"] = spec_id
+        if field:
+            item["field"] = field
+        oracles.append(item)
+
+    if expected_status is not None or expected_error is not None:
+        add("outcome", "error_code_matches", {
+            "http_status": expected_status,
+            "error_code": expected_error,
+        }, "test_strategy.expected_behavior / validation_points")
+
+    expected_5xx = expected_status is not None and expected_status >= 500
+    if not expected_5xx:
+        add("negative", "no_unexpected_5xx", {"max_status": 499}, "fault default negative oracle")
+
+    if not has_expected_error:
+        add("negative", "no_unexpected_error_frame", {"forbidden_field": "error"}, "fault default negative oracle")
+
+    if any(o.get("spec_id") == "SPEC-ID-TYPE" for o in oracle_refs) or "回带" in text or "correlation" in lower:
+        add("process", "correlation_id_preserved", {"field": "id"}, "SPEC-ID-TYPE / validation_points",
+            spec_id="SPEC-ID-TYPE", field="id")
+
+    is_sse = (
+        "sse" in lower or "stream" in lower or "流式" in text or "中断" in text
+        or "SSE" in {str(t) for t in fault.get("tags", []) or []}
+        or any(o.get("spec_id") == "SPEC-SSE" for o in oracle_refs)
+        or contract.get("has_sse") and cat == "FC-SSE"
+    )
+    if is_sse:
+        add("process", "sse_terminal_state", {"terminal_states": ["COMPLETED", "FAILED", "CANCELED", "CANCELLED", "ERROR", "DONE", "SUCCESS"]},
+            "SSE/stream fault oracle", spec_id="SPEC-SSE", field="last_event.status.state")
+        add("negative", "no_duplicate_terminal_event", {"terminal_states": ["COMPLETED", "FAILED", "CANCELED", "CANCELLED", "ERROR", "DONE", "SUCCESS"]},
+            "SSE/stream fault oracle", spec_id="SPEC-SSE", field="events")
+
+    if any(k in text for k in ("不创建", "不执行操作", "不重复处理", "不产生副作用", "状态不变", "重复提交", "幂等")):
+        add("negative", "resource_not_created", {"requires_followup_observation": True}, "validation_points")
+        add("negative", "state_not_mutated", {"requires_followup_observation": True}, "validation_points")
+
+    if any(k in text for k in ("重试", "超时", "降级", "熔断", "退避")) or tags & {"超时", "降级", "重试", "熔断"}:
+        add("process", "retry_or_timeout_observed", {"signals": ["retry", "timeout", "fallback", "degraded", "cache"]}, "validation_points")
+
+    # Hard guarantee: every fault case has at least one required process/negative oracle.
+    if not any(o["required"] and o["kind"] in {"process", "negative"} for o in oracles):
+        add("process", "trace_observed", {"min_records": 2}, "mandatory fallback process oracle")
+
+    return oracles
+
+
 def enrich_hint(fault: dict, oracle_refs: list, reconciliation: str):
     """计算 LLM 增强提示（阶段2.6b 用）。返回 {needs_bind, unbound_points, hints} 或 None。
 
@@ -666,6 +782,7 @@ def match(
 
     def _make_match(fault, scene, reasons):
         oracle_refs, recon = build_oracle_refs(fault, contract)
+        fault_oracles = build_fault_oracles(fault, oracle_refs, contract)
         rs = list(reasons)
         rs.append(f"tag:{(fault.get('tags') or ['-'])[0]}")
         m = {
@@ -685,6 +802,7 @@ def match(
             "trigger": fault.get("test_strategy", {}).get("trigger_pattern", ""),
             "expected_behavior_raw": fault.get("test_strategy", {}).get("expected_behavior", ""),
             "oracle_refs": oracle_refs,
+            "fault_oracles": fault_oracles,
             "reconciliation": recon,
             "source": "history" if fault.get("_is_history") else
                       ("project" if fault.get("_category") == "PROJECT" else "global"),

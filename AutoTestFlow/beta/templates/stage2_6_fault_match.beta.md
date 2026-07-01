@@ -29,6 +29,7 @@
   （spec-required→至多 L2；deployment-config-dependent→至多 L1；needs-runtime-verify/契约无此 specId→至多 L0 观察）。
 - **判据只来自 contract.md**：找不到匹配 specId 的 validation_point **保留为观察项**，不得臆造 specId、不得"洗绿"。
 - **契约优先**：故障 `expected_behavior_raw` 与 contract 冲突时，以 contract 为准（见任务3）。
+- **fault_oracles 不得丢失**：`match_faults.py` 已为每条故障生成 required 过程/否定 oracle。增强过程中必须原样保留；若新增/调整 `oracle_refs` 影响到可机器检查的过程/否定点，只能补充或收紧 `fault_oracles`，不得删除 required 项。
 - 【Beta · LLM Wiki 红线】`{wiki_dir}/*.md` **仅作语义参考**：可帮助理解 validation_point 含义、缩小候选 specId 范围，
   但**最终绑定必须在 contract specId 目录中实际命中**；wiki 不在 contract 中的"期望"**一律不得**形成断言或新 specId；
   断言级别仍按 contract 权威性封顶。wiki 缺失时本步骤跳过，增强逻辑与稳定模板**完全一致**。
@@ -50,6 +51,9 @@
    - 语义比对 `expected_behavior_raw` 与 contract 对应 specId 的规定：
      - **冲突**（故障期望与契约形态相悖，如故障要求 string 但契约实测为 int）→ 置 `reconciliation:"contract_conflict"`，把相关 `oracle_ref` 降为观察（L0/L1），`reconciliation_note` 记差异；该用例在 stage3b 作观察项处理，不作硬断言。
      - **仅契约静默/部署相关**（非冲突）→ 维持 `downgraded`，确认观察级别正确即可。
+4. **validate_fault_oracles**：
+   - 每个 match 必须保留 `fault_oracles`。
+   - 若缺少 `required=true` 且 `kind=process|negative` 的机器可检查项，补一条保守 `trace_observed` / `no_unexpected_5xx` / `no_unexpected_error_frame`，或标 `enrich.still_unbound` 要求人工复核；不得让 `fault_ref` 用例在 stage4 仅凭最终响应通过。
 
 处理完成后：把该 match 的 `enrich` 更新为 `{"resolved": true, "still_unbound": [...]}`（移除 `needs_bind`）。
 - 【Beta · LLM Wiki】若某条绑定参考了 wiki，可在该 match 增 `"wiki_ref": "{fault_id}"`（仅作可追溯标注，不影响断言）。
@@ -59,7 +63,7 @@
 - **原地重写** `{output_dir}/.state/fault_matches.json`：更新被增强的条目（其余逐字保留）；在 `meta` 增
   `"enrichment": {"enriched": N, "newly_bound": M, "contract_conflict": K, "still_unbound": J}`。
   - 【Beta · LLM Wiki】可在 `meta.enrichment` 增 `"wiki_assisted": W`（参考了 wiki 的绑定条数，纯统计）。
-- 保持 schema 兼容：下游 stage3b 仍按既有字段消费；`contract_conflict` 项 stage3b 作观察用例（不强断言）。
+- 保持 schema 兼容：下游 stage3b 仍按既有字段消费，并会原样透传 `fault_oracles`；`contract_conflict` 项 stage3b 作观察用例（不强断言），但 required 过程/否定 oracle 仍可阻断 pass。
 
 ### 仅返回摘要（禁止回灌完整 JSON）
 

@@ -21,7 +21,7 @@
 1. `{output_dir}/.state/stage_summary.json` — cd_list + gap_list（静态缺陷/GAP 数据源）
 2. `{output_dir}/contract.md` — 契约权威性分级表（spec-required vs config-dependent 观察）
 3. `{output_dir}/case_results.json` — 执行统计（含设计用例的 test_type / case_kind）
-4. `{output_dir}/.state/results/*.json` — 各用例详细结果（含 status/class/trace_file/oracle_refs/skip_reason/sdk_defect，glob 后并行读取）
+4. `{output_dir}/.state/results/*.json` — 各用例详细结果（含 status/class/trace_file/oracle_refs/fault_oracle_summary/fault_oracle_results/skip_reason/sdk_defect，glob 后并行读取）
 5. `{output_dir}/.state/trace/*.jsonl`（如有，按需抽样读取末帧/关键帧，用于交互轨迹摘要）
 6. `{output_dir}/.state/knowledge_matches.json` / `{output_dir}/.state/fault_matches.json` + `{output_dir}/.state/new_knowledge_candidates.json` / `{output_dir}/.state/new_faults_detected.json`（如有，TestKnowledgeBase 覆盖与自积累，见第8部分；无则省略该节）
 7. `{output_dir}/.state/professional_acceptance.json` + `{output_dir}/.state/ai_eval_readiness.json`（如有，Professional_experience 专业验收和 AI readiness，见第9部分；无则先由编排器运行 `professional_acceptance.py --mode report` 或省略该节）
@@ -65,12 +65,12 @@
 > 说明：env_issue（SUT 未起）用例无轨迹，单列标注。
 ```
 
-#### 第3部分：执行结果5分类分布
+#### 第3部分：执行结果分类分布
 
 从 `.state/results/*.json` 的 `class` 字段聚合：
 
 ```markdown
-## 3. 执行结果 5 分类分布
+## 3. 执行结果分类分布
 
 | 分类 | 数量 | 说明 |
 |------|------|------|
@@ -79,9 +79,33 @@
 | sut_unsatisfied（忽略） | X | 脚本可跑通、SUT 正常响应但断言不达成；已 skip/xfail 标注，不计失败（见第5部分） |
 | sdk_defect | X | SUT 报错/5xx/契约违例，contract 确认本应正确（确认缺陷，见第4部分） |
 | env_issue | X | 连接/就绪/依赖问题，就绪门拦截，代码已保留待复跑（非缺陷） |
+| requires_human_review | X | 故障导向用例的 required 过程/否定 oracle 缺失、unsupported 或 trace 不可观察，禁止按 pass 处理 |
 ```
 
 > 区分 sut_unsatisfied（忽略，不洗绿不改断言）、sdk_defect（确认缺陷）、env_issue（环境，不计缺陷）是本 skill 的关键，避免缺陷被 mask 或被误判。
+
+#### 第3.5部分：Fault Oracle Coverage（仅当存在 fault_oracle_summary）
+
+从 `case_results.json.summary.fault_oracle_coverage` 与每条结果的 `fault_oracle_summary` 汇总：
+
+```markdown
+## 3.5 Fault Oracle Coverage
+
+| oracle kind | passed | failed | unobservable | 说明 |
+|-------------|--------|--------|--------------|------|
+| outcome | X | X | X | 结果 oracle（错误码/HTTP 状态等） |
+| process | X | X | X | 过程 oracle（id 回带、SSE 终态、重试/超时信号等） |
+| negative | X | X | X | 否定 oracle（无 5xx、无 error frame、无重复终态、资源未创建等） |
+
+| 指标 | 数值 |
+|------|------|
+| fault_ref 用例数 | N |
+| required oracle 阻断 pass | X |
+| pytest 已通过但 fault oracle 阻断 | X |
+| 需要人工复核 | X |
+
+> `fault_ref` 用例不能仅凭最终 E2E 响应成功写 pass；required 过程/否定 oracle 失败时归入 `sdk_defect` / `sut_unsatisfied` / `requires_human_review`。
+```
 
 #### 第4部分：确认缺陷清单（仅 sdk_defect）
 
@@ -152,7 +176,8 @@
 ## 8. TestKnowledgeBase 覆盖（knowledge/fault coverage）
 
 - 知识库版本：{knowledge_base_version}；匹配条目数：{matched}（降级 {downgraded}）
-- 故障导向用例（fault_ref 非空）：{N} 条；结果分类：pass X / sdk_defect X / sut_unsatisfied X
+- 故障导向用例（fault_ref 非空）：{N} 条；结果分类：pass X / sdk_defect X / sut_unsatisfied X / requires_human_review X
+- Fault Oracle Coverage：outcome/process/negative 的 pass/fail/unobservable 统计；pytest 已通过但 fault oracle 阻断 X 条
 - 本轮自积累（record_faults）：新增候选 X 条 / 去重跳过 X 条
 
 | fault_id | 场景 | 分支 | 用例数 | sdk_defect | 说明 |
@@ -200,8 +225,9 @@ Write `{output_dir}/report.md`
 | 项目 | 结果 |
 |------|------|
 | 设计覆盖 | 场景 X / 用例 X（scenario X / dfx 占位 X） |
-| 执行5分类 | pass X / harness_defect已修 X / sut_unsatisfied忽略 X / sdk_defect X / env_issue X |
+| 执行分类 | pass X / harness_defect已修 X / sut_unsatisfied忽略 X / sdk_defect X / env_issue X / requires_human_review X |
 | 交互轨迹 | X 条（env_issue 无轨迹 X） |
+| Fault Oracle Coverage | blocked X / pytest已过但被oracle阻断 X / unobservable X |
 | 确认缺陷 | sdk_defect X 条 |
 | TestKnowledgeBase 覆盖 | 匹配 X / 故障用例 X / 新积累 X（未接入则 -） |
 | Professional Acceptance | pass X / warn X / fail X / requires_human_review X（未接入则 -） |
