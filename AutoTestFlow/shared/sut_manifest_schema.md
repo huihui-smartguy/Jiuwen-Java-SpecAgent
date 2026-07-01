@@ -1,8 +1,58 @@
-# SUT Manifest Schema (`autotestflow.sut-manifest.v1`)
+# SUT Description and Manifest Schema
 
-AutoTestFlow standard mode now receives SUT topology through a Markdown file
-with YAML front matter. The Markdown body is for human notes; only the front
-matter is parsed by `scripts/sut_manifest.py`.
+AutoTestFlow now treats `autotestflow.suts.md` as a natural-language SUT
+description by default. Users can describe components, URLs, ports,
+environment variables, dependencies, and whether each service is already
+available or must be built/started. AutoTestFlow Stage 0 converts that document
+into the canonical `autotestflow.sut-manifest.v1` shape, validates it
+deterministically with `scripts/sut_manifest.py`, and writes the normalized
+manifest consumed by later stages.
+
+Existing Markdown files with YAML front matter remain fully compatible.
+
+## Preferred Natural-Language Format
+
+```markdown
+# Test Environment
+
+[Catalog API]
+ip: 127.0.0.1
+port: 8081
+Accessible directly
+Environment variables: CATALOG_REGION
+
+[Checkout API]
+Source path: services/checkout
+URL: http://localhost:8082/actuator/health
+Requires creation in conjunction with Catalog API
+Build: mvn -q -DskipTests package
+Start: java -jar target/checkout.jar --server.port=8082
+Stop: pkill -f checkout.jar || true
+Environment variables: CHECKOUT_TOKEN=<provided at runtime>
+```
+
+Stage 0 writes:
+
+```text
+<output_dir>/
+└── .state/
+    ├── sut_description.parse.json
+    ├── sut_description.review.md
+    └── sut_manifest.normalized.json
+```
+
+Review is required when AutoTestFlow infers managed build/start commands,
+detects low-confidence or missing fields, or cannot resolve dependencies. Direct
+already-running targets with a clear base URL can continue automatically. Managed
+commands still require the existing runtime `--allow-commands` confirmation.
+
+Secret-like environment variable values are redacted in parse/review artifacts.
+
+## Canonical Manifest Shape
+
+The parser validates the canonical shape below. LLM-produced candidate manifests
+can be passed through `scripts/sut_manifest.py --candidate-manifest <json>` for
+the same deterministic checks.
 
 ```markdown
 ---
@@ -15,9 +65,9 @@ suite:
 targets:
   - id: catalog
     name: Catalog API
-    role: primary
+    role: dependency
     source:
-      path: services/catalog
+      available: false
     runtime:
       mode: predeployed
       base_url: http://localhost:8081
@@ -25,10 +75,6 @@ targets:
         method: GET
         path: /health
         expect_status_lt: 500
-    probes:
-      - name: health
-        method: GET
-        path: /health
   - id: checkout
     name: Checkout API
     role: primary
@@ -48,11 +94,10 @@ targets:
         stop: "pkill -f checkout.jar || true"
 ---
 
-# Notes
-Human-readable deployment and review notes can live here.
+# Optional human notes
 ```
 
-## Required Fields
+## Required Canonical Fields
 
 | Field | Required | Description |
 |---|:---:|---|
@@ -63,17 +108,19 @@ Human-readable deployment and review notes can live here.
 | `targets[].id` | Yes | Stable target id. Allowed characters: letters, digits, `_`, `.`, `-`. |
 | `targets[].name` | No | Human-readable target name. Defaults to `id`. |
 | `targets[].role` | No | Target role, such as `primary`, `dependency`, or `supporting`. |
-| `targets[].source.path` | Yes | Source tree path. Relative paths resolve from the manifest file directory. |
 | `targets[].runtime.mode` | Yes | `predeployed` or `managed`. |
 | `targets[].runtime.base_url` | Yes | Base URL used by contract probing and pytest execution. |
 | `targets[].runtime.readiness_probe` | Yes | `{method, path, expect_status_lt}` readiness request. |
+| `targets[].source.path` | Conditional | Required for managed targets. Direct predeployed targets may set `source.available=false`. |
 
-## Optional Fields
+## Optional Canonical Fields
 
 | Field | Description |
 |---|---|
 | `targets[].depends_on` | Target ids that should be prepared before this target. Dependency metadata controls startup/readiness ordering and report grouping; it does not create cross-target assertions. |
+| `targets[].source.available` | `false` means AutoTestFlow should skip source scan/code-only gap generation for this target and rely on live contract probing when reachable. |
 | `targets[].runtime.commands` | Optional `build`, `start`, and `stop` shell commands for managed targets. Commands are never run unless orchestration has explicit human confirmation and passes `--allow-commands`. |
+| `targets[].environment` | Redacted environment variable names, values, and env files inferred from the SUT description. |
 | `targets[].probes` | Target-specific contract probes. If omitted, `probe_contract.py` uses the existing A2A example probes as a legacy fallback. |
 | `targets[].knowledge_domain` | Overrides suite-level knowledge domain for this target. |
 | `targets[].remediation.config_path` | Target-local remediation config. If omitted, AutoTestFlow may look for `targets/<target_id>/remediation.config.json`. |
@@ -84,7 +131,10 @@ Human-readable deployment and review notes can live here.
 
 ```text
 <output_dir>/
-├── .state/sut_manifest.normalized.json
+├── .state/
+│   ├── sut_description.parse.json
+│   ├── sut_description.review.md
+│   └── sut_manifest.normalized.json
 ├── report.md
 └── targets/
     └── <target_id>/
