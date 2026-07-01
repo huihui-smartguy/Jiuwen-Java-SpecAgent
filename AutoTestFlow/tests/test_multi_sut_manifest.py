@@ -81,6 +81,44 @@ targets:
 """
 
 
+DIRECT_NL_SUT = """# SUT Description
+
+[Catalog API]
+ip: 127.0.0.1
+port: 8081
+Accessible directly
+Environment variables: API_TOKEN=secret-value, REGION
+"""
+
+
+MANAGED_NL_SUT = """# Test environment
+
+[Checkout API]
+Source path: services/checkout
+URL: http://localhost:8082/actuator/health
+Requires creation before tests
+Build: mvn -q -DskipTests package
+Start command: java -jar target/checkout.jar --server.port=8082
+Stop command: pkill -f checkout.jar || true
+Environment variables: CHECKOUT_SECRET=very-secret
+"""
+
+
+MULTI_DEP_NL_SUT = """# SUT Description
+
+[Catalog]
+URL: http://localhost:8081/health
+Accessible directly
+
+[Checkout]
+Source path: services/checkout
+URL: http://localhost:8082/actuator/health
+Requires creation in conjunction with Catalog
+Build: mvn package
+Start: java -jar target/checkout.jar
+"""
+
+
 class MultiSutManifestTests(unittest.TestCase):
     def test_valid_two_target_manifest_normalizes_paths_and_artifacts(self):
         with tempfile.TemporaryDirectory() as td:
@@ -152,6 +190,102 @@ class MultiSutManifestTests(unittest.TestCase):
         data = sut_manifest.load_manifest(str(example))
         normalized = sut_manifest.validate_and_normalize(data, manifest_path=str(example))
         self.assertEqual([t["id"] for t in normalized["targets"]], ["catalog", "checkout"])
+
+    def test_natural_language_direct_access_target_normalizes_without_source(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            manifest_path = root / "autotestflow.suts.md"
+            write(manifest_path, DIRECT_NL_SUT)
+
+            data = sut_manifest.load_manifest(str(manifest_path))
+            normalized = sut_manifest.validate_and_normalize(
+                data,
+                manifest_path=str(manifest_path),
+                output_dir=str(root / "analysis"),
+            )
+
+            self.assertEqual(normalized["input_format"], "natural_language")
+            target = normalized["targets"][0]
+            self.assertEqual(target["id"], "catalog-api")
+            self.assertEqual(target["runtime"]["mode"], "predeployed")
+            self.assertEqual(target["runtime"]["base_url"], "http://127.0.0.1:8081")
+            self.assertFalse(target["source"]["available"])
+            self.assertTrue(target["source"]["skip_code_scan"])
+            self.assertFalse(normalized["sut_description_parse"]["review_required"])
+
+    def test_natural_language_managed_target_records_commands_and_requires_review(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            manifest_path = root / "autotestflow.suts.md"
+            write(manifest_path, MANAGED_NL_SUT)
+
+            data = sut_manifest.load_manifest(str(manifest_path))
+            normalized = sut_manifest.validate_and_normalize(
+                data,
+                manifest_path=str(manifest_path),
+                output_dir=str(root / "analysis"),
+            )
+
+            target = normalized["targets"][0]
+            self.assertEqual(target["runtime"]["mode"], "managed")
+            self.assertEqual(target["runtime"]["base_url"], "http://localhost:8082")
+            self.assertEqual(target["runtime"]["readiness_probe"]["path"], "/actuator/health")
+            self.assertEqual(target["runtime"]["commands"]["build"], "mvn -q -DskipTests package")
+            self.assertTrue(normalized["sut_description_parse"]["review_required"])
+            self.assertIn(
+                "managed_runtime_requires_confirmation",
+                normalized["sut_description_parse"]["risky_inferences"],
+            )
+
+    def test_natural_language_multi_sut_dependency_maps_by_component_name(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            manifest_path = root / "autotestflow.suts.md"
+            write(manifest_path, MULTI_DEP_NL_SUT)
+
+            data = sut_manifest.load_manifest(str(manifest_path))
+            normalized = sut_manifest.validate_and_normalize(
+                data,
+                manifest_path=str(manifest_path),
+                output_dir=str(root / "analysis"),
+            )
+
+            self.assertEqual([t["id"] for t in normalized["targets"]], ["catalog", "checkout"])
+            self.assertEqual(normalized["targets"][1]["depends_on"], ["catalog"])
+
+    def test_natural_language_missing_base_url_is_review_required_and_rejected_by_validator(self):
+        text = """[Worker]\nSource path: services/worker\nRequires creation before tests\nBuild: echo build\n"""
+        candidate, parse_doc = sut_manifest.parse_natural_language_description(text, manifest_path="autotestflow.suts.md")
+        self.assertTrue(parse_doc["review"]["required"])
+        self.assertIn("missing_base_url", parse_doc["review"]["reasons"])
+        with self.assertRaisesRegex(sut_manifest.ManifestError, "runtime.base_url"):
+            sut_manifest.validate_and_normalize(candidate, manifest_path="autotestflow.suts.md")
+
+    def test_secret_like_environment_values_are_redacted(self):
+        candidate, parse_doc = sut_manifest.parse_natural_language_description(DIRECT_NL_SUT, manifest_path="autotestflow.suts.md")
+        variables = parse_doc["candidate_manifest"]["targets"][0]["environment"]["variables"]
+        by_name = {item["name"]: item for item in variables}
+        self.assertEqual(by_name["API_TOKEN"]["value"], sut_manifest.REDACTED_VALUE)
+        self.assertTrue(by_name["API_TOKEN"]["redacted"])
+        self.assertIsNone(by_name["REGION"]["value"])
+
+    def test_write_outputs_parse_review_artifacts_for_natural_language(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            manifest_path = root / "autotestflow.suts.md"
+            write(manifest_path, DIRECT_NL_SUT)
+
+            rc = sut_manifest.main([
+                "--sut-manifest", str(manifest_path),
+                "--output-dir", str(root / "analysis"),
+                "--write",
+            ])
+            self.assertEqual(rc, 0)
+            self.assertTrue((root / "analysis/.state/sut_manifest.normalized.json").exists())
+            self.assertTrue((root / "analysis/.state/sut_description.parse.json").exists())
+            self.assertTrue((root / "analysis/.state/sut_description.review.md").exists())
+            normalized_doc = json.loads((root / "analysis/.state/sut_manifest.normalized.json").read_text(encoding="utf-8"))
+            self.assertNotIn("_sut_description_parse", normalized_doc)
 
 
 class ProbeContractMultiSutTests(unittest.TestCase):

@@ -12,7 +12,7 @@
 /auto-test-flow requirements.md --sut-manifest autotestflow.suts.md --remediation-config remediation.config.json --faults on --fault-enrich on --remediate on
 ```
 
-运行前只需按项目实际情况修改 `requirements.md`、`autotestflow.suts.md` 和 `remediation.config.json`。该命令默认接入 `TestKnowledgeBase/registry.json`、启用故障库 LLM 增强，并在报告后进入门控式 fault analysis / remediation；外发 evidence issue 仍必须经过人工确认门和 `switches.allow_open_issue=true`。
+运行前只需按项目实际情况修改 `requirements.md`、自然语言 `autotestflow.suts.md` 和 `remediation.config.json`。该命令默认接入 `TestKnowledgeBase/registry.json`、启用故障库 LLM 增强，并在报告后进入门控式 fault analysis / remediation；外发 evidence issue 仍必须经过人工确认门和 `switches.allow_open_issue=true`。
 
 ---
 
@@ -22,7 +22,7 @@
 |------|------|
 | **定位** | 需求驱动的测试智能体，按"测试维度"抽象 |
 | **测试维度** | `scenario`（场景化，**已实现**）+ `dfx`（性能/可靠性/安全/兼容性等，**规划中、并行轨道**） |
-| **输入** | 需求文档 + SUT manifest（Markdown + YAML，支持一个或多个 target）+ 默认 TestKnowledgeBase + remediation 配置（门控修复） |
+| **输入** | 需求文档 + 自然语言 SUT 描述（兼容 legacy Markdown+YAML manifest，支持一个或多个 target）+ 默认 TestKnowledgeBase + remediation 配置（门控修复） |
 | **输出** | 每个 target 的校准契约 + 测试场景 + 测试设计 + Python 黑盒用例 + target 报告，以及根级汇总报告 |
 | **被测对象** | Java/Spring、Python Web/API、C++ service/RPC 或未知源码树的 SUT target。每个 target 的协议/端点/响应契约真实形态以 target-local `contract.md` 为准 |
 | **测试栈** | stage4 生成 Python `pytest` + `httpx` 黑盒用例，只经对外协议观测 |
@@ -57,17 +57,17 @@ AutoTestFlow/                       # Skill 本体
 │   ├── java_scan_guide.md          # Java/Spring profile 附录
 │   ├── code_analysis_template.md   # stage2 输出模板
 │   ├── scenario_schema.md          # 场景 JSON schema
-│   └── sut_manifest_schema.md      # 多 SUT manifest schema
+│   └── sut_manifest_schema.md      # 自然语言 SUT 描述 + canonical manifest schema
 ├── reference/                      # 通用黑盒复用资产（按 contract.md 专化）
 │   ├── http_client.py              # 通用黑盒 HTTP 客户端 + 交互记录器
 │   ├── conftest.py                 # pytest fixtures + 轨迹日志
 │   └── client_reference.md         # 客户端方法表与判据约定
 ├── examples/
 │   ├── a2a/                        # A2A 示例锚点（客户端专化 + 参考资产）
-│   └── multi_sut/                  # 多 SUT manifest 示例
+│   └── multi_sut/                  # 多 SUT 示例
 ├── scripts/                        # 确定性脚本（scan-prep / probe / match / merge / select / aggregate / record）
 │   ├── prepare_code_scan.py        # stage2 profile adapter 预扫描计划
-│   ├── sut_manifest.py             # Markdown+YAML manifest 解析 / legacy 单 SUT 归一化
+│   ├── sut_manifest.py             # 自然语言 SUT 描述解析 / YAML manifest 兼容 / legacy 单 SUT 归一化
 │   ├── sut_runtime.py              # target readiness + managed runtime command guard
 │   ├── probe_contract.py           # stage2.5 target 探活校准 → target-local contract.md
 │   ├── knowledge_base.py           # TestKnowledgeBase registry/glob adapter
@@ -115,7 +115,7 @@ cp -r AutoTestFlow <你的项目>/.claude/skills/
 | 参数 | 说明 |
 |------|------|
 | `需求.md` | 需求文档路径（必填） |
-| `--sut-manifest` | Markdown + YAML SUT manifest（标准模式主入口；可声明多个 target、源码路径、运行方式、readiness、probe plan、依赖与 remediation 配置） |
+| `--sut-manifest` | 自然语言 SUT 描述（标准模式主入口；可写 target、URL/IP/端口、环境变量、依赖、源码路径、运行方式；兼容 legacy Markdown+YAML manifest） |
 | `--sut-base-url` | **Deprecated compatibility only**：兼容旧单 target 调用；内部归一化为 `target_id=default` 的 manifest |
 | `--knowledge-root` | TestKnowledgeBase 根目录，供 stage2.6 registry/glob discovery 使用（默认仓内 `TestKnowledgeBase`） |
 | `--knowledge-domain` | 知识域过滤：`all` / `rest_api` / `web` / `agent` / `dfx`，或逗号分隔 package_id |
@@ -130,18 +130,40 @@ cp -r AutoTestFlow <你的项目>/.claude/skills/
 > 完整参数（`--output-dir` / `--case-batch-size` / `--p0-count` / `--pr` / `--commit` 等）以 `SKILL.md`《参数》为准；此处仅列常用项。
 > 故障库（规格库）的详细用法见下文 **§7 故障库（规格库）使用**。
 
-Manifest 示例见 [`examples/multi_sut/sut-manifest.md`](examples/multi_sut/sut-manifest.md)，schema 见
+`autotestflow.suts.md` 推荐用自然语言编写，例如：
+
+```markdown
+[Catalog API]
+ip: 127.0.0.1
+port: 8081
+Accessible directly
+
+[Checkout API]
+Source path: services/checkout
+URL: http://localhost:8082/actuator/health
+Requires creation in conjunction with Catalog API
+Build: mvn -q -DskipTests package
+Start: java -jar target/checkout.jar --server.port=8082
+Environment variables: CHECKOUT_TOKEN=<provided at runtime>
+```
+
+AutoTestFlow 会在 stage0 生成 `.state/sut_description.parse.json`、`.state/sut_description.review.md`
+和 `.state/sut_manifest.normalized.json`。推断出 managed build/start 命令、低置信或缺字段时会先进入人工确认；legacy YAML manifest 继续兼容。示例见 [`examples/multi_sut/sut-manifest.md`](examples/multi_sut/sut-manifest.md)，schema 见
 [`shared/sut_manifest_schema.md`](shared/sut_manifest_schema.md)。每个 target 会被归一化到
 `<output_dir>/targets/<target_id>/`，并拥有独立的 `contract.md`、`.state/results/`、`.state/trace/`
 和 `report.md`，根级 `report.md` 只做聚合。
+
+直接可访问但没有源码的 target 会标记为 `source.available=false`：跳过源码扫描/code-only GAP，
+但仍在可达时执行 stage2.5 契约探测和后续黑盒测试。
 
 ---
 
 ## 6. 端到端流程
 
 ```
-需求.md + SUT manifest + TestKnowledgeBase + remediation.config.json
+需求.md + SUT 描述 + TestKnowledgeBase + remediation.config.json
    │
+   ├─ stage0   自然语言 SUT 描述解析 → parse/review/normalized manifest（必要时人工确认）
    ├─ stage1   需求侧场景分析（flow/framework/quality）        ← 人工裁决 ✅（FP 拆分/场景边界把关）
    ├─ target loop（每个 targets/<target_id>/ 独立执行）
    │  ├─ stage2   通用代码扫描 → code_scan_plan.json + code_analysis.md（profile adapter）
