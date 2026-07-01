@@ -17,6 +17,12 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+
+import output_layout as layout
+
 # ============================================================
 # 门禁脚本模板
 # ============================================================
@@ -385,14 +391,14 @@ def generate_validate_script(forbidden: dict, user_entry_apis: list[str] | None 
 
 
 def build_defect_hints(
-    cases: list[dict], state_dir: str
+    cases: list[dict], output_dir: str
 ) -> dict:
     """构建缺陷线索文件：case_id → 相关缺陷/异常/约束。
 
     匹配链：case.source_scene → fp_refs → code_entry → exception_catalog/constraint_catalog
     """
     # 读取 s3a_enriched_index（FP→code_entry映射）
-    enriched_path = os.path.join(state_dir, "s3a_enriched_index.json")
+    enriched_path = layout.existing_target_artifact(output_dir, "s3a_enriched_index")
     if not os.path.exists(enriched_path):
         return {}
     enriched = load_json(enriched_path)
@@ -410,7 +416,7 @@ def build_defect_hints(
         scene_to_fps[si["id"]] = si.get("fp_refs", [])
 
     # 读取 s2_code_facts（异常目录+约束目录+缺陷清单）
-    facts_path = os.path.join(state_dir, "s2_code_facts.json")
+    facts_path = layout.existing_target_artifact(output_dir, "s2_code_facts")
     if not os.path.exists(facts_path):
         return {}
     facts = load_json(facts_path)
@@ -493,11 +499,10 @@ def main():
     args = parser.parse_args()
 
     output_dir = args.output_dir
-    state_dir = os.path.join(output_dir, ".state")
 
     # 读取输入
-    cases = load_json(os.path.join(output_dir, "test_design.json"))
-    stage_summary = load_json(os.path.join(state_dir, "stage_summary.json"))
+    cases = load_json(layout.existing_target_artifact(output_dir, "test_design"))
+    stage_summary = load_json(layout.existing_target_artifact(output_dir, "stage_summary"))
 
     # P0筛选
     p0_cases = select_p0_cases(cases, args.p0_count)
@@ -521,7 +526,7 @@ def main():
             "remaining_count": len(remaining),
         },
     }
-    save_json(os.path.join(state_dir, "p0_selection.json"), p0_selection)
+    save_json(layout.target_artifact(output_dir, "p0_selection", create_parent=True), p0_selection)
 
     # 生成 validate_test.py
     forbidden = extract_forbidden_names(stage_summary)
@@ -529,15 +534,15 @@ def main():
     user_entry = stage_summary.get("user_test_entry")
     user_entry_apis = user_entry.get("forbidden_direct_apis", []) if user_entry else None
     script_content = generate_validate_script(forbidden, user_entry_apis)
-    validate_path = os.path.join(state_dir, "validate_test.py")
+    validate_path = layout.target_artifact(output_dir, "validate_test", create_parent=True)
     with open(validate_path, "w", encoding="utf-8") as f:
         f.write(script_content)
 
     # 生成 defect_hints.json（仅在有有效内容时写入）
-    defect_hints = build_defect_hints(cases, state_dir)
+    defect_hints = build_defect_hints(cases, output_dir)
     has_content = defect_hints.get("code_defects") or defect_hints.get("case_hints")
     if has_content:
-        save_json(os.path.join(state_dir, "defect_hints.json"), defect_hints)
+        save_json(layout.target_artifact(output_dir, "defect_hints", create_parent=True), defect_hints)
         n_hinted = len(defect_hints.get("case_hints", {}))
         n_cd = len(defect_hints.get("code_defects", []))
         print(f"Defect hints: {n_hinted} cases, {n_cd} defects")

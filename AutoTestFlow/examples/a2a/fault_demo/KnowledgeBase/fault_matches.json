@@ -2,7 +2,7 @@
   "meta": {
     "fault_lib_version": "1.1.0",
     "overlay_version": null,
-    "contract_path": "contract.md",
+    "contract_path": "Contract/contract.md",
     "generated_by": "match_faults.py",
     "contract_probe_status": "reachable",
     "stats": {

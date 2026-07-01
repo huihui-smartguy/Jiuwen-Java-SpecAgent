@@ -141,7 +141,9 @@ class MultiSutManifestTests(unittest.TestCase):
             self.assertEqual(worker["depends_on"], ["api"])
             self.assertTrue(api["source"]["abs_path"].endswith("services/api"))
             self.assertTrue(api["target_output_dir"].endswith("analysis/targets/api"))
-            self.assertTrue(worker["contract_path"].endswith("analysis/targets/worker/contract.md"))
+            self.assertTrue(worker["contract_path"].endswith("analysis/targets/worker/Contract/contract.md"))
+            self.assertTrue(worker["artifact_dirs"]["test_cases"].endswith("analysis/targets/worker/TestCases"))
+            self.assertTrue(worker["artifacts"]["report"].endswith("analysis/targets/worker/Reports/report.md"))
 
             written = sut_manifest.write_normalized(normalized)
             self.assertTrue(Path(written).exists())
@@ -281,10 +283,10 @@ class MultiSutManifestTests(unittest.TestCase):
                 "--write",
             ])
             self.assertEqual(rc, 0)
-            self.assertTrue((root / "analysis/.state/sut_manifest.normalized.json").exists())
-            self.assertTrue((root / "analysis/.state/sut_description.parse.json").exists())
-            self.assertTrue((root / "analysis/.state/sut_description.review.md").exists())
-            normalized_doc = json.loads((root / "analysis/.state/sut_manifest.normalized.json").read_text(encoding="utf-8"))
+            self.assertTrue((root / "analysis/RunMetadata/sut_manifest.normalized.json").exists())
+            self.assertTrue((root / "analysis/RunMetadata/sut_description.parse.json").exists())
+            self.assertTrue((root / "analysis/RunMetadata/sut_description.review.md").exists())
+            normalized_doc = json.loads((root / "analysis/RunMetadata/sut_manifest.normalized.json").read_text(encoding="utf-8"))
             self.assertNotIn("_sut_description_parse", normalized_doc)
 
 
@@ -354,8 +356,8 @@ class RuntimeOrchestrationTests(unittest.TestCase):
                 "readiness_probe": {"method": "GET", "path": "/health", "expect_status_lt": 500},
                 "commands": commands or {},
             },
-            "ready_path": str(out / "targets" / target_id / ".state" / "sut_ready.json"),
-            "case_results_path": str(out / "targets" / target_id / "case_results.json"),
+            "ready_path": str(out / "targets" / target_id / "Contract" / "sut_ready.json"),
+            "case_results_path": str(out / "targets" / target_id / "TestRun" / "case_results.json"),
         }
 
     def test_predeployed_readiness_success(self):

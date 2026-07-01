@@ -7,9 +7,9 @@ assertion is not enough for a fault_ref case to pass: required process and
 negative oracles must also be satisfied by the black-box trace.
 
 The evaluator is intentionally deterministic and black-box. It reads:
-  - test_design.json for the case contract and fault_oracles
-  - .state/results/{case_id}.json for the current Stage4 result
-  - .state/trace/*.jsonl for observable requests, responses, and SSE frames
+  - TestCases/test_design.json for the case contract and fault_oracles
+  - TestRun/results/{case_id}.json for the current Stage4 result
+  - TestRun/trace/*.jsonl for observable requests, responses, and SSE frames
 
 It never submits issues, mutates the SUT, or inspects implementation internals.
 """
@@ -19,8 +19,13 @@ import json
 import os
 import re
 import sys
-from glob import glob
 from typing import Any, Optional, Set, Tuple
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+
+import output_layout as layout
 
 
 PASS_STATUSES = {"passed", "pass"}
@@ -62,7 +67,7 @@ def relpath(path: str, root: str) -> str:
 
 
 def load_case(output_dir: str, case_id: str) -> dict:
-    design = load_json(os.path.join(output_dir, "test_design.json"), default=[])
+    design = load_json(layout.existing_target_artifact(output_dir, "test_design"), default=[])
     cases = []
     if isinstance(design, list):
         cases = design
@@ -78,7 +83,6 @@ def load_case(output_dir: str, case_id: str) -> dict:
 
 
 def trace_candidates(output_dir: str, case_id: str, result: dict) -> list:
-    trace_dir = os.path.join(output_dir, ".state", "trace")
     candidates = []
 
     trace_file = result.get("trace_file") if isinstance(result, dict) else None
@@ -92,9 +96,15 @@ def trace_candidates(output_dir: str, case_id: str, result: dict) -> list:
         f"{safe}.jsonl",
         f"test_{safe}.jsonl",
     ]
-    candidates.extend(os.path.join(trace_dir, name) for name in names)
-    candidates.extend(sorted(glob(os.path.join(trace_dir, f"*{safe}*.jsonl"))))
-    candidates.extend(sorted(glob(os.path.join(trace_dir, f"*{str(case_id).lower()}*.jsonl"))))
+    for name in names:
+        candidates.append(layout.trace_file(output_dir, name))
+        candidates.append(os.path.join(output_dir, ".state", "trace", name))
+    candidates.extend(layout.existing_glob(output_dir, f"TestRun/trace/*{safe}*.jsonl", f".state/trace/*{safe}*.jsonl"))
+    candidates.extend(layout.existing_glob(
+        output_dir,
+        f"TestRun/trace/*{str(case_id).lower()}*.jsonl",
+        f".state/trace/*{str(case_id).lower()}*.jsonl",
+    ))
 
     seen = set()
     out = []
@@ -488,7 +498,7 @@ def missing_oracle_result(fault_ref: str) -> list:
 
 
 def evaluate(output_dir: str, case_id: str, result_path: Optional[str] = None) -> Tuple[list, dict]:
-    result_path = result_path or os.path.join(output_dir, ".state", "results", f"{case_id}.json")
+    result_path = result_path or layout.existing_result_file(output_dir, case_id)
     result = load_json(result_path, default={}) or {}
     case = load_case(output_dir, case_id)
 
@@ -527,7 +537,9 @@ def first_blocking_result(results: list) -> dict:
 
 
 def write_back(output_dir: str, case_id: str, result_path: Optional[str], results: list, summary: dict) -> dict:
-    result_path = result_path or os.path.join(output_dir, ".state", "results", f"{case_id}.json")
+    result_path = result_path or layout.existing_result_file(output_dir, case_id)
+    if not os.path.exists(result_path):
+        result_path = layout.result_file(output_dir, case_id, create_parent=True)
     result = load_json(result_path, default={}) or {"case_id": case_id}
     result.setdefault("case_id", case_id)
     if summary.get("fault_ref"):

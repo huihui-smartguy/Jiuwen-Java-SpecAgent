@@ -1,6 +1,6 @@
 # 阶段6 子Agent：通用故障分析目标（fault_analysis）
 
-> 本模板处理 `.state/fault_analysis/analysis_plan.json` 中的单个 target。它是可扩展的诊断模板：
+> 本模板处理 `FaultAnalysis/analysis_plan.json` 中的单个 target。它是可扩展的诊断模板：
 > Web / REST / Agent / DFX 只是初始 profile，后续新增故障模式应通过
 > `shared/fault_analysis_profiles.json` 扩展，而不是改写本模板的分支结构。
 > 本阶段**只读 + 产文件**，不执行 push / PR / issue 等外发动作。
@@ -16,12 +16,12 @@
 
 ## 自行读取的文件
 
-1. `{output_dir}/.state/fault_analysis/analysis_plan.json`：读取当前 `target_id` 的完整 target。
+1. `{output_dir}/FaultAnalysis/analysis_plan.json`：读取当前 `target_id` 的完整 target。
 2. `{contract_path}`：仅用于确认 specId 权威性；`contract.md` 是唯一 oracle。
-3. `{output_dir}/.state/results/{case_id}.json`：若 `case_id` 存在，读取实际执行分类与 expected/actual；若有 `fault_oracle_summary`，读取 required oracle 的失败/不可观察明细。
+3. `{output_dir}/TestRun/results/{case_id}.json`：若 `case_id` 存在，读取实际执行分类与 expected/actual；若有 `fault_oracle_summary`，读取 required oracle 的失败/不可观察明细。
 4. `{output_dir}/{trace_file}`：若存在，摘录触发请求与证明实际结果的响应/事件帧。
-5. `{output_dir}/.state/fault_matches.json`：若 `fault_id` 命中，读取故障库 validation point 与 expected behavior。
-6. `{output_dir}/.state/s2_code_facts.json` 与 `{clone_path}`：仅当需要定位源码或生成 patch 时读取。
+5. `{output_dir}/KnowledgeBase/fault_matches.json`：若 `fault_id` 命中，读取故障库 validation point 与 expected behavior。
+6. `{output_dir}/FeatureAnalysis/s2_code_facts.json` 与 `{clone_path}`：仅当需要定位源码或生成 patch 时读取。
 7. `wiki/{fault_id}.md`：若 beta wiki 开启且文件存在，只作 advisory 叙事素材，不作判据。
 
 ## 输出文件

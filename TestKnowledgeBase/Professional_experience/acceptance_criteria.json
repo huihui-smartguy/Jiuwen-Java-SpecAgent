@@ -23,8 +23,8 @@
         "flaky、慢测试、环境依赖失败必须在报告中单列。"
       ],
       "evidence_required": [
-        "test_design.json",
-        "case_results.json",
+        "TestCases/test_design.json",
+        "TestRun/case_results.json",
         "runtime_summary",
         "failure_classification"
       ],
@@ -44,9 +44,9 @@
       "default_status_when_missing": "warn",
       "risk_scope": "pr",
       "evidence_map": {
-        "test_design.json": "test cases exist and include priority/case_kind",
-        "case_results.json": "execution summary exists",
-        "failure_classification": ".state/results/*.json include class/status"
+        "TestCases/test_design.json": "test cases exist and include priority/case_kind",
+        "TestRun/case_results.json": "execution summary exists",
+        "failure_classification": "TestRun/results/*.json include class/status"
       }
     },
     {
@@ -63,8 +63,8 @@
         "E2E 失败必须有 trace 和定位线索。"
       ],
       "evidence_required": [
-        "test_design.json",
-        "scene_tc_mapping.json",
+        "TestCases/test_design.json",
+        "TestCases/scene_tc_mapping.json",
         "trace_files"
       ],
       "release_gate": "warn",
@@ -82,8 +82,8 @@
       "default_status_when_missing": "warn",
       "risk_scope": "release",
       "evidence_map": {
-        "test_design.json": "case_kind/test_type distribution can be calculated",
-        "trace_files": ".state/trace/*.jsonl exists for executed E2E cases"
+        "TestCases/test_design.json": "case_kind/test_type distribution can be calculated",
+        "trace_files": "TestRun/trace/*.jsonl exists for executed E2E cases"
       }
     },
     {
@@ -101,8 +101,8 @@
         "contract 中未定义的行业经验点只能作为观察或人工裁决项。"
       ],
       "evidence_required": [
-        "contract.md",
-        "test_design.json",
+        "Contract/contract.md",
+        "TestCases/test_design.json",
         "oracle_refs"
       ],
       "release_gate": "must_for_release",
@@ -121,8 +121,8 @@
       "default_status_when_missing": "fail",
       "risk_scope": "release",
       "evidence_map": {
-        "contract.md": "contract authority table exists",
-        "test_design.json": "oracle_refs cite specId values",
+        "Contract/contract.md": "contract authority table exists",
+        "TestCases/test_design.json": "oracle_refs cite specId values",
         "oracle_refs": "case oracle_refs contain at least one contract-backed reference"
       }
     },
@@ -141,9 +141,9 @@
         "故障断言必须经过 contract-first 调和。"
       ],
       "evidence_required": [
-        "fault_matches.json",
-        "test_design.json",
-        "case_results.json"
+        "KnowledgeBase/fault_matches.json",
+        "TestCases/test_design.json",
+        "TestRun/case_results.json"
       ],
       "release_gate": "must_for_release",
       "applies_to": [
@@ -161,9 +161,9 @@
       "default_status_when_missing": "warn",
       "risk_scope": "release",
       "evidence_map": {
-        "knowledge_matches.json": ".state/knowledge_matches.json or .state/fault_matches.json exists",
-        "test_design.json": "fault_ref cases exist when knowledge matches exist",
-        "case_results.json": "fault_ref execution results are classified"
+        "KnowledgeBase/knowledge_matches.json": "KnowledgeBase/knowledge_matches.json or KnowledgeBase/fault_matches.json exists",
+        "TestCases/test_design.json": "fault_ref cases exist when knowledge matches exist",
+        "TestRun/case_results.json": "fault_ref execution results are classified"
       }
     },
     {
@@ -183,8 +183,8 @@
       "evidence_required": [
         "trace_files",
         "logs",
-        "case_results.json",
-        "report.md"
+        "TestRun/case_results.json",
+        "Reports/report.md"
       ],
       "release_gate": "warn",
       "applies_to": [
@@ -202,9 +202,9 @@
       "default_status_when_missing": "warn",
       "risk_scope": "release",
       "evidence_map": {
-        "trace_files": ".state/trace/*.jsonl or result trace_file references exist",
+        "trace_files": "TestRun/trace/*.jsonl or result trace_file references exist",
         "logs": "log or trace evidence is linked from results",
-        "case_results.json": "results include status/class"
+        "TestRun/case_results.json": "results include status/class"
       }
     },
     {
@@ -244,7 +244,7 @@
       "default_status_when_missing": "requires_human_review",
       "risk_scope": "high_risk_release",
       "evidence_map": {
-        "dfx_cases": "test_design.json contains test_type=dfx or DFX knowledge matches",
+        "dfx_cases": "TestCases/test_design.json contains test_type=dfx or DFX knowledge matches",
         "fault_injection_scope": "DFX fault refs or explicit scope note exists",
         "metrics": "metrics or recovery evidence exists"
       }
@@ -436,7 +436,7 @@
       "evidence_required": [
         "tool_call_trace",
         "agent_trace",
-        "case_results.json"
+        "TestRun/case_results.json"
       ],
       "release_gate": "must_for_agent_release",
       "applies_to": [
@@ -457,7 +457,7 @@
         "project_profile": "AI/Agent signals detected in requirements, scenarios, code facts, or test design",
         "tool_call_trace": "tool_call_id/input/output/error evidence exists",
         "agent_trace": "agent decision trace exists",
-        "case_results.json": "tool-use case results are classified"
+        "TestRun/case_results.json": "tool-use case results are classified"
       }
     },
     {
@@ -565,8 +565,8 @@
         "报告包含 contract coverage、fault coverage、professional acceptance 和 residual risk。"
       ],
       "evidence_required": [
-        "report.md",
-        "case_results.json",
+        "Reports/report.md",
+        "TestRun/case_results.json",
         "trace_files"
       ],
       "release_gate": "must_for_release",
@@ -583,8 +583,8 @@
       "default_status_when_missing": "fail",
       "risk_scope": "release",
       "evidence_map": {
-        "report.md": "report exists and includes actionable sections",
-        "case_results.json": "classification summary exists",
+        "Reports/report.md": "report exists and includes actionable sections",
+        "TestRun/case_results.json": "classification summary exists",
         "trace_files": "failure evidence and trace links exist"
       }
     }

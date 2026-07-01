@@ -41,5 +41,5 @@
       "publishable": true
     }
   ],
-  "fault_analysis_plan": ".state/fault_analysis/analysis_plan.json"
+  "fault_analysis_plan": "FaultAnalysis/analysis_plan.json"
 }

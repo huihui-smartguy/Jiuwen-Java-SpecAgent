@@ -2,7 +2,7 @@
 """
 aggregate_results.py - 阶段4-agg：结果聚合
 
-读取 .state/results/*.json，生成 case_results.json。
+读取 TestRun/results/*.json，生成 TestRun/case_results.json。
 替代原 Agent 方式，执行时间 <1s。
 
 用法：
@@ -13,7 +13,12 @@ import argparse
 import json
 import os
 import sys
-from glob import glob
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+
+import output_layout as layout
 
 
 def load_json(path: str):
@@ -55,12 +60,9 @@ def merge_fault_oracle_coverage(coverage: dict, summary: dict):
 
 
 def aggregate(output_dir: str):
-    state_dir = os.path.join(output_dir, ".state")
-    results_dir = os.path.join(state_dir, "results")
-
     # 读取所有结果文件
     details = {}
-    for fp in sorted(glob(os.path.join(results_dir, "*.json"))):
+    for fp in layout.existing_glob(output_dir, "TestRun/results/*.json", ".state/results/*.json"):
         r = load_json(fp)
         case_id = os.path.basename(fp).replace(".json", "")
         status = classify_status(r.get("status", "unknown"))
@@ -126,7 +128,7 @@ def aggregate(output_dir: str):
     }
 
     # 写入
-    output_path = os.path.join(output_dir, "case_results.json")
+    output_path = layout.target_artifact(output_dir, "case_results", create_parent=True)
     save_json(output_path, case_results)
 
     # 输出摘要

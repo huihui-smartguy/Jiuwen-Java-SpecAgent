@@ -8,7 +8,7 @@
   "repo": {
     "upstream_url": "fake_repo",
     "ref": "v0.1.0",
-    "clone_path": ".state/remediation/repo",
+    "clone_path": "Remediation/repo",
     "local_branch_prefix": "autotestflow/fix",
     "business_code_roots": ["src/main/java"],
     "selftest_roots": ["src/test/java"],

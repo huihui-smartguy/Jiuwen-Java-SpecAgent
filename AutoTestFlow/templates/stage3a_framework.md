@@ -34,9 +34,9 @@
 
 ### 第二步：读取输入（并行 Read）
 
-- `{output_dir}/.state/s1_index.json` — 需求侧场景索引（获取 scenario_index 的 id/name/fp_refs）
-- `{output_dir}/.state/framework_scenes.json` — **stage2 派生的框架 E2E 场景**（内部产物，含 `framework_scenes[{id,category,modules,call_chain,entry_hint,related_fp_hint}]`）
-- `{output_dir}/.state/stage_summary.json` — module_role
+- `{output_dir}/FeatureAnalysis/s1_index.json` — 需求侧场景索引（获取 scenario_index 的 id/name/fp_refs）
+- `{output_dir}/FeatureAnalysis/framework_scenes.json` — **stage2 派生的框架 E2E 场景**（内部产物，含 `framework_scenes[{id,category,modules,call_chain,entry_hint,related_fp_hint}]`）
+- `{output_dir}/FeatureAnalysis/stage_summary.json` — module_role
 
 输出统计：`S1索引: 场景 X | 框架场景 N`
 
@@ -69,7 +69,7 @@
 
 **4a. 批量读取关联flow场景（最多2次Read）**
 
-从 s1_index.json 的 scenario_index 中找到所有需要关联的 flow 场景，一次性并行 Read 对应的 `{output_dir}/.state/{file}`。禁止对同一场景文件读取超过1次。
+从 s1_index.json 的 scenario_index 中找到所有需要关联的 flow 场景，一次性并行 Read 对应的 `{output_dir}/FeatureAnalysis/{file}`。禁止对同一场景文件读取超过1次。
 
 **4b. 批量映射（内联完成，不调用工具）**
 
@@ -123,7 +123,7 @@
 
 ### 第六步：写入输出
 
-**Write `{output_dir}/.state/s3a_framework.json`**：
+**Write `{output_dir}/FeatureAnalysis/s3a_framework.json`**：
 
 ```json
 {
@@ -151,7 +151,7 @@
 | 生成framework场景 | N |
 | 组合追问触发 | 是/否（触发类型：...） |
 | 组合发现 | N 个（如未触发则填0） |
-| 输出 | .state/s3a_framework.json |
+| 输出 | FeatureAnalysis/s3a_framework.json |
 ```
 
 ## ---END-PROMPT---

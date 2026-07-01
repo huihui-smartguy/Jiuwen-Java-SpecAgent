@@ -5,11 +5,11 @@ professional_acceptance.py - deterministic Professional_experience adapter.
 This script consumes TestKnowledgeBase/Professional_experience and emits advisory
 artifacts for AutoTestFlow Phase A-D:
 
-  Phase A: .state/professional_acceptance.json for stage5 reporting
-  Phase B: .state/professional_case_guidance.json for stage3b case design
-  Phase C: .state/professional_acceptance.seed.json and
-           .state/professional_acceptance.code_gaps.json for stage1/stage2 gates
-  Phase D: .state/ai_eval_readiness.json for AI/Agent readiness
+  Phase A: QualityGates/professional_acceptance.json for stage5 reporting
+  Phase B: QualityGates/professional_case_guidance.json for stage3b case design
+  Phase C: QualityGates/professional_acceptance.seed.json and
+           QualityGates/professional_acceptance.code_gaps.json for stage1/stage2 gates
+  Phase D: QualityGates/ai_eval_readiness.json for AI/Agent readiness
 
 It never creates strong assertions. L2 oracles remain contract.md-only.
 """
@@ -20,7 +20,12 @@ import os
 import re
 import sys
 from collections import Counter
-from glob import glob
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+
+import output_layout as layout
 
 
 AI_KEYWORDS = (
@@ -120,7 +125,7 @@ def load_professional_knowledge(knowledge_root):
 
 
 def load_test_design(output_dir):
-    path = os.path.join(output_dir, "test_design.json")
+    path = layout.existing_target_artifact(output_dir, "test_design")
     data = safe_load_json(path, None)
     if isinstance(data, list):
         return data
@@ -130,16 +135,23 @@ def load_test_design(output_dir):
 
 
 def collect_evidence(output_dir):
-    state = os.path.join(output_dir, ".state")
     test_design = load_test_design(output_dir)
-    result_files = sorted(glob(os.path.join(state, "results", "*.json")))
+    result_files = layout.existing_glob(output_dir, "TestRun/results/*.json", ".state/results/*.json")
     results = [safe_load_json(p, {}) for p in result_files]
-    trace_files = sorted(glob(os.path.join(state, "trace", "*.jsonl")))
-    stage_summary = safe_load_json(os.path.join(state, "stage_summary.json"), {}) or {}
-    code_facts = safe_load_json(os.path.join(state, "s2_code_facts.json"), {}) or {}
-    fault_matches = safe_load_json(os.path.join(state, "fault_matches.json"), {}) or {}
-    knowledge_matches = safe_load_json(os.path.join(state, "knowledge_matches.json"), {}) or {}
-    case_results = safe_load_json(os.path.join(output_dir, "case_results.json"), {}) or {}
+    trace_files = layout.existing_glob(output_dir, "TestRun/trace/*.jsonl", ".state/trace/*.jsonl")
+    stage_summary_path = layout.existing_target_artifact(output_dir, "stage_summary")
+    code_facts_path = layout.existing_target_artifact(output_dir, "s2_code_facts")
+    fault_matches_path = layout.existing_target_artifact(output_dir, "fault_matches")
+    knowledge_matches_path = layout.existing_target_artifact(output_dir, "knowledge_matches")
+    contract_path = layout.existing_target_artifact(output_dir, "contract")
+    test_design_path = layout.existing_target_artifact(output_dir, "test_design")
+    case_results_path = layout.existing_target_artifact(output_dir, "case_results")
+    report_path = layout.existing_target_artifact(output_dir, "report")
+    stage_summary = safe_load_json(stage_summary_path, {}) or {}
+    code_facts = safe_load_json(code_facts_path, {}) or {}
+    fault_matches = safe_load_json(fault_matches_path, {}) or {}
+    knowledge_matches = safe_load_json(knowledge_matches_path, {}) or {}
+    case_results = safe_load_json(case_results_path, {}) or {}
 
     oracle_cases = [
         c for c in test_design
@@ -155,9 +167,9 @@ def collect_evidence(output_dir):
     classes = Counter((r.get("class") or r.get("status") or "unknown") for r in results)
 
     text_parts = [
-        read_text(os.path.join(output_dir, "requirement_analysis.md")),
-        read_text(os.path.join(output_dir, "code_analysis.md")),
-        read_text(os.path.join(output_dir, "contract.md")),
+        read_text(layout.existing_target_artifact(output_dir, "requirement_analysis")),
+        read_text(layout.existing_target_artifact(output_dir, "code_analysis")),
+        read_text(contract_path),
         flatten_text(test_design),
         flatten_text(stage_summary),
         flatten_text(code_facts),
@@ -168,21 +180,21 @@ def collect_evidence(output_dir):
 
     return {
         "paths": {
-            "contract": os.path.join(output_dir, "contract.md"),
-            "test_design": os.path.join(output_dir, "test_design.json"),
-            "case_results": os.path.join(output_dir, "case_results.json"),
-            "stage_summary": os.path.join(state, "stage_summary.json"),
-            "fault_matches": os.path.join(state, "fault_matches.json"),
-            "knowledge_matches": os.path.join(state, "knowledge_matches.json"),
+            "contract": contract_path,
+            "test_design": test_design_path,
+            "case_results": case_results_path,
+            "stage_summary": stage_summary_path,
+            "fault_matches": fault_matches_path,
+            "knowledge_matches": knowledge_matches_path,
         },
         "exists": {
-            "contract.md": os.path.exists(os.path.join(output_dir, "contract.md")),
-            "test_design.json": os.path.exists(os.path.join(output_dir, "test_design.json")),
-            "case_results.json": os.path.exists(os.path.join(output_dir, "case_results.json")),
-            "stage_summary.json": os.path.exists(os.path.join(state, "stage_summary.json")),
-            "fault_matches.json": os.path.exists(os.path.join(state, "fault_matches.json")),
-            "knowledge_matches.json": os.path.exists(os.path.join(state, "knowledge_matches.json")),
-            "report.md": os.path.exists(os.path.join(output_dir, "report.md")),
+            "contract.md": os.path.exists(contract_path),
+            "test_design.json": os.path.exists(test_design_path),
+            "case_results.json": os.path.exists(case_results_path),
+            "stage_summary.json": os.path.exists(stage_summary_path),
+            "fault_matches.json": os.path.exists(fault_matches_path),
+            "knowledge_matches.json": os.path.exists(knowledge_matches_path),
+            "report.md": os.path.exists(report_path),
         },
         "test_design": test_design,
         "results": results,
@@ -262,36 +274,46 @@ def missing_default(criterion):
 def evidence_hit(evidence, names):
     counts = evidence["counts"]
     exists = evidence["exists"]
+    canonical_names = {
+        "Contract/contract.md": "contract.md",
+        "KnowledgeBase/fault_matches.json": "fault_matches.json",
+        "KnowledgeBase/knowledge_matches.json": "knowledge_matches.json",
+        "Reports/report.md": "report.md",
+        "TestCases/scene_tc_mapping.json": "scene_tc_mapping.json",
+        "TestCases/test_design.json": "test_design.json",
+        "TestRun/case_results.json": "case_results.json",
+    }
     hits = []
     missing = []
     for name in names:
+        lookup = canonical_names.get(name, name)
         hit = False
-        if name in ("test_design.json", "scene_tc_mapping.json"):
+        if lookup in ("test_design.json", "scene_tc_mapping.json"):
             hit = exists["test_design.json"] and counts["cases"] > 0
-        elif name == "case_results.json":
+        elif lookup == "case_results.json":
             hit = exists["case_results.json"] or counts["results"] > 0
-        elif name in ("runtime_summary", "failure_classification"):
+        elif lookup in ("runtime_summary", "failure_classification"):
             hit = bool(evidence["classes"]) or exists["case_results.json"]
-        elif name == "contract.md":
+        elif lookup == "contract.md":
             hit = exists["contract.md"]
-        elif name == "oracle_refs":
+        elif lookup == "oracle_refs":
             hit = counts["oracle_cases"] > 0
-        elif name in ("fault_matches.json", "knowledge_matches.json"):
+        elif lookup in ("fault_matches.json", "knowledge_matches.json"):
             hit = exists["fault_matches.json"] or exists["knowledge_matches.json"]
-        elif name == "trace_files":
+        elif lookup == "trace_files":
             hit = counts["trace_files"] > 0 or any(r.get("trace_file") for r in evidence["results"])
-        elif name in ("logs", "tool_call_trace", "agent_trace"):
-            hit = name in evidence["corpus"].lower() or counts["trace_files"] > 0
-        elif name == "dfx_cases":
+        elif lookup in ("logs", "tool_call_trace", "agent_trace"):
+            hit = lookup in evidence["corpus"].lower() or counts["trace_files"] > 0
+        elif lookup == "dfx_cases":
             hit = counts["dfx_cases"] > 0 or "dfx" in evidence["corpus"].lower()
-        elif name in ("fault_injection_scope", "metrics", "recovery_trace"):
-            hit = name in evidence["corpus"].lower() or "dfx" in evidence["corpus"].lower()
-        elif name == "report.md":
+        elif lookup in ("fault_injection_scope", "metrics", "recovery_trace"):
+            hit = lookup in evidence["corpus"].lower() or "dfx" in evidence["corpus"].lower()
+        elif lookup == "report.md":
             hit = exists["report.md"]
-        elif name == "project_profile":
+        elif lookup == "project_profile":
             hit = True
         else:
-            hit = name.lower() in evidence["corpus"].lower()
+            hit = lookup.lower() in evidence["corpus"].lower()
         (hits if hit else missing).append(name)
     return hits, missing
 
@@ -480,13 +502,12 @@ def build_outputs(knowledge, evidence, profile):
 
 
 def write_outputs(output_dir, outputs, mode):
-    state = os.path.join(output_dir, ".state")
     targets = {
-        "seed": os.path.join(state, "professional_acceptance.seed.json"),
-        "code-gaps": os.path.join(state, "professional_acceptance.code_gaps.json"),
-        "case-guidance": os.path.join(state, "professional_case_guidance.json"),
-        "report": os.path.join(state, "professional_acceptance.json"),
-        "ai-readiness": os.path.join(state, "ai_eval_readiness.json"),
+        "seed": layout.target_artifact(output_dir, "professional_acceptance_seed", create_parent=True),
+        "code-gaps": layout.target_artifact(output_dir, "professional_acceptance_code_gaps", create_parent=True),
+        "case-guidance": layout.target_artifact(output_dir, "professional_case_guidance", create_parent=True),
+        "report": layout.target_artifact(output_dir, "professional_acceptance", create_parent=True),
+        "ai-readiness": layout.target_artifact(output_dir, "ai_eval_readiness", create_parent=True),
     }
     selected = {
         "seed": ["seed"],

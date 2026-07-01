@@ -2,9 +2,9 @@
 """
 record_faults.py - 阶段5 子步：TestKnowledgeBase 闭环自积累（仅 sdk_defect）
 
-读取 .state/results/*.json，仅把 class==sdk_defect（contract 背书的真实违例）蒸馏为
+读取 TestRun/results/*.json，仅把 class==sdk_defect（contract 背书的真实违例）蒸馏为
 知识候选条目，去重后写入 TestKnowledgeBase 项目级 overlay（默认，不污染全局精选库）。
-默认 dry-run（只打印 + 写 .state/new_knowledge_candidates.json 和兼容 .state/new_faults_detected.json）；
+默认 dry-run（只打印 + 写 KnowledgeBase/new_knowledge_candidates.json 和兼容 KnowledgeBase/new_faults_detected.json）；
 --write 才落库。
 
 安全收敛（对比 README 设想的 update_fault_library.py）：
@@ -25,13 +25,17 @@ import json
 import os
 import re
 import sys
-from glob import glob
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
 
 from knowledge_base import (
     default_knowledge_root,
     load_faults as load_knowledge_faults,
     recording_policy,
 )
+import output_layout as layout
 
 
 def load_json(path: str):
@@ -112,10 +116,9 @@ def _next_hist_seq(known_ids: set) -> int:
 
 
 def collect_sdk_defects(output_dir: str):
-    """读取 .state/results/*.json，返回 class==sdk_defect 的 (case_id, result) 列表。"""
-    results_dir = os.path.join(output_dir, ".state", "results")
+    """读取 TestRun/results/*.json，返回 class==sdk_defect 的 (case_id, result) 列表。"""
     out = []
-    for fp in sorted(glob(os.path.join(results_dir, "*.json"))):
+    for fp in layout.existing_glob(output_dir, "TestRun/results/*.json", ".state/results/*.json"):
         r = load_json(fp)
         case_id = r.get("case_id") or os.path.basename(fp).replace(".json", "")
         cls = r.get("class") or r.get("status")
@@ -165,7 +168,7 @@ def distill(case_id: str, r: dict, case_ctx: dict, seq: int) -> dict:
 
 def main():
     parser = argparse.ArgumentParser(description="阶段5 子步：sdk_defect → TestKnowledgeBase 候选自积累")
-    parser.add_argument("--output-dir", required=True, help="输出目录（含 .state/results/）")
+    parser.add_argument("--output-dir", required=True, help="输出目录（含 TestRun/results/）")
     parser.add_argument("--knowledge-root", default=None, help="TestKnowledgeBase 根目录（默认自动探测仓内 TestKnowledgeBase）")
     parser.add_argument("--fault-lib", default=None, help="显式故障库路径（兼容旧 demo；默认读取 TestKnowledgeBase 包）")
     parser.add_argument("--overlay-path", default=None, help="项目级 overlay 路径（默认来自 TestKnowledgeBase registry）")
@@ -190,7 +193,7 @@ def main():
 
     # 用例上下文（fault_ref / 名称 / trigger）
     case_ctx_map = {}
-    td_path = os.path.join(args.output_dir, "test_design.json")
+    td_path = layout.existing_target_artifact(args.output_dir, "test_design")
     if os.path.exists(td_path):
         try:
             td = load_json(td_path)
@@ -230,8 +233,8 @@ def main():
         new_entries.append(entry)
 
     # dry-run 产物
-    candidate_path = os.path.join(args.output_dir, policy["candidate_output"])
-    legacy_detected_path = os.path.join(args.output_dir, policy["legacy_candidate_output"])
+    candidate_path = layout.target_artifact(args.output_dir, "new_knowledge_candidates", create_parent=True)
+    legacy_detected_path = layout.target_artifact(args.output_dir, "new_faults_detected", create_parent=True)
     payload = {
         "generated_by": "record_faults.py",
         "mode": "write" if args.write else "dry-run",

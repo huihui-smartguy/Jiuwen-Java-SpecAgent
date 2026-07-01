@@ -11,7 +11,7 @@
 
 - **不读取需求侧任何文件**（requirement_analysis.md / s1_*.json）
 - **不生成测试场景，只编录源码事实与框架场景候选**
-- 被测系统（SUT）可能是 Java/Spring、Python Web/API、C++ service/RPC 或未知技术栈；必须根据 `.state/code_scan_plan.json` 选择 adapter，不得假设一定是 Java/Spring。
+- 被测系统（SUT）可能是 Java/Spring、Python Web/API、C++ service/RPC 或未知技术栈；必须根据 `FeatureAnalysis/code_scan_plan.json` 选择 adapter，不得假设一定是 Java/Spring。
 - stage2 事实只作为 stage2.5 契约校准的静态线索；真实断言形态最终以 `contract.md` 为准。
 
 ---
@@ -20,7 +20,7 @@
 
 ### 第零步：准备或读取代码扫描计划
 
-如果 `{output_dir}/.state/code_scan_plan.json` 不存在，先运行：
+如果 `{output_dir}/FeatureAnalysis/code_scan_plan.json` 不存在，先运行：
 
 ```bash
 python3 {skill_dir}/scripts/prepare_code_scan.py --code-path {code_path} --output-dir {output_dir}
@@ -28,7 +28,7 @@ python3 {skill_dir}/scripts/prepare_code_scan.py --code-path {code_path} --outpu
 
 然后读取：
 
-1. `{output_dir}/.state/code_scan_plan.json` — profile 选择、证据、P0/P1/P2 搜索 hints
+1. `{output_dir}/FeatureAnalysis/code_scan_plan.json` — profile 选择、证据、P0/P1/P2 搜索 hints
 2. `{skill_dir}/shared/code_scan_profiles.json` — adapter profile 定义
 
 记录 `primary_profile`、`language`、`frameworks`、`confidence`。低置信度或未知 profile 时，所有无法从源码证明的运行时形态必须标 `needs-runtime-verify`。
@@ -55,7 +55,7 @@ python3 {skill_dir}/scripts/prepare_code_scan.py --code-path {code_path} --outpu
 
 - 探测源码布局、构建文件、服务启动点、公开路由/接口声明、协议文档或网关注册。
 - 读取命中的入口文件、build/config 小文件、公开协议文件（如 OpenAPI/proto/schema）和必要的模型文件。
-- 如 `{output_dir}/.state/skeleton/*` 存在（请求/响应样例），可读取作为线缆形态线索，但仍不得读取需求侧文件。
+- 如 `{output_dir}/FeatureAnalysis/skeleton/*` 存在（请求/响应样例），可读取作为线缆形态线索，但仍不得读取需求侧文件。
 
 #### 2b. P1 — 入口、错误、模型、序列化文件
 
@@ -204,7 +204,7 @@ stage2 不读需求文档，因此不判断需求覆盖；覆盖判定留给 sta
 
 ### 第十一步：派生框架 E2E 场景
 
-从源码结构派生 `.state/framework_scenes.json`，供 stage3a-fw 使用：
+从源码结构派生 `FeatureAnalysis/framework_scenes.json`，供 stage3a-fw 使用：
 
 1. 模块分类：核心引擎、数据存储、通信、编排、插件、配置、工具。
 2. 调用链：从用户入口沿依赖/调用/注册关系追溯。
@@ -229,7 +229,7 @@ stage2 不读需求文档，因此不判断需求覆盖；覆盖判定留给 sta
 
 按以下顺序写入，每写完一个文件立即确认成功：
 
-1. **Write `{output_dir}/.state/stage_summary.json`**
+1. **Write `{output_dir}/FeatureAnalysis/stage_summary.json`**
 
 ```json
 {
@@ -254,11 +254,11 @@ stage2 不读需求文档，因此不判断需求覆盖；覆盖判定留给 sta
 
 `user_test_entry` 仅当 `module_role="支持性组件"` 时写入。
 
-2. **Write `{output_dir}/code_analysis.md`**
+2. **Write `{output_dir}/FeatureAnalysis/code_analysis.md`**
 
 按 `code_analysis_template.md` 填写人类可读报告，必须包含 profile、扫描范围、入口、错误、约束、序列化、模块角色、缺陷、code_only、统计。
 
-3. **Write `{output_dir}/.state/s2_code_facts.json`**
+3. **Write `{output_dir}/FeatureAnalysis/s2_code_facts.json`**
 
 保持既有字段，同时在 `meta` 增加：
 
@@ -268,11 +268,11 @@ stage2 不读需求文档，因此不判断需求覆盖；覆盖判定留给 sta
   "language": "python",
   "frameworks": ["fastapi"],
   "profile_confidence": 0.9,
-  "scan_plan": ".state/code_scan_plan.json"
+  "scan_plan": "FeatureAnalysis/code_scan_plan.json"
 }
 ```
 
-4. **Write `{output_dir}/.state/framework_scenes.json`**
+4. **Write `{output_dir}/FeatureAnalysis/framework_scenes.json`**
 
 按第十一步 schema 输出，并在 `meta.source_profile` 写入 `primary_profile`。
 

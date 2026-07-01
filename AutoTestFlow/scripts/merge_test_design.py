@@ -15,6 +15,12 @@ import sys
 from pathlib import Path
 from collections import defaultdict
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+
+import output_layout as layout
+
 
 def load_json(path: str) -> dict | list:
     with open(path, "r", encoding="utf-8") as f:
@@ -29,8 +35,7 @@ def save_json(path: str, data, indent=2):
 
 def glob_batch_files(output_dir: str) -> list[str]:
     """扫描test_design_batch_*.json文件。"""
-    d = Path(output_dir)
-    return sorted(str(f) for f in d.glob("test_design_batch_*.json"))
+    return layout.existing_glob(output_dir, "TestCases/test_design_batch_*.json", "test_design_batch_*.json")
 
 
 def load_all_test_cases(batch_files: list[str]) -> list[dict]:
@@ -127,14 +132,16 @@ def main():
 
     # 2. 加载enriched索引和framework数据（用于覆盖验证）
     enriched_index = {}
-    enriched_dir = os.path.join(output_dir, ".state", "s3a_enriched")
-    enriched_index_path = os.path.join(output_dir, ".state", "s3a_enriched_index.json")
+    enriched_dir = layout.s3a_enriched_dir(output_dir)
+    if not os.path.exists(enriched_dir):
+        enriched_dir = os.path.join(output_dir, ".state", "s3a_enriched")
+    enriched_index_path = layout.existing_target_artifact(output_dir, "s3a_enriched_index")
 
     if os.path.exists(enriched_index_path):
         enriched_index = load_json(enriched_index_path)
 
     framework_data = {}
-    framework_path = os.path.join(output_dir, ".state", "s3a_framework.json")
+    framework_path = layout.existing_target_artifact(output_dir, "s3a_framework")
     if os.path.exists(framework_path):
         framework_data = load_json(framework_path)
 
@@ -148,7 +155,7 @@ def main():
         print("[OK] 场景覆盖验证通过")
 
     # 4. 生成test_design.json
-    test_design_path = os.path.join(output_dir, "test_design.json")
+    test_design_path = layout.target_artifact(output_dir, "test_design", create_parent=True)
     save_json(test_design_path, all_cases)
     print(f"输出: {test_design_path}")
 
@@ -164,7 +171,7 @@ def main():
         "missing_scenes": missing
     }
 
-    mapping_path = os.path.join(output_dir, "scene_tc_mapping.json")
+    mapping_path = layout.target_artifact(output_dir, "scene_tc_mapping", create_parent=True)
     save_json(mapping_path, mapping_data)
     print(f"输出: {mapping_path}")
 
@@ -176,7 +183,7 @@ def main():
             "function_points": enriched_index.get("function_points", []),
             "flow_scenarios": scenarios
         }
-        e2e_path = os.path.join(output_dir, "e2e_scenes.json")
+        e2e_path = layout.target_artifact(output_dir, "e2e_scenes_json", create_parent=True)
         save_json(e2e_path, e2e_data)
         print(f"输出: {e2e_path}")
 

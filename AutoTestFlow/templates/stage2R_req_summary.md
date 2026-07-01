@@ -17,7 +17,7 @@
 | stage_summary.json | 含 module_role + cd_list | module_role=独立功能 + cd_list=[] |
 
 > 注：纯需求模式无源码序列化事实，阶段2.5 的 contract.md 只能走静态兜底（全部标 needs-runtime-verify）或依赖真实探测；编排器据此决定是否跳过 contract 校准。
-> 注：纯需求模式无 stage2，不产 `.state/framework_scenes.json`；**框架场景改由 stage3aR 从需求侧派生**（标 needs-code/needs-runtime-verify），覆盖能力受限。
+> 注：纯需求模式无 stage2，不产 `FeatureAnalysis/framework_scenes.json`；**框架场景改由 stage3aR 从需求侧派生**（标 needs-code/needs-runtime-verify），覆盖能力受限。
 
 ---
 
@@ -25,7 +25,7 @@
 
 ### 第一步：读取输入
 
-Read `{output_dir}/.state/s1_index.json`
+Read `{output_dir}/FeatureAnalysis/s1_index.json`
 
 从中提取：
 - `function_points` 数组 — FP清单
@@ -42,7 +42,7 @@ Read `{output_dir}/.state/s1_index.json`
 
 ### 第三步：生成 stage_summary.json
 
-Write `{output_dir}/.state/stage_summary.json`：
+Write `{output_dir}/FeatureAnalysis/stage_summary.json`：
 
 ```json
 {
@@ -67,7 +67,7 @@ Write `{output_dir}/.state/stage_summary.json`：
 | 项目 | 结果 |
 |------|------|
 | 模式 | 纯需求模式 |
-| 输出文件 | .state/stage_summary.json |
+| 输出文件 | FeatureAnalysis/stage_summary.json |
 | FP功能点 | X 个（P0: X, P1: X, P2: X） |
 | 场景总数 | X（flow X / quality X） |
 | cd_list | 空数组（纯需求模式） |
