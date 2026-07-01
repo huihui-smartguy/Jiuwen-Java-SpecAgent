@@ -80,24 +80,24 @@ class FaultOracleNormalizationTests(unittest.TestCase):
 class FaultOracleEvaluatorTests(unittest.TestCase):
     def build_case(self, root, case_id, fault_oracles=None, fault_ref="F-TEST-001", status="passed"):
         out = Path(root)
-        write_json(out / "test_design.json", [{
+        write_json(out / "TestCases" / "test_design.json", [{
             "case_id": case_id,
             "fault_ref": fault_ref,
             "fault_oracles": fault_oracles or [],
         }])
-        write_json(out / ".state" / "results" / f"{case_id}.json", {
+        write_json(out / "TestRun" / "results" / f"{case_id}.json", {
             "case_id": case_id,
             "status": status,
             "class": None,
             "fault_ref": fault_ref,
-            "trace_file": f".state/trace/{case_id}.jsonl",
+            "trace_file": f"TestRun/trace/{case_id}.jsonl",
         })
         return out
 
     def evaluate_and_write(self, out, case_id):
         results, summary = evaluate_fault_oracles.evaluate(str(out), case_id)
         evaluate_fault_oracles.write_back(str(out), case_id, None, results, summary)
-        return json.loads((out / ".state" / "results" / f"{case_id}.json").read_text(encoding="utf-8"))
+        return json.loads((out / "TestRun" / "results" / f"{case_id}.json").read_text(encoding="utf-8"))
 
     def test_final_response_passes_but_error_frame_becomes_sdk_defect(self):
         with tempfile.TemporaryDirectory() as td:
@@ -109,7 +109,7 @@ class FaultOracleEvaluatorTests(unittest.TestCase):
                 "required": True,
                 "authority": "fault-required",
             }])
-            write_trace(out / ".state" / "trace" / f"{case_id}.jsonl", [
+            write_trace(out / "TestRun" / "trace" / f"{case_id}.jsonl", [
                 {"kind": "request", "method": "POST", "url": "/rpc", "body": {"id": "1"}},
                 {"kind": "response", "method": "POST", "status_code": 200,
                  "body": {"result": {"ok": True}, "error": {"code": -32603}}},
@@ -134,7 +134,7 @@ class FaultOracleEvaluatorTests(unittest.TestCase):
                 "authority": "fault-required",
                 "expected": {"terminal_states": ["COMPLETED"]},
             }])
-            write_trace(out / ".state" / "trace" / f"{case_id}.jsonl", [
+            write_trace(out / "TestRun" / "trace" / f"{case_id}.jsonl", [
                 {"kind": "sse_event", "idx": 1, "event": {"event": "message", "data": {"status": "RUNNING"}}},
             ])
 
@@ -154,7 +154,7 @@ class FaultOracleEvaluatorTests(unittest.TestCase):
                 "authority": "fault-required",
                 "expected": {"terminal_states": ["COMPLETED"]},
             }])
-            write_trace(out / ".state" / "trace" / f"{case_id}.jsonl", [
+            write_trace(out / "TestRun" / "trace" / f"{case_id}.jsonl", [
                 {"kind": "sse_event", "idx": 1, "event": {"event": "message", "data": {"state": "COMPLETED"}}},
                 {"kind": "sse_event", "idx": 2, "event": {"event": "message", "data": {"state": "COMPLETED"}}},
             ])
@@ -174,7 +174,7 @@ class FaultOracleEvaluatorTests(unittest.TestCase):
                 "required": True,
                 "authority": "fault-required",
             }])
-            write_trace(out / ".state" / "trace" / f"{case_id}.jsonl", [
+            write_trace(out / "TestRun" / "trace" / f"{case_id}.jsonl", [
                 {"kind": "request", "method": "POST", "url": "/items", "body": {"name": "x"}},
                 {"kind": "response", "method": "POST", "status_code": 200, "body": {"result": {"ok": True}}},
             ])
@@ -188,8 +188,8 @@ class FaultOracleEvaluatorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             out = Path(td)
             case_id = "TC_NORMAL"
-            write_json(out / "test_design.json", [{"case_id": case_id, "name": "normal"}])
-            write_json(out / ".state" / "results" / f"{case_id}.json", {
+            write_json(out / "TestCases" / "test_design.json", [{"case_id": case_id, "name": "normal"}])
+            write_json(out / "TestRun" / "results" / f"{case_id}.json", {
                 "case_id": case_id,
                 "status": "passed",
                 "class": None,
@@ -203,7 +203,7 @@ class FaultOracleEvaluatorTests(unittest.TestCase):
     def test_aggregate_counts_pytest_passed_but_fault_oracle_blocked(self):
         with tempfile.TemporaryDirectory() as td:
             out = Path(td)
-            write_json(out / ".state" / "results" / "TC_BLOCKED.json", {
+            write_json(out / "TestRun" / "results" / "TC_BLOCKED.json", {
                 "case_id": "TC_BLOCKED",
                 "status": "sdk_defect",
                 "pytest_status": "passed",
@@ -221,7 +221,7 @@ class FaultOracleEvaluatorTests(unittest.TestCase):
             })
 
             aggregate_results.aggregate(str(out))
-            case_results = json.loads((out / "case_results.json").read_text(encoding="utf-8"))
+            case_results = json.loads((out / "TestRun" / "case_results.json").read_text(encoding="utf-8"))
 
             self.assertEqual(case_results["summary"]["fault_oracle_failed"], 1)
             self.assertEqual(case_results["summary"]["final_pytest_passed_but_fault_oracle_failed"], 1)

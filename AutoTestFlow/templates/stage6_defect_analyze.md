@@ -1,6 +1,6 @@
 # 阶段6 子Agent：单个可修复 contract defect 的深度分析 + 修复产出
 
-> 本模板由编排器对 `.state/remediation/plan.json` 中**每个 patchable contract defect** 各启动一个子 Agent
+> 本模板由编排器对 `Remediation/plan.json` 中**每个 patchable contract defect** 各启动一个子 Agent
 >（`run_in_background=True`）。通用/未来故障模式使用 `templates/stage6_fault_analyze.md`。
 > 只读分析 + 产出文件，**不做任何外发副作用**（issue 提交由 stage7 在强制门后执行；PR 自动提交已移除）。
 > 红线见 `shared/remediation_rules.md`：契约唯一权威、修 SUT 使其符合契约、**绝不弱化测试洗绿**。
@@ -16,11 +16,11 @@
 ## 你要自行读取的文件（按需，命名读取，勿全量回灌）
 
 1. `{contract_path}` —— 违例 `spec_id` 所在行 + §7「字段权威性分级表」。**只有 spec-required 违例才修**。
-2. `{output_dir}/.state/results/{case_id}.json` —— `sdk_defect{spec_id,field,expected,actual}`；若有 `fault_oracle_summary`，同时读取 required oracle 的失败/不可观察明细。
+2. `{output_dir}/TestRun/results/{case_id}.json` —— `sdk_defect{spec_id,field,expected,actual}`；若有 `fault_oracle_summary`，同时读取 required oracle 的失败/不可观察明细。
 3. `{output_dir}/{trace_file}` —— 真实请求/响应/SSE 帧；摘录**触发请求** + **证明 actual 的响应帧**。
-4. `{output_dir}/.state/fault_matches.json` —— 若 `fault_ref` 命中：取其 `fault_id/name/severity`、
+4. `{output_dir}/KnowledgeBase/fault_matches.json` —— 若 `fault_ref` 命中：取其 `fault_id/name/severity`、
    `oracle_refs[].validation_point`、`expected_behavior_raw`（**规格库知识**半边证据）。
-5. `{output_dir}/.state/s2_code_facts.json` —— `entry_catalog[].source_file/class/method` 定位业务码。
+5. `{output_dir}/FeatureAnalysis/s2_code_facts.json` —— `entry_catalog[].source_file/class/method` 定位业务码。
 6. `{clone_path}` 下的**真实源码** —— 用 Grep/Read 跟踪 `source_file` 与调用链，定位根因。
 
 ## 步骤
@@ -47,7 +47,7 @@
 
 ## 输出与返回
 
-- 写入目录：`{output_dir}/.state/remediation/defects/{case_id}/`
+- 写入目录：`{output_dir}/Remediation/defects/{case_id}/`
   （`root_cause.md`、`evidence.json`、`fix_solution.md`、`patch.diff`(可选)、`regression_test.diff`(可选)、`issue.md`、`confidence.json`）。
 - **仅返回一行摘要**（禁止回灌 diff/JSON 全文）：
   `[stage6:{case_id}] localizable=<bool> confidence=<lvl> files=<n> needs_human=<bool>`

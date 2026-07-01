@@ -35,7 +35,7 @@ Stage 0 writes:
 
 ```text
 <output_dir>/
-└── .state/
+└── RunMetadata/
     ├── sut_description.parse.json
     ├── sut_description.review.md
     └── sut_manifest.normalized.json
@@ -131,24 +131,47 @@ targets:
 
 ```text
 <output_dir>/
-├── .state/
+├── RunMetadata/
 │   ├── sut_description.parse.json
 │   ├── sut_description.review.md
 │   └── sut_manifest.normalized.json
-├── report.md
+├── FeatureAnalysis/
+├── Reports/
+│   └── report.md
 └── targets/
     └── <target_id>/
-        ├── contract.md
-        ├── test_design.json
-        ├── case_results.json
-        ├── report.md
-        └── .state/
-            ├── contract_samples.json
-            ├── sut_ready.json
-            ├── results/
-            └── trace/
+        ├── FeatureAnalysis/
+        │   ├── code_scan_plan.json
+        │   ├── s1_index.json
+        │   ├── s1_scenarios/
+        │   ├── s2_code_facts.json
+        │   ├── stage_summary.json
+        │   ├── s3a_enriched/
+        │   └── s3a_enriched_index.json
+        ├── Contract/
+        │   ├── contract.md
+        │   ├── contract_samples.json
+        │   └── sut_ready.json
+        ├── KnowledgeBase/
+        │   ├── knowledge_matches.json
+        │   ├── fault_matches.json
+        │   └── fault_contract_alignment.md
+        ├── QualityGates/
+        ├── TestCases/
+        │   ├── test_design.json
+        │   ├── scene_tc_mapping.json
+        │   └── e2e_scenes.json
+        ├── TestRun/
+        │   ├── tests/
+        │   ├── results/
+        │   ├── trace/
+        │   └── case_results.json
+        ├── Reports/
+        │   └── report.md
+        ├── FaultAnalysis/
+        └── Remediation/
 ```
 
-Each target keeps its own `contract.md`; contracts must not be merged across
+Each target keeps its own `Contract/contract.md`; contracts must not be merged across
 targets. Strong executable assertions remain contract-first and must cite the
 target-local contract.

@@ -15,7 +15,7 @@
 - 流式/SSE 事件形态臆测错（事件是 oneof，state/标识路径随形态不同）
 - 自描述字段臆测错（某字段实为部署相关基址，并非固定值）
 
-本阶段产出 **`{target_output_dir}/contract.md`** 作为该 target 的**唯一权威契约**：用真实响应（优先）+ 源码事实（兜底）确定每个响应形态，并区分 **spec-required（规约必然）** vs **deployment-config-dependent（部署配置相关）**。多 SUT 模式下严禁把不同 target 的契约合并。
+本阶段产出 **`{target_output_dir}/Contract/contract.md`** 作为该 target 的**唯一权威契约**：用真实响应（优先）+ 源码事实（兜底）确定每个响应形态，并区分 **spec-required（规约必然）** vs **deployment-config-dependent（部署配置相关）**。多 SUT 模式下严禁把不同 target 的契约合并。
 
 ## ⚠️ 核心约束
 
@@ -30,8 +30,8 @@
 ### 第一步：读取参考文件（并行 Read）
 
 1. `{skill_dir}/shared/scenario_schema.md` — schema
-2. `{target_output_dir}/.state/s2_code_facts.json` — target 源码序列化事实（`serialization_facts`：响应包装/id类型/枚举前缀/事件oneof/错误码/卡片字段）
-3. `{target_output_dir}/code_analysis.md` — 人类可读的序列化契约事实章节（辅助）
+2. `{target_output_dir}/FeatureAnalysis/s2_code_facts.json` — target 源码序列化事实（`serialization_facts`：响应包装/id类型/枚举前缀/事件oneof/错误码/卡片字段）
+3. `{target_output_dir}/FeatureAnalysis/code_analysis.md` — 人类可读的序列化契约事实章节（辅助）
 
 ### 第二步：真实 SUT 探测（可达则执行）
 
@@ -42,12 +42,12 @@ python3 {skill_dir}/scripts/probe_contract.py \
   --target-id {target_id} \
   --base-url {sut_base_url} \
   [--probe-plan {target_probe_plan_json}] \
-  --output {target_output_dir}/.state/contract_samples.json
+  --output {target_output_dir}/Contract/contract_samples.json
 ```
 
 - 探测覆盖：自描述端点（如能力/服务描述端点）、典型成功响应（含 result 包装）、流式/SSE 事件序列、典型错误响应（错误码）。
 - 脚本不可达/连接失败/超时 → 记 `probe_status=unreachable`，**进入第四步（静态兜底）**，不报错退出。
-- 探测成功 → Read `{target_output_dir}/.state/contract_samples.json`，记 `probe_status=reachable`。
+- 探测成功 → Read `{target_output_dir}/Contract/contract_samples.json`，记 `probe_status=reachable`。
 
 ### 第三步：交叉校准（探测可达时）
 
@@ -70,9 +70,9 @@ python3 {skill_dir}/scripts/probe_contract.py \
 - 能从源码确定的形态 → 正常写入契约，标 `来源=源码:file:line`
 - 源码无法确定的形态（如 oneof 实际帧序列、部署相关 url 实际值）→ 标 **`needs-runtime-verify`**，提示该形态待真实服务确认，下游断言对此项应放宽或标记为待复测
 
-### 第五步：写入权威契约 `{target_output_dir}/contract.md`
+### 第五步：写入权威契约 `{target_output_dir}/Contract/contract.md`
 
-Write `{target_output_dir}/contract.md`，结构如下（每个形态条目分配稳定 **specId**，供下游引用）：
+Write `{target_output_dir}/Contract/contract.md`，结构如下（每个形态条目分配稳定 **specId**，供下游引用）：
 
 ```markdown
 # SUT 契约（权威）

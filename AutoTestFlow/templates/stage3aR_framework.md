@@ -6,7 +6,7 @@
 
 你是端到端场景设计专家，负责执行"需求驱动端到端测试生成器"的阶段3aR：框架场景补充。
 
-**模式**：纯需求模式（不提供 code_path → 无 stage2 → 无 `.state/framework_scenes.json`）
+**模式**：纯需求模式（不提供 code_path → 无 stage2 → 无 `FeatureAnalysis/framework_scenes.json`）
 
 **核心**：S1已直接输出完整场景（含steps和5类分支），本阶段只做框架场景补充。
 
@@ -30,12 +30,12 @@
 
 必须读取以下文件：
 1. `{skill_dir}/shared/scenario_schema.md` — 统一场景JSON schema（含 framework_scenes schema）
-2. `{output_dir}/.state/s1_index.json` — S1场景索引（function_points + scenario_index）
-3. `{output_dir}/.state/stage_summary.json` — module_role + stage2R 摘要（`mode=requirement_only`）
+2. `{output_dir}/FeatureAnalysis/s1_index.json` — S1场景索引（function_points + scenario_index）
+3. `{output_dir}/FeatureAnalysis/stage_summary.json` — module_role + stage2R 摘要（`mode=requirement_only`）
 
-> ⚠️ **纯需求模式无 stage2，无 `.state/framework_scenes.json` 可读**。框架场景须**从需求侧派生**（见第二步）。
+> ⚠️ **纯需求模式无 stage2，无 `FeatureAnalysis/framework_scenes.json` 可读**。框架场景须**从需求侧派生**（见第二步）。
 
-读取场景详情时，按需 Read `{output_dir}/.state/s1_scenarios/{file}` 获取对应场景的完整数据。
+读取场景详情时，按需 Read `{output_dir}/FeatureAnalysis/s1_scenarios/{file}` 获取对应场景的完整数据。
 
 **输出统计**：
 
@@ -105,9 +105,9 @@
 
 ### 第四步：合并+写入输出
 
-遍历 s1_index.json 的 scenario_index，逐个 Read 对应场景文件获取完整数据，与新生成的 framework 场景合并，写入 e2e_scenes.json。
+遍历 s1_index.json 的 scenario_index，逐个 Read 对应场景文件获取完整数据，与新生成的 framework 场景合并，写入 `TestCases/e2e_scenes.json`。
 
-#### 结构化数据（Write e2e_scenes.json）
+#### 结构化数据（Write `{output_dir}/TestCases/e2e_scenes.json`）
 
 ```json
 {
@@ -122,7 +122,7 @@
 
 格式遵循已读取的 `shared/scenario_schema.md`。
 
-#### 汇总表（Write e2e_scenes.md）
+#### 汇总表（Write `{output_dir}/TestCases/e2e_scenes.md`）
 
 ```markdown
 ## 端到端场景汇总表（纯需求模式）
@@ -156,7 +156,7 @@
 | 新增framework | X |
 | flow | X | framework | X | quality | X | 总计 | X |
 | 覆盖验证 | {全部✅或有❌} |
-| 输出文件 | e2e_scenes.md, e2e_scenes.json |
+| 输出文件 | TestCases/e2e_scenes.md, TestCases/e2e_scenes.json |
 ```
 
 > **阶段3aR完成后自动进入阶段3b，无需人工确认。阶段3b完成后，纯需求模式终止。**

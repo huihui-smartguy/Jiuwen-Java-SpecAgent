@@ -25,6 +25,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from remediation_config import (  # noqa: E402
     load_json, save_json, load_config, resolve_config_path, ConfigError, upstream_slug,
 )
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import output_layout as layout  # noqa: E402
 
 
 def _run(cmd, cwd=None, timeout=120):
@@ -53,9 +55,9 @@ def _rel(path, base):
 
 
 def _load_manifests(rem_dir, output_dir):
-    rem_manifest = load_json(os.path.join(rem_dir, "manifest.json")) if \
-        os.path.exists(os.path.join(rem_dir, "manifest.json")) else {"defects": []}
-    analysis_manifest_path = os.path.join(output_dir, ".state", "fault_analysis", "manifest.json")
+    rem_manifest_path = layout.existing_target_artifact(output_dir, "remediation_manifest")
+    rem_manifest = load_json(rem_manifest_path) if os.path.exists(rem_manifest_path) else {"defects": []}
+    analysis_manifest_path = layout.existing_target_artifact(output_dir, "fault_analysis_manifest")
     analysis_manifest = load_json(analysis_manifest_path) if os.path.exists(analysis_manifest_path) else {"targets": []}
 
     candidates = []
@@ -75,10 +77,10 @@ def _load_manifests(rem_dir, output_dir):
 
 def _artifact_dir(rem_dir, output_dir, entry):
     case = entry.get("case_id") or entry.get("target_id")
-    rem_case = os.path.join(rem_dir, "defects", case or "")
+    rem_case = layout.existing_remediation_defect_dir(output_dir, case or "")
     if case and os.path.isdir(rem_case):
         return rem_case
-    analysis_case = os.path.join(output_dir, ".state", "fault_analysis", "targets", entry.get("target_id") or case or "")
+    analysis_case = layout.existing_fault_analysis_target_dir(output_dir, entry.get("target_id") or case or "")
     if os.path.isdir(analysis_case):
         return analysis_case
     return rem_case
@@ -168,7 +170,7 @@ def main():
                         help="deprecated no-op; submission is always issue-only")
     args = parser.parse_args()
 
-    rem_dir = os.path.join(args.output_dir, ".state", "remediation")
+    rem_dir = layout.target_dir(args.output_dir, "remediation", create=True)
     submitted = {
         "generated_by": "submit_remediation.py",
         "schema_version": "2.1",
@@ -179,7 +181,7 @@ def main():
     }
 
     def finish(msg):
-        save_json(os.path.join(rem_dir, "submitted.json"), submitted)
+        save_json(layout.target_artifact(args.output_dir, "remediation_submitted", create_parent=True), submitted)
         print("[submit_remediation] %s" % msg)
         return 0
 
@@ -209,10 +211,10 @@ def main():
         return finish("issue disabled by config.")
 
     slug = upstream_slug(cfg["repo"]["upstream_url"])
-    reverify = load_json(os.path.join(rem_dir, "reverify.json")) if \
-        os.path.exists(os.path.join(rem_dir, "reverify.json")) else {}
+    reverify_path = layout.existing_target_artifact(args.output_dir, "remediation_reverify")
+    reverify = load_json(reverify_path) if os.path.exists(reverify_path) else {}
     candidates = _load_manifests(rem_dir, args.output_dir)
-    body_dir = os.path.join(rem_dir, "issue_bodies")
+    body_dir = layout.target_dir(args.output_dir, "remediation_issue_bodies", create=True)
     os.makedirs(body_dir, exist_ok=True)
 
     for d in candidates:

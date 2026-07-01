@@ -18,13 +18,13 @@
 
 ### 第一步：读取输入（并行 Read）
 
-1. `{output_dir}/.state/stage_summary.json` — cd_list + gap_list（静态缺陷/GAP 数据源）
-2. `{output_dir}/contract.md` — 契约权威性分级表（spec-required vs config-dependent 观察）
-3. `{output_dir}/case_results.json` — 执行统计（含设计用例的 test_type / case_kind）
-4. `{output_dir}/.state/results/*.json` — 各用例详细结果（含 status/class/trace_file/oracle_refs/fault_oracle_summary/fault_oracle_results/skip_reason/sdk_defect，glob 后并行读取）
-5. `{output_dir}/.state/trace/*.jsonl`（如有，按需抽样读取末帧/关键帧，用于交互轨迹摘要）
-6. `{output_dir}/.state/knowledge_matches.json` / `{output_dir}/.state/fault_matches.json` + `{output_dir}/.state/new_knowledge_candidates.json` / `{output_dir}/.state/new_faults_detected.json`（如有，TestKnowledgeBase 覆盖与自积累，见第8部分；无则省略该节）
-7. `{output_dir}/.state/professional_acceptance.json` + `{output_dir}/.state/ai_eval_readiness.json`（如有，Professional_experience 专业验收和 AI readiness，见第9部分；无则先由编排器运行 `professional_acceptance.py --mode report` 或省略该节）
+1. `{output_dir}/FeatureAnalysis/stage_summary.json` — cd_list + gap_list（静态缺陷/GAP 数据源）
+2. `{output_dir}/Contract/contract.md` — 契约权威性分级表（spec-required vs config-dependent 观察）
+3. `{output_dir}/TestRun/case_results.json` — 执行统计（含设计用例的 test_type / case_kind）
+4. `{output_dir}/TestRun/results/*.json` — 各用例详细结果（含 status/class/trace_file/oracle_refs/fault_oracle_summary/fault_oracle_results/skip_reason/sdk_defect，glob 后并行读取）
+5. `{output_dir}/TestRun/trace/*.jsonl`（如有，按需抽样读取末帧/关键帧，用于交互轨迹摘要）
+6. `{output_dir}/KnowledgeBase/knowledge_matches.json` / `{output_dir}/KnowledgeBase/fault_matches.json` + `{output_dir}/KnowledgeBase/new_knowledge_candidates.json` / `{output_dir}/KnowledgeBase/new_faults_detected.json`（如有，TestKnowledgeBase 覆盖与自积累，见第8部分；无则省略该节）
+7. `{output_dir}/QualityGates/professional_acceptance.json` + `{output_dir}/QualityGates/ai_eval_readiness.json`（如有，Professional_experience 专业验收和 AI readiness，见第9部分；无则先由编排器运行 `professional_acceptance.py --mode report` 或省略该节）
 
 ### 第二步：生成报告
 
@@ -32,7 +32,7 @@
 
 #### 第1部分：设计覆盖（按 test_type）
 
-从 case_results.json + 用例设计统计，**按测试维度 test_type 拆分**：
+从 TestRun/case_results.json + TestCases/test_design.json 用例设计统计，**按测试维度 test_type 拆分**：
 
 ```markdown
 ## 1. 设计覆盖（按测试维度）
@@ -52,22 +52,22 @@
 
 #### 第2部分：交互轨迹摘要
 
-从 `.state/results/*.json` 的 trace_file + 抽样 trace jsonl：
+从 `TestRun/results/*.json` 的 trace_file + 抽样 trace jsonl：
 
 ```markdown
 ## 2. 交互轨迹摘要
 
 | 用例 | 轨迹文件 | 关键交互（请求→响应/事件流末态） |
 |------|----------|----------------------------------|
-| TC_001 | .state/trace/...jsonl | 提交请求 → result 末态=<state> |
-| TC_002 | .state/trace/...jsonl | 流式请求 → N×状态更新事件，末态=<state> |
+| TC_001 | TestRun/trace/...jsonl | 提交请求 → result 末态=<state> |
+| TC_002 | TestRun/trace/...jsonl | 流式请求 → N×状态更新事件，末态=<state> |
 
 > 说明：env_issue（SUT 未起）用例无轨迹，单列标注。
 ```
 
 #### 第3部分：执行结果分类分布
 
-从 `.state/results/*.json` 的 `class` 字段聚合：
+从 `TestRun/results/*.json` 的 `class` 字段聚合：
 
 ```markdown
 ## 3. 执行结果分类分布
@@ -86,7 +86,7 @@
 
 #### 第3.5部分：Fault Oracle Coverage（仅当存在 fault_oracle_summary）
 
-从 `case_results.json.summary.fault_oracle_coverage` 与每条结果的 `fault_oracle_summary` 汇总：
+从 `TestRun/case_results.json.summary.fault_oracle_coverage` 与每条结果的 `fault_oracle_summary` 汇总：
 
 ```markdown
 ## 3.5 Fault Oracle Coverage
@@ -165,12 +165,12 @@
 - 说明：DFX 维度当前**仅登记、未生成可执行用例、未执行**，待后续版本实现；本轮报告不对其做通过/失败判定。
 ```
 
-#### 第8部分：TestKnowledgeBase 覆盖（knowledge/fault coverage，仅当 `.state/fault_matches.json` 存在）
+#### 第8部分：TestKnowledgeBase 覆盖（knowledge/fault coverage，仅当 `KnowledgeBase/fault_matches.json` 存在）
 
-> 编排器子步（在 case_results.json 生成后、本报告生成前）：
+> 编排器子步（在 TestRun/case_results.json 生成后、本报告生成前）：
 > `python {skill_dir}/scripts/record_faults.py --output-dir {output_dir}`（默认 dry-run）
-> → 仅把 `class=sdk_defect` 蒸馏为 TestKnowledgeBase 候选，写 `.state/new_knowledge_candidates.json`，并保留 `.state/new_faults_detected.json` 兼容输出；`--write` 默认落 TestKnowledgeBase 项目 overlay 或显式项目 overlay（不污染全局精选库）。
-> 数据源：`.state/knowledge_matches.json` / `.state/fault_matches.json`（阶段2.6 注入计划）+ 带 `fault_ref` 的用例结果 + `.state/new_knowledge_candidates.json` / `.state/new_faults_detected.json`。**无 TestKnowledgeBase 接入时整节省略。**
+> → 仅把 `class=sdk_defect` 蒸馏为 TestKnowledgeBase 候选，写 `KnowledgeBase/new_knowledge_candidates.json`，并保留 `KnowledgeBase/new_faults_detected.json` 兼容输出；`--write` 默认落 TestKnowledgeBase 项目 overlay 或显式项目 overlay（不污染全局精选库）。
+> 数据源：`KnowledgeBase/knowledge_matches.json` / `KnowledgeBase/fault_matches.json`（阶段2.6 注入计划）+ 带 `fault_ref` 的用例结果 + `KnowledgeBase/new_knowledge_candidates.json` / `KnowledgeBase/new_faults_detected.json`。**无 TestKnowledgeBase 接入时整节省略。**
 
 ```markdown
 ## 8. TestKnowledgeBase 覆盖（knowledge/fault coverage）
@@ -183,14 +183,14 @@
 | fault_id | 场景 | 分支 | 用例数 | sdk_defect | 说明 |
 |----------|------|------|--------|-----------|------|
 
-> TestKnowledgeBase 逼出的确认缺陷已并入第4部分（按 fault_ref 标注来源）；新积累候选见 `.state/new_knowledge_candidates.json`，兼容输出见 `.state/new_faults_detected.json`。
+> TestKnowledgeBase 逼出的确认缺陷已并入第4部分（按 fault_ref 标注来源）；新积累候选见 `KnowledgeBase/new_knowledge_candidates.json`，兼容输出见 `KnowledgeBase/new_faults_detected.json`。
 ```
 
-#### 第9部分：Professional_experience 专业验收（仅当 `.state/professional_acceptance.json` 存在）
+#### 第9部分：Professional_experience 专业验收（仅当 `QualityGates/professional_acceptance.json` 存在）
 
-> 编排器子步（在 report.md 生成前）：
+> 编排器子步（在 Reports/report.md 生成前）：
 > `python {skill_dir}/scripts/professional_acceptance.py --output-dir {output_dir} --mode report`
-> → 生成 `.state/professional_acceptance.json` 与 `.state/ai_eval_readiness.json`。
+> → 生成 `QualityGates/professional_acceptance.json` 与 `QualityGates/ai_eval_readiness.json`。
 > Professional_experience 只产生 advisory gate，不产生强断言；缺失门禁应作为 release risk 或人工复核项，不混入 sdk_defect。
 
 ```markdown
@@ -213,7 +213,7 @@
 
 ### 第三步：写入输出
 
-Write `{output_dir}/report.md`
+Write `{output_dir}/Reports/report.md`
 
 ### 第四步：仅返回摘要
 
@@ -234,7 +234,7 @@ Write `{output_dir}/report.md`
 | AI Readiness | pass / warn / fail / not_applicable / requires_human_review |
 | 契约观察 | spec-required X / config-dependent X / needs-runtime-verify X |
 | 静态缺陷/GAP | CD X / GAP X |
-| 输出文件 | report.md |
+| 输出文件 | Reports/report.md |
 ```
 
 ## ---END-PROMPT---

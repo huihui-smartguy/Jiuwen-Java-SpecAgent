@@ -13,6 +13,12 @@ import os
 import sys
 from pathlib import Path
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+
+import output_layout as layout
+
 
 def load_json(path: str) -> dict | list:
     with open(path, "r", encoding="utf-8") as f:
@@ -27,9 +33,8 @@ def save_json(path: str, data, indent=2):
 
 def glob_batch_summaries(output_dir: str) -> list[dict]:
     """扫描s3a_batch_*_summary.json文件。"""
-    d = Path(output_dir) / ".state"
     summaries = []
-    for f in d.glob("s3a_batch_*_summary.json"):
+    for f in layout.existing_glob(output_dir, "FeatureAnalysis/s3a_batch_*_summary.json", ".state/s3a_batch_*_summary.json"):
         summaries.append(load_json(str(f)))
     return summaries
 
@@ -50,8 +55,6 @@ def build_enriched_index(s1_index: dict, fp_mapping: dict, batch_summaries: list
 
     # 构建scenario_index
     scenario_index = []
-    enriched_dir = Path(output_dir) / ".state" / "s3a_enriched"
-
     for scene_id in all_scene_ids + all_gap_ids:
         # 确定场景类型
         if scene_id.startswith("FS-GAP"):
@@ -73,7 +76,7 @@ def build_enriched_index(s1_index: dict, fp_mapping: dict, batch_summaries: list
             "type": scene_type,
             "priority": priority,
             "fp_refs": [],  # 从具体场景文件获取
-            "file": f"s3a_enriched/{scene_id}.json",
+            "file": f"FeatureAnalysis/s3a_enriched/{scene_id}.json",
             "enriched_stats": all_stats.get(scene_id, {})
         })
 
@@ -122,11 +125,10 @@ def main():
     args = parser.parse_args()
 
     output_dir = args.output_dir
-    state_dir = os.path.join(output_dir, ".state")
 
     # 1. 加载输入文件
-    s1_index_path = os.path.join(state_dir, "s1_index.json")
-    fp_mapping_path = os.path.join(state_dir, "fp_mapping.json")
+    s1_index_path = layout.existing_target_artifact(output_dir, "s1_index")
+    fp_mapping_path = layout.existing_target_artifact(output_dir, "fp_mapping")
 
     if not os.path.exists(s1_index_path):
         print(f"错误: s1_index.json 不存在")
@@ -135,7 +137,7 @@ def main():
     s1_index = load_json(s1_index_path)
 
     # 优先从stage_summary.json读取module_role（阶段2代码分析的判断结果）
-    stage_summary_path = os.path.join(state_dir, "stage_summary.json")
+    stage_summary_path = layout.existing_target_artifact(output_dir, "stage_summary")
     module_role_from_stage = "独立功能"  # 默认值
     if os.path.exists(stage_summary_path):
         stage_summary = load_json(stage_summary_path)
@@ -160,7 +162,9 @@ def main():
     if not batch_summaries:
         # 兼容旧模式：如果没有批次摘要，直接从s3a_enriched目录扫描
         print("未找到批次摘要，使用兼容模式扫描s3a_enriched目录")
-        enriched_dir = Path(state_dir) / "s3a_enriched"
+        enriched_dir = Path(layout.s3a_enriched_dir(output_dir))
+        if not enriched_dir.exists():
+            enriched_dir = Path(output_dir) / ".state" / "s3a_enriched"
         if enriched_dir.exists():
             scene_files = sorted(enriched_dir.glob("FS-*.json"))
             batch_summaries = [{
@@ -177,7 +181,7 @@ def main():
     enriched_index = build_enriched_index(s1_index, fp_mapping, batch_summaries, output_dir)
 
     # 4. 写入输出
-    output_path = os.path.join(state_dir, "s3a_enriched_index.json")
+    output_path = layout.target_artifact(output_dir, "s3a_enriched_index", create_parent=True)
     save_json(output_path, enriched_index)
 
     print(f"输出: {output_path}")

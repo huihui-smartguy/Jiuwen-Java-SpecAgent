@@ -5,7 +5,7 @@ match_faults.py - 阶段2.6：TestKnowledgeBase 知识/故障匹配
 在 stage2.5 产出 contract.md 之后、stage3a/3b 之前运行。把 TestKnowledgeBase
 注册表或 Fault/*.json 包中的知识条目匹配到 s1 场景，并用 contract.md 的「字段权威性分级表」对每条故障的
 断言级别做契约优先封顶（spec-required→至多L2；config-dependent/契约静默/未知→降L0/L1）。
-产出 .state/knowledge_matches.json，并保留 .state/fault_matches.json 兼容下游 stage3b/stage5。
+产出 KnowledgeBase/knowledge_matches.json，并保留 KnowledgeBase/fault_matches.json 兼容下游 stage3b/stage5。
 
 纯确定性脚本（无 LLM、无网络），可单测、可复现。缺库/关闭/无 contract.md 时优雅退出，
 不产出任何文件，流水线与未接入故障库时字节级一致。
@@ -24,11 +24,16 @@ import re
 import sys
 from collections import defaultdict
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+
 from knowledge_base import (
     default_knowledge_root,
     load_faults as load_knowledge_faults,
     parse_domain_filter,
 )
+import output_layout as layout
 
 
 # ---------------- 通用 IO（与其它脚本保持一致） ----------------
@@ -213,8 +218,7 @@ def _infer_scene_domains(haystack: str, code_facts: dict) -> list:
 
 def build_scenes(output_dir: str, code_facts: dict) -> list:
     """从 s1_index + s1_scenarios 构建场景列表，附 is_streaming / is_write / reference_fields。"""
-    state = os.path.join(output_dir, ".state")
-    idx_path = os.path.join(state, "s1_index.json")
+    idx_path = layout.existing_target_artifact(output_dir, "s1_index")
     scenes = []
     if not os.path.exists(idx_path):
         return scenes
@@ -245,7 +249,10 @@ def build_scenes(output_dir: str, code_facts: dict) -> list:
             "reference_fields": list(endpoint_ref_fields),
         }
         # 读取单场景文件补充判定
-        fpath = os.path.join(state, s.get("file", f"s1_scenarios/{sid}.json"))
+        scene_file = s.get("file", f"FeatureAnalysis/s1_scenarios/{sid}.json")
+        fpath = scene_file if os.path.isabs(scene_file) else os.path.join(output_dir, scene_file)
+        if not os.path.exists(fpath):
+            fpath = os.path.join(output_dir, ".state", s.get("file", f"s1_scenarios/{sid}.json"))
         blob = ""
         if os.path.exists(fpath):
             try:
@@ -748,8 +755,7 @@ def match(
     knowledge_root=None,
     domains=None,
 ) -> dict:
-    state = os.path.join(output_dir, ".state")
-    contract_path = os.path.join(output_dir, "contract.md")
+    contract_path = layout.existing_target_artifact(output_dir, "contract")
 
     if not os.path.exists(contract_path):
         print(f"[match_faults] 跳过：未找到 {contract_path}（纯需求模式或 stage2.5 未产出）")
@@ -769,7 +775,7 @@ def match(
         print("[match_faults] 跳过：未加载到可匹配的 TestKnowledgeBase 条目")
         return {}
 
-    code_facts_path = os.path.join(state, "s2_code_facts.json")
+    code_facts_path = layout.existing_target_artifact(output_dir, "s2_code_facts")
     code_facts = load_json(code_facts_path) if os.path.exists(code_facts_path) else {}
     scenes = build_scenes(output_dir, code_facts)
 
@@ -869,7 +875,7 @@ def match(
             "knowledge_root": lib_meta.get("knowledge_root"),
             "knowledge_packages": lib_meta.get("packages", []),
             "overlay_version": (overlay_meta or {}).get("version"),
-            "contract_path": "contract.md",
+            "contract_path": layout.relpath(layout.target_artifact(output_dir, "contract"), output_dir),
             "generated_by": "match_faults.py",
             "contract_probe_status": "reachable" if contract["authority"] else "unreachable",
             "stats": {
@@ -901,15 +907,14 @@ def write_alignment_report(output_dir: str, plan: dict):
             f"| {m['fault_id']} | {','.join(m['target_scenes'])} | {m['branch_class']} "
             f"| {m['priority']} | {m['reconciliation']} | {oref} |"
         )
-    path = os.path.join(output_dir, ".state", "fault_contract_alignment.md")
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    path = layout.target_artifact(output_dir, "fault_contract_alignment", create_parent=True)
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
 
 
 def main():
     parser = argparse.ArgumentParser(description="阶段2.6 TestKnowledgeBase 知识/故障匹配（contract 优先调和）")
-    parser.add_argument("--output-dir", required=True, help="输出目录（含 contract.md 与 .state/）")
+    parser.add_argument("--output-dir", required=True, help="输出目录（含 Contract/ 与 FeatureAnalysis/）")
     parser.add_argument("--knowledge-root", default=None, help="TestKnowledgeBase 根目录（默认自动探测仓内 TestKnowledgeBase）")
     parser.add_argument("--knowledge-domain", default="all",
                         help="知识域过滤：all/rest_api/web/agent/dfx，或逗号分隔 package_id")
@@ -949,8 +954,8 @@ def main():
     if not plan:
         return 0
 
-    out_path = os.path.join(args.output_dir, ".state", "fault_matches.json")
-    knowledge_out_path = os.path.join(args.output_dir, ".state", "knowledge_matches.json")
+    out_path = layout.target_artifact(args.output_dir, "fault_matches", create_parent=True)
+    knowledge_out_path = layout.target_artifact(args.output_dir, "knowledge_matches", create_parent=True)
     save_json(out_path, plan)
     save_json(knowledge_out_path, plan)
     if not args.no_alignment:

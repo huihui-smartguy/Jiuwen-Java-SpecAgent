@@ -4,14 +4,15 @@
 remediation_plan.py - stage6 fault analysis planner + compatibility remediation worklist
 
 prep (default):
-  - reads .state/results/*.json, .state/fault_matches.json, test_design.json, contract.md, and
+  - reads TestRun/results/*.json, KnowledgeBase/fault_matches.json,
+    TestCases/test_design.json, Contract/contract.md, and
     known fault libraries
-  - writes .state/fault_analysis/analysis_plan.json for all actionable/diagnostic targets
-  - writes .state/remediation/plan.json only for the patchable contract-backed subset
+  - writes FaultAnalysis/analysis_plan.json for all actionable/diagnostic targets
+  - writes Remediation/plan.json only for the patchable contract-backed subset
 
 finalize (--finalize):
-  - summarizes stage6 artifacts into .state/fault_analysis/manifest.json
-  - preserves .state/remediation/manifest.json for stage7 apply/reverify compatibility
+  - summarizes stage6 artifacts into FaultAnalysis/manifest.json
+  - preserves Remediation/manifest.json for stage7 apply/reverify compatibility
 
 Pure deterministic preprocessing/postprocessing. Stage6 remains side-effect free; stage7 alone
 may apply patches, reverify, and submit evidence-rich issues after the human gate.
@@ -26,6 +27,8 @@ from glob import glob
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "reference"))
 from remediation_config import load_json, save_json  # noqa: E402
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import output_layout as layout  # noqa: E402
 
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -63,7 +66,7 @@ def _contract_authority(output_dir, spec_id):
     """Minimal parser for contract.md §7 authority table."""
     if not spec_id:
         return "unknown"
-    path = os.path.join(output_dir, "contract.md")
+    path = layout.existing_target_artifact(output_dir, "contract")
     if not os.path.exists(path):
         return "unknown"
     with open(path, encoding="utf-8") as f:
@@ -155,7 +158,7 @@ def _load_profiles():
 
 def _load_results(output_dir):
     out = {}
-    for fp in sorted(glob(os.path.join(output_dir, ".state", "results", "*.json"))):
+    for fp in layout.existing_glob(output_dir, "TestRun/results/*.json", ".state/results/*.json"):
         r = load_json(fp)
         out[_case_id_from(fp, r)] = r
     return out
@@ -163,7 +166,7 @@ def _load_results(output_dir):
 
 def _load_case_context(output_dir):
     ctx = {}
-    td_path = os.path.join(output_dir, "test_design.json")
+    td_path = layout.existing_target_artifact(output_dir, "test_design")
     if not os.path.exists(td_path):
         return ctx
     try:
@@ -186,7 +189,7 @@ def _load_case_context(output_dir):
 
 
 def _load_fault_matches(output_dir):
-    plan = _load_json_if(os.path.join(output_dir, ".state", "fault_matches.json"), {})
+    plan = _load_json_if(layout.existing_target_artifact(output_dir, "fault_matches"), {})
     matches = {}
     by_scene = []
     for m in plan.get("fault_matches", []):
@@ -296,8 +299,8 @@ def _target_from_result(case_id, result, ctx, matches, fault_index, profiles, de
         "publishable": publishable,
         "patchable": patchable,
         "needs_human": needs_human,
-        "output_dir": ".state/fault_analysis/targets/%s" % case_id,
-        "remediation_dir": ".state/remediation/defects/%s" % case_id if patchable else None,
+        "output_dir": "FaultAnalysis/targets/%s" % case_id,
+        "remediation_dir": "Remediation/defects/%s" % case_id if patchable else None,
         "fault_context": _fault_context(fault_ref, match, fault_doc),
     }
     return target
@@ -334,7 +337,7 @@ def _target_from_match(match, fault_index, profiles, default_profile, seen_ids):
         "publishable": False,
         "patchable": False,
         "needs_human": True,
-        "output_dir": ".state/fault_analysis/targets/%s" % target_id,
+        "output_dir": "FaultAnalysis/targets/%s" % target_id,
         "remediation_dir": None,
         "fault_context": _fault_context(fault_ref, match, fault_doc),
     }
@@ -426,7 +429,7 @@ def build_plans(output_dir, max_defects, max_analysis_targets):
         "max_defects": max_defects,
         "selected": len(remediation_items),
         "defects": remediation_items,
-        "fault_analysis_plan": ".state/fault_analysis/analysis_plan.json",
+        "fault_analysis_plan": "FaultAnalysis/analysis_plan.json",
     }
     return analysis_plan, remediation_plan
 
@@ -470,29 +473,27 @@ def _confidence_entry(case_dir, target_lookup):
 
 
 def finalize(output_dir):
-    analysis_dir = os.path.join(output_dir, ".state", "fault_analysis")
-    rem_dir = os.path.join(output_dir, ".state", "remediation")
-    analysis_plan = _load_json_if(os.path.join(analysis_dir, "analysis_plan.json"), {"targets": []})
+    analysis_plan = _load_json_if(layout.existing_target_artifact(output_dir, "fault_analysis_plan"), {"targets": []})
     target_lookup = {t.get("target_id"): t for t in analysis_plan.get("targets", [])}
     for t in analysis_plan.get("targets", []):
         if t.get("case_id"):
             target_lookup.setdefault(t["case_id"], t)
 
     remediation_entries = []
-    for case_dir in sorted(glob(os.path.join(rem_dir, "defects", "*"))):
+    for case_dir in layout.existing_glob(output_dir, "Remediation/defects/*", ".state/remediation/defects/*"):
         if os.path.isdir(case_dir):
             entry = _confidence_entry(case_dir, target_lookup)
             if entry:
                 remediation_entries.append(entry)
 
     analysis_entries = []
-    for target_dir in sorted(glob(os.path.join(analysis_dir, "targets", "*"))):
+    for target_dir in layout.existing_glob(output_dir, "FaultAnalysis/targets/*", ".state/fault_analysis/targets/*"):
         if os.path.isdir(target_dir):
             entry = _confidence_entry(target_dir, target_lookup)
             if entry:
                 analysis_entries.append(entry)
 
-    # Patchable stage6 artifacts may still be produced only under .state/remediation/defects.
+    # Patchable stage6 artifacts may still be produced only under Remediation/defects.
     seen = {e["target_id"] for e in analysis_entries}
     for entry in remediation_entries:
         if entry["target_id"] not in seen:
@@ -523,7 +524,7 @@ def finalize(output_dir):
             "localizable": sum(1 for e in remediation_entries if e.get("localizable")),
             "needs_human": sum(1 for e in remediation_entries if e.get("needs_human")),
         },
-        "fault_analysis_manifest": ".state/fault_analysis/manifest.json",
+        "fault_analysis_manifest": "FaultAnalysis/manifest.json",
     }
     analysis_manifest = {
         "generated_by": "remediation_plan.py --finalize",
@@ -545,20 +546,20 @@ def main():
     parser = argparse.ArgumentParser(description="stage6 fault analysis plan / manifest generator")
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--max-defects", type=int, default=5,
-                        help="max patchable contract defects entering .state/remediation/plan.json")
+                        help="max patchable contract defects entering Remediation/plan.json")
     parser.add_argument("--max-analysis-targets", type=int, default=20,
-                        help="max non-patchable analysis targets entering .state/fault_analysis/analysis_plan.json")
+                        help="max non-patchable analysis targets entering FaultAnalysis/analysis_plan.json")
     parser.add_argument("--finalize", action="store_true",
                         help="summarize stage6 artifacts into remediation and fault_analysis manifests")
     args = parser.parse_args()
 
-    rem_dir = os.path.join(args.output_dir, ".state", "remediation")
-    analysis_dir = os.path.join(args.output_dir, ".state", "fault_analysis")
+    layout.target_dir(args.output_dir, "remediation", create=True)
+    layout.target_dir(args.output_dir, "fault_analysis", create=True)
 
     if args.finalize:
         rem_manifest, analysis_manifest = finalize(args.output_dir)
-        save_json(os.path.join(rem_dir, "manifest.json"), rem_manifest)
-        save_json(os.path.join(analysis_dir, "manifest.json"), analysis_manifest)
+        save_json(layout.target_artifact(args.output_dir, "remediation_manifest", create_parent=True), rem_manifest)
+        save_json(layout.target_artifact(args.output_dir, "fault_analysis_manifest", create_parent=True), analysis_manifest)
         rt = rem_manifest["totals"]
         at = analysis_manifest["totals"]
         print("[remediation_plan] manifest: remediation %d | analysis %d | publishable %d | needs_human %d"
@@ -568,8 +569,8 @@ def main():
     analysis_plan, remediation_plan = build_plans(
         args.output_dir, args.max_defects, args.max_analysis_targets
     )
-    save_json(os.path.join(analysis_dir, "analysis_plan.json"), analysis_plan)
-    save_json(os.path.join(rem_dir, "plan.json"), remediation_plan)
+    save_json(layout.target_artifact(args.output_dir, "fault_analysis_plan", create_parent=True), analysis_plan)
+    save_json(layout.target_artifact(args.output_dir, "remediation_plan", create_parent=True), remediation_plan)
 
     t = analysis_plan["totals"]
     print("[remediation_plan] stage6 targets %d → selected %d | patchable %d | diagnostic %d"

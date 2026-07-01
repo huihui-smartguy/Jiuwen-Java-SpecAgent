@@ -288,7 +288,7 @@ def recording_policy(knowledge_root=None):
     default_overlay = policy.get("default_overlay") or "Fault/project_faults.json"
     return {
         "default_overlay": os.path.join(knowledge_root, default_overlay),
-        "candidate_output": policy.get("candidate_output", ".state/new_knowledge_candidates.json"),
-        "legacy_candidate_output": policy.get("legacy_candidate_output", ".state/new_faults_detected.json"),
+        "candidate_output": policy.get("candidate_output", "KnowledgeBase/new_knowledge_candidates.json"),
+        "legacy_candidate_output": policy.get("legacy_candidate_output", "KnowledgeBase/new_faults_detected.json"),
         "eligible_result_classes": policy.get("eligible_result_classes", ["sdk_defect"]),
     }

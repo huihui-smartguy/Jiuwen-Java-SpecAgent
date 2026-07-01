@@ -5,29 +5,44 @@
     "harness_defects": 0,
     "sut_unsatisfied": 0,
     "sdk_defects": 2,
-    "env_issues": 0
+    "env_issues": 0,
+    "requires_human_review": 0,
+    "fault_oracle_failed": 0,
+    "final_pytest_passed_but_fault_oracle_failed": 0,
+    "fault_oracle_coverage": {}
   },
   "details": {
     "TC_041": {
       "status": "sdk_defect",
       "fix_rounds": 0,
+      "class": "sdk_defect",
+      "trace_file": "TestRun/trace/TC_041.jsonl",
       "sdk_defect": {
         "spec_id": "SPEC-RESP-WRAP",
         "field": "result.task.status.state",
         "expected": "终态 FAILED（不存在的 agentId 不应成功）",
         "actual": "COMPLETED"
-      }
+      },
+      "oracle_refs": [
+        "SPEC-RESP-WRAP",
+        "SPEC-ID-TYPE"
+      ]
     },
     "TC_042": {
       "status": "sdk_defect",
       "fix_rounds": 0,
+      "class": "sdk_defect",
+      "trace_file": "TestRun/trace/TC_042.jsonl",
       "sdk_defect": {
         "spec_id": "SPEC-RESP-WRAP",
         "field": "result.task.status.state",
         "expected": "终态 FAILED",
         "actual": "COMPLETED"
       },
-      "fault_ref": "F-REQ-011"
+      "fault_ref": "F-REQ-011",
+      "oracle_refs": [
+        "SPEC-RESP-WRAP"
+      ]
     }
   }
 }

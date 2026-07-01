@@ -32,7 +32,8 @@ class Stage6Iteration2Tests(unittest.TestCase):
     def test_planner_keeps_patchable_subset_and_future_profiles(self):
         with tempfile.TemporaryDirectory() as td:
             out = Path(td)
-            (out / "contract.md").write_text(
+            (out / "Contract").mkdir(parents=True, exist_ok=True)
+            (out / "Contract" / "contract.md").write_text(
                 "\n".join([
                     "# contract",
                     "## 7. 字段权威性分级表",
@@ -42,10 +43,10 @@ class Stage6Iteration2Tests(unittest.TestCase):
                 ]),
                 encoding="utf-8",
             )
-            write_json(out / ".state/results/TC_SDK.json", {
+            write_json(out / "TestRun/results/TC_SDK.json", {
                 "case_id": "TC_SDK",
                 "class": "sdk_defect",
-                "trace_file": ".state/trace/TC_SDK.jsonl",
+                "trace_file": "TestRun/trace/TC_SDK.jsonl",
                 "fault_ref": "F-REQ-001",
                 "oracle_refs": ["SPEC-ID-TYPE"],
                 "sdk_defect": {
@@ -55,14 +56,14 @@ class Stage6Iteration2Tests(unittest.TestCase):
                     "actual": "number",
                 },
             })
-            write_json(out / ".state/results/TC_DFX.json", {
+            write_json(out / "TestRun/results/TC_DFX.json", {
                 "case_id": "TC_DFX",
                 "class": "sut_unsatisfied",
-                "trace_file": ".state/trace/TC_DFX.jsonl",
+                "trace_file": "TestRun/trace/TC_DFX.jsonl",
                 "fault_ref": "F-DFX-001",
                 "oracle_refs": [],
             })
-            write_json(out / ".state/fault_matches.json", {
+            write_json(out / "KnowledgeBase/fault_matches.json", {
                 "meta": {"fault_lib_version": "test"},
                 "fault_matches": [
                     {"fault_id": "F-DFX-001", "name": "下游API超时", "target_scenes": ["FS-1"],
@@ -88,7 +89,7 @@ class Stage6Iteration2Tests(unittest.TestCase):
             path = Path(td) / "remediation.config.json"
             base = {
                 "sut": {"base_url": "http://localhost"},
-                "repo": {"upstream_url": "fake_repo", "ref": "v1", "clone_path": ".state/remediation/repo"},
+                "repo": {"upstream_url": "fake_repo", "ref": "v1", "clone_path": "Remediation/repo"},
                 "switches": {"require_evidence_before_issue": True},
             }
             write_json(path, base)

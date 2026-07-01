@@ -22,6 +22,12 @@ import sys
 from copy import deepcopy
 from urllib.parse import urlparse
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+
+import output_layout as layout
+
 
 SCHEMA_VERSION = "autotestflow.sut-manifest.v1"
 DESCRIPTION_PARSE_VERSION = "autotestflow.sut-description.parse.v1"
@@ -687,23 +693,26 @@ def _normalize_path(path, base_dir):
 
 def _target_paths(root_output_dir, target_id):
     target_output_dir = os.path.join(root_output_dir, "targets", target_id)
+    artifact_dirs = layout.target_artifact_dirs(target_output_dir)
+    artifacts = layout.target_artifacts(target_output_dir)
     return {
         "target_output_dir": target_output_dir,
-        "state_dir": os.path.join(target_output_dir, ".state"),
-        "trace_dir": os.path.join(target_output_dir, ".state", "trace"),
-        "contract_path": os.path.join(target_output_dir, "contract.md"),
-        "contract_samples_path": os.path.join(target_output_dir, ".state", "contract_samples.json"),
-        "ready_path": os.path.join(target_output_dir, ".state", "sut_ready.json"),
-        "case_results_path": os.path.join(target_output_dir, "case_results.json"),
-        "report_path": os.path.join(target_output_dir, "report.md"),
+        "artifact_dirs": artifact_dirs,
+        "artifacts": artifacts,
+        "state_dir": artifact_dirs["feature_analysis"],
+        "trace_dir": artifact_dirs["test_run_trace"],
+        "contract_path": artifacts["contract"],
+        "contract_samples_path": artifacts["contract_samples"],
+        "ready_path": artifacts["sut_ready"],
+        "case_results_path": artifacts["case_results"],
+        "report_path": artifacts["report"],
     }
 
 
 def _description_artifact_paths(root_output_dir):
-    state_dir = os.path.join(root_output_dir, ".state")
     return {
-        "sut_description_parse": os.path.join(state_dir, "sut_description.parse.json"),
-        "sut_description_review": os.path.join(state_dir, "sut_description.review.md"),
+        "sut_description_parse": layout.root_artifact(root_output_dir, "sut_description_parse"),
+        "sut_description_review": layout.root_artifact(root_output_dir, "sut_description_review"),
     }
 
 
@@ -807,9 +816,10 @@ def validate_and_normalize(data, manifest_path=None, output_dir=None):
         },
         "manifest_path": os.path.abspath(manifest_path),
         "targets": normalized_targets,
+        "artifact_dirs": layout.root_artifact_dirs(root_output_dir),
         "artifacts": {
-            "normalized_manifest": os.path.join(root_output_dir, ".state", "sut_manifest.normalized.json"),
-            "aggregate_report": os.path.join(root_output_dir, "report.md"),
+            "normalized_manifest": layout.root_artifact(root_output_dir, "normalized_manifest"),
+            "aggregate_report": layout.root_artifact(root_output_dir, "aggregate_report"),
             **_description_artifact_paths(root_output_dir),
         },
     }
@@ -951,7 +961,7 @@ def main(argv=None):
     parser.add_argument("--requirement-doc")
     parser.add_argument("--code-path")
     parser.add_argument("--output-dir")
-    parser.add_argument("--write", action="store_true", help="Write .state/sut_manifest.normalized.json")
+    parser.add_argument("--write", action="store_true", help="Write RunMetadata/sut_manifest.normalized.json")
     args = parser.parse_args(argv)
 
     data = None

@@ -147,11 +147,11 @@ Start: java -jar target/checkout.jar --server.port=8082
 Environment variables: CHECKOUT_TOKEN=<provided at runtime>
 ```
 
-AutoTestFlow 会在 stage0 生成 `.state/sut_description.parse.json`、`.state/sut_description.review.md`
-和 `.state/sut_manifest.normalized.json`。推断出 managed build/start 命令、低置信或缺字段时会先进入人工确认；legacy YAML manifest 继续兼容。示例见 [`examples/multi_sut/sut-manifest.md`](examples/multi_sut/sut-manifest.md)，schema 见
+AutoTestFlow 会在 stage0 生成 `RunMetadata/sut_description.parse.json`、`RunMetadata/sut_description.review.md`
+和 `RunMetadata/sut_manifest.normalized.json`。推断出 managed build/start 命令、低置信或缺字段时会先进入人工确认；legacy YAML manifest 继续兼容。示例见 [`examples/multi_sut/sut-manifest.md`](examples/multi_sut/sut-manifest.md)，schema 见
 [`shared/sut_manifest_schema.md`](shared/sut_manifest_schema.md)。每个 target 会被归一化到
-`<output_dir>/targets/<target_id>/`，并拥有独立的 `contract.md`、`.state/results/`、`.state/trace/`
-和 `report.md`，根级 `report.md` 只做聚合。
+`<output_dir>/targets/<target_id>/`，并拥有独立的 `Contract/contract.md`、`TestCases/`、`TestRun/`
+和 `Reports/report.md`，根级 `Reports/report.md` 只做聚合。
 
 直接可访问但没有源码的 target 会标记为 `source.available=false`：跳过源码扫描/code-only GAP，
 但仍在可达时执行 stage2.5 契约探测和后续黑盒测试。
@@ -234,7 +234,7 @@ python AutoTestFlow/scripts/record_faults.py --output-dir <output_dir> \
 
 ### 7.4 fault_ref 用例的过程/否定 oracle
 
-TestKnowledgeBase 生成的 `fault_ref` 用例不能只验证"最终返回成功/失败"。阶段2.6 会为每条命中补齐 `fault_oracles`，阶段3b 必须原样写入 `test_design.json`，且至少包含 1 条 required 的 `process` 或 `negative` oracle。阶段4 在 pytest 通过后运行 `scripts/evaluate_fault_oracles.py` 读取 `.state/trace/<case>.jsonl`，检查 `no_unexpected_5xx`、`no_unexpected_error_frame`、`correlation_id_preserved`、`sse_terminal_state`、`no_duplicate_terminal_event`、`resource_not_created`、`state_not_mutated`、`retry_or_timeout_observed` 等黑盒可观察项。
+TestKnowledgeBase 生成的 `fault_ref` 用例不能只验证"最终返回成功/失败"。阶段2.6 会为每条命中补齐 `fault_oracles`，阶段3b 必须原样写入 `TestCases/test_design.json`，且至少包含 1 条 required 的 `process` 或 `negative` oracle。阶段4 在 pytest 通过后运行 `scripts/evaluate_fault_oracles.py` 读取 `TestRun/trace/<case>.jsonl`，检查 `no_unexpected_5xx`、`no_unexpected_error_frame`、`correlation_id_preserved`、`sse_terminal_state`、`no_duplicate_terminal_event`、`resource_not_created`、`state_not_mutated`、`retry_or_timeout_observed` 等黑盒可观察项。
 
 只有 `fault_oracle_summary.classification=="passed"` 时，故障导向用例才能保持 `status=passed`。如果最终响应看似成功但中间 trace 暴露 5xx、error frame、重复终态事件、id 未回带或状态副作用，结果会转为 `sdk_defect` / `sut_unsatisfied`；无法机器观察的 required oracle 会转为 `requires_human_review`，而不是静默通过。
 
@@ -246,17 +246,17 @@ TestKnowledgeBase 生成的 `fault_ref` 用例不能只验证"最终返回成功
 
 | 产物 | 说明 |
 |------|------|
-| `targets/<target_id>/.state/knowledge_matches.json` | TestKnowledgeBase 主产物（匹配 + 契约调和 + 配额） |
-| `targets/<target_id>/.state/fault_matches.json` | 兼容产物，供 target-local stage3b/stage5 读取 |
-| `targets/<target_id>/.state/fault_contract_alignment.md` | 故障-契约对齐报告 |
-| `targets/<target_id>/.state/results/<case_id>.json` 中的 `fault_oracle_summary` | `fault_ref` 用例的过程/否定 oracle 门禁结果 |
-| `targets/<target_id>/.state/new_knowledge_candidates.json` | 本轮闭环候选（dry-run 输出） |
-| `targets/<target_id>/.state/new_faults_detected.json` | 兼容候选输出 |
-| `targets/<target_id>/.state/professional_acceptance.seed.json` | Phase C：测试计划和需求可测性种子 |
-| `targets/<target_id>/.state/professional_acceptance.code_gaps.json` | Phase C：代码/可观测性/依赖证据缺口 |
-| `targets/<target_id>/.state/professional_case_guidance.json` | Phase B：stage3b 用例设计指导与 `acceptance_refs` |
-| `targets/<target_id>/.state/professional_acceptance.json` | Phase A：stage5 专业验收和发布门禁矩阵 |
-| `targets/<target_id>/.state/ai_eval_readiness.json` | Phase D：AI/Agent eval、grader、redteam、tool-call、监控就绪度 |
+| `targets/<target_id>/KnowledgeBase/knowledge_matches.json` | TestKnowledgeBase 主产物（匹配 + 契约调和 + 配额） |
+| `targets/<target_id>/KnowledgeBase/fault_matches.json` | 兼容产物，供 target-local stage3b/stage5 读取 |
+| `targets/<target_id>/KnowledgeBase/fault_contract_alignment.md` | 故障-契约对齐报告 |
+| `targets/<target_id>/TestRun/results/<case_id>.json` 中的 `fault_oracle_summary` | `fault_ref` 用例的过程/否定 oracle 门禁结果 |
+| `targets/<target_id>/KnowledgeBase/new_knowledge_candidates.json` | 本轮闭环候选（dry-run 输出） |
+| `targets/<target_id>/KnowledgeBase/new_faults_detected.json` | 兼容候选输出 |
+| `targets/<target_id>/QualityGates/professional_acceptance.seed.json` | Phase C：测试计划和需求可测性种子 |
+| `targets/<target_id>/QualityGates/professional_acceptance.code_gaps.json` | Phase C：代码/可观测性/依赖证据缺口 |
+| `targets/<target_id>/QualityGates/professional_case_guidance.json` | Phase B：stage3b 用例设计指导与 `acceptance_refs` |
+| `targets/<target_id>/QualityGates/professional_acceptance.json` | Phase A：stage5 专业验收和发布门禁矩阵 |
+| `targets/<target_id>/QualityGates/ai_eval_readiness.json` | Phase D：AI/Agent eval、grader、redteam、tool-call、监控就绪度 |
 | 用例字段 `fault_ref` | 故障导向用例的溯源标记 |
 | 用例字段 `fault_oracles` | 故障导向用例的 required 过程/否定/结果 oracle |
 

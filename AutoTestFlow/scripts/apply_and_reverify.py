@@ -3,9 +3,9 @@
 """
 apply_and_reverify.py - stage7 应用补丁 + 本地重建 + 复验（确定性绿门，无 LLM）
 
-读取 stage6 产出的 .state/remediation/defects/<case>/{patch.diff,regression_test.diff}，
+读取 stage6 产出的 Remediation/defects/<case>/{patch.diff,regression_test.diff}，
 对配置声明的代码仓在 <ref> 基线上：建分支 → git apply（路径白名单）→ 构建 → 重启 SUT →
-重跑失败的黑盒用例（须转绿）+ 回归自测 → 产 .state/remediation/reverify.json。
+重跑失败的黑盒用例（须转绿）+ 回归自测 → 产 Remediation/reverify.json。
 
 绿/红由本脚本**确定性判定**（重跑未改动的 stage4 用例 + 重建后的 SUT），LLM 不参与——
 这是"生成器不得自我认证"红线的执行点。所有失败落 reverify.json、丢弃该缺陷、不抛栈。
@@ -29,6 +29,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from remediation_config import (  # noqa: E402
     load_json, save_json, load_config, resolve_config_path, ConfigError,
 )
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import output_layout as layout  # noqa: E402
 
 
 def _run(cmd, cwd=None, timeout=900, env=None):
@@ -206,10 +208,10 @@ def reverify_live(cfg, output_dir, clone_abs, applied_cases, rec):
 
     # 重跑失败用例（复用 stage4 已生成的 test_<case>.py，指向重建后的 SUT）
     base_url = cfg["sut"]["base_url"]
-    trace_dir = os.path.join(output_dir, ".state", "remediation", "trace")
-    env = dict(os.environ, BASE_URL=base_url, A2A_TRACE_DIR=trace_dir)
+    trace_dir = layout.target_dir(output_dir, "remediation_trace", create=True)
+    env = dict(os.environ, BASE_URL=base_url, A2A_TRACE_DIR=trace_dir, AUTOTESTFLOW_TRACE_DIR=trace_dir)
     for case in applied_cases:
-        tfile = os.path.join(output_dir, "test_%s.py" % case.lower())
+        tfile = layout.existing_test_file(output_dir, case.lower())
         if not os.path.exists(tfile):
             rec["defects"][case]["after"] = "no_test_file"
             continue
@@ -262,7 +264,7 @@ def main():
     parser.add_argument("--work-dir", default=None)
     args = parser.parse_args()
 
-    rem_dir = os.path.join(args.output_dir, ".state", "remediation")
+    rem_dir = layout.target_dir(args.output_dir, "remediation", create=True)
     cfg_path = resolve_config_path(args.output_dir, args.work_dir, args.remediation_config)
     rec = {"generated_by": "apply_and_reverify.py", "require_green": True,
            "defects": {}, "remediated": [], "still_red": []}
@@ -270,7 +272,7 @@ def main():
     if not cfg_path:
         rec["status"] = "skipped"
         rec["reason"] = "no remediation config resolved"
-        save_json(os.path.join(rem_dir, "reverify.json"), rec)
+        save_json(layout.target_artifact(args.output_dir, "remediation_reverify", create_parent=True), rec)
         print("[apply_and_reverify] 无配置，跳过。")
         return 0
     try:
@@ -278,11 +280,11 @@ def main():
     except ConfigError as e:
         rec["status"] = "config_error"
         rec["reason"] = str(e)
-        save_json(os.path.join(rem_dir, "reverify.json"), rec)
+        save_json(layout.target_artifact(args.output_dir, "remediation_reverify", create_parent=True), rec)
         print("[apply_and_reverify] 配置非法：%s" % e)
         return 0
 
-    plan_fp = os.path.join(rem_dir, "plan.json")
+    plan_fp = layout.existing_target_artifact(args.output_dir, "remediation_plan")
     plan = load_json(plan_fp) if os.path.exists(plan_fp) else {"defects": []}
     case_ids = [d["case_id"] for d in plan.get("defects", [])]
     spec_of = {d["case_id"]: d.get("spec_id", "") for d in plan.get("defects", [])}
@@ -298,7 +300,7 @@ def main():
     method = prepare_repo(cfg, args.output_dir, clone_abs, rec)
     if method is None:
         rec["status"] = "clone_failed"
-        save_json(os.path.join(rem_dir, "reverify.json"), rec)
+        save_json(layout.target_artifact(args.output_dir, "remediation_reverify", create_parent=True), rec)
         print("[apply_and_reverify] 代码仓准备失败（clone/物化）。")
         return 0
 
@@ -307,10 +309,10 @@ def main():
     # before 基线（来自已落盘的红结果）
     applied_cases = []
     for case in case_ids:
-        res_fp = os.path.join(args.output_dir, ".state", "results", "%s.json" % case)
+        res_fp = layout.existing_result_file(args.output_dir, case)
         before = load_json(res_fp).get("class", "sdk_defect") if os.path.exists(res_fp) else "sdk_defect"
         drec = {"case_id": case, "spec_id": spec_of.get(case, ""), "before": before}
-        defect_dir = os.path.join(rem_dir, "defects", case)
+        defect_dir = layout.existing_remediation_defect_dir(args.output_dir, case)
         if apply_defect(clone_abs, defect_dir, cfg, drec):
             # 记录补丁规模
             pdiff = open(os.path.join(defect_dir, "patch.diff"), encoding="utf-8").read()
@@ -341,7 +343,7 @@ def main():
             rec["still_red"].append(case)
     rec["status"] = "done"
 
-    save_json(os.path.join(rem_dir, "reverify.json"), rec)
+    save_json(layout.target_artifact(args.output_dir, "remediation_reverify", create_parent=True), rec)
     print("[apply_and_reverify] method=%s build=%s ready=%s | remediated=%s still_red=%s"
           % (rec.get("repo_method"), rec.get("build"), rec.get("sut_ready"),
              rec["remediated"], rec["still_red"]))

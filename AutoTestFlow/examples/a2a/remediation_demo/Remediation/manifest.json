@@ -50,5 +50,5 @@
     "localizable": 2,
     "needs_human": 0
   },
-  "fault_analysis_manifest": ".state/fault_analysis/manifest.json"
+  "fault_analysis_manifest": "FaultAnalysis/manifest.json"
 }

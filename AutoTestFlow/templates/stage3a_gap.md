@@ -22,8 +22,8 @@
 
 ### 第二步：读取输入（并行 Read）
 
-- `{output_dir}/.state/s1_index.json` — 需求侧场景索引（获取 function_points 和 scenario_index，了解已有场景避免重复）
-- `{output_dir}/.state/s2_code_facts.json` — 代码事实（获取 code_only_capabilities + entry_catalog + exception_catalog + constraint_catalog）
+- `{output_dir}/FeatureAnalysis/s1_index.json` — 需求侧场景索引（获取 function_points 和 scenario_index，了解已有场景避免重复）
+- `{output_dir}/FeatureAnalysis/s2_code_facts.json` — 代码事实（获取 code_only_capabilities + entry_catalog + exception_catalog + constraint_catalog）
 
 输出统计：`code_only: X | 已有场景: X`
 
@@ -106,7 +106,7 @@
 
 **3c. 写入文件**
 
-Write `{output_dir}/.state/s3a_enriched/FS-GAP-{NNN}.json`
+Write `{output_dir}/FeatureAnalysis/s3a_enriched/FS-GAP-{NNN}.json`
 
 ### 第四步：仅返回摘要
 
@@ -120,7 +120,7 @@ Write `{output_dir}/.state/s3a_enriched/FS-GAP-{NNN}.json`
 | code_only能力 | X 个 |
 | 生成GAP场景 | X 个 |
 | 跳过（已覆盖/内部） | X 个 |
-| 输出 | .state/s3a_enriched/FS-GAP-*.json |
+| 输出 | FeatureAnalysis/s3a_enriched/FS-GAP-*.json |
 ```
 
 ## ---END-PROMPT---

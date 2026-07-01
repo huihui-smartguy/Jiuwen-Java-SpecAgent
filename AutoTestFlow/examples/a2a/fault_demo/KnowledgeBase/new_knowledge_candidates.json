@@ -1,0 +1,70 @@
+{
+  "generated_by": "record_faults.py",
+  "mode": "dry-run",
+  "target": "overlay",
+  "knowledge_root": "/Users/yanghui/Library/Mobile Documents/com~apple~CloudDocs/Codex/AutoTestFlow_Work/repo/TestKnowledgeBase",
+  "new_knowledge_candidates": [
+    {
+      "fault_id": "F-HIST-001",
+      "knowledge_id": "F-HIST-001",
+      "knowledge_type": "sdk_defect_candidate",
+      "domain": "rest_api",
+      "source": "TC_041 执行 sdk_defect",
+      "description": "SPEC-RESP-WRAP 契约违例：期望 终态 FAILED（不存在的 agentId 不应成功）；实际 COMPLETED",
+      "severity": "高",
+      "discovered_date": "2026-07-01",
+      "test_case_id": "TC_041",
+      "spec_id": "SPEC-RESP-WRAP",
+      "field": "result.task.status.state",
+      "fault_ref": null,
+      "test_strategy": {
+        "trigger_pattern": "1. 构造消息并通过 POST /a2a 同步发送",
+        "expected_behavior": "终态 FAILED（不存在的 agentId 不应成功）",
+        "assertion_level": "L2",
+        "validation_points": [
+          "result.task.status.state 应满足：终态 FAILED（不存在的 agentId 不应成功）"
+        ]
+      },
+      "resolution_status": "open",
+      "tags": [
+        "历史缺陷",
+        "契约验证"
+      ]
+    }
+  ],
+  "new_faults": [
+    {
+      "fault_id": "F-HIST-001",
+      "knowledge_id": "F-HIST-001",
+      "knowledge_type": "sdk_defect_candidate",
+      "domain": "rest_api",
+      "source": "TC_041 执行 sdk_defect",
+      "description": "SPEC-RESP-WRAP 契约违例：期望 终态 FAILED（不存在的 agentId 不应成功）；实际 COMPLETED",
+      "severity": "高",
+      "discovered_date": "2026-07-01",
+      "test_case_id": "TC_041",
+      "spec_id": "SPEC-RESP-WRAP",
+      "field": "result.task.status.state",
+      "fault_ref": null,
+      "test_strategy": {
+        "trigger_pattern": "1. 构造消息并通过 POST /a2a 同步发送",
+        "expected_behavior": "终态 FAILED（不存在的 agentId 不应成功）",
+        "assertion_level": "L2",
+        "validation_points": [
+          "result.task.status.state 应满足：终态 FAILED（不存在的 agentId 不应成功）"
+        ]
+      },
+      "resolution_status": "open",
+      "tags": [
+        "历史缺陷",
+        "契约验证"
+      ]
+    }
+  ],
+  "skipped": [
+    {
+      "case_id": "TC_042",
+      "reason": "重复签名 ('SPEC-RESP-WRAP', 'result.task.status.state')"
+    }
+  ]
+}

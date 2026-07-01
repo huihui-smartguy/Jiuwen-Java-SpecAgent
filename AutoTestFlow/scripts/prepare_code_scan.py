@@ -14,8 +14,15 @@ import argparse
 import json
 import os
 import re
+import sys
 from pathlib import Path
 from typing import Any
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+import output_layout as layout
 
 
 SCHEMA_VERSION = "1.0"
@@ -304,9 +311,7 @@ def build_plan(code_path: str | Path, output_dir: str | Path, profiles_path: str
 
 
 def write_plan(plan: dict[str, Any], output_dir: str | Path) -> Path:
-    state = Path(output_dir).resolve() / ".state"
-    state.mkdir(parents=True, exist_ok=True)
-    path = state / "code_scan_plan.json"
+    path = Path(layout.target_artifact(str(Path(output_dir).resolve()), "code_scan_plan", create_parent=True))
     with path.open("w", encoding="utf-8") as f:
         json.dump(plan, f, ensure_ascii=False, indent=2)
         f.write("\n")

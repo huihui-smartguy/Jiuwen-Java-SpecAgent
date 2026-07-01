@@ -53,7 +53,7 @@ Read `{requirement_doc}`（需求文档）
 
 #### 3b. 调用示例提取
 
-提取文档中展示**用户入口调用**的请求/响应示例（如 HTTP 请求体、响应样例、事件流样例） → `{output_dir}/.state/skeleton/`。无示例则不创建。（具体协议形态示例见 examples/a2a/）
+提取文档中展示**用户入口调用**的请求/响应示例（如 HTTP 请求体、响应样例、事件流样例） → `{output_dir}/FeatureAnalysis/skeleton/`。无示例则不创建。（具体协议形态示例见 examples/a2a/）
 
 **过滤规则**：仅提取展示用户可独立触发入口的示例（引用第四步FP单入口原则）。跳过展示内部实现的示例。
 
@@ -223,11 +223,11 @@ Read `{requirement_doc}`（需求文档）
 
 **拆分文件模式**：不写单个大JSON，改为索引 + 逐场景文件。
 
-1. **Write `{output_dir}/.state/s1_scenarios/FS-001.json` ... `FS-NNN.json`**：每个场景独立文件，schema 遵循已读取的 `shared/scenario_schema.md` 中的"单场景文件结构"。
+1. **Write `{output_dir}/FeatureAnalysis/s1_scenarios/FS-001.json` ... `FS-NNN.json`**：每个场景独立文件，schema 遵循已读取的 `shared/scenario_schema.md` 中的"单场景文件结构"。
 
-2. **Write `{output_dir}/.state/s1_index.json`**：轻量索引，包含 meta + function_points + scenario_index。schema 遵循 `shared/scenario_schema.md` 中的"s1_index.json 结构"。meta.source=requirement。
+2. **Write `{output_dir}/FeatureAnalysis/s1_index.json`**：轻量索引，包含 meta + function_points + scenario_index。schema 遵循 `shared/scenario_schema.md` 中的"s1_index.json 结构"。meta.source=requirement。
 
-3. **Write `{output_dir}/requirement_analysis.md`**（人类可读摘要，从索引生成）：
+3. **Write `{output_dir}/FeatureAnalysis/requirement_analysis.md`**（人类可读摘要，从索引生成）：
 
 ```
 一、需求概述
@@ -236,13 +236,13 @@ Read `{requirement_doc}`（需求文档）
 四、统计（FP数/场景数/各类分支数）
 ```
 
-如有调用示例，Write `{output_dir}/.state/skeleton/*`。
+如有调用示例，Write `{output_dir}/FeatureAnalysis/skeleton/*`。
 
 ### 第七步（续）：可选历史缺陷 P0 富化（best-effort，仅当传入 `{fault_lib}`）
 
 > 仅当编排器传入了故障库路径 `{fault_lib}` 时执行；否则跳过，对产物零影响。
 > 注：此为 **best-effort 启发式**——历史缺陷 `test_case_id`（如 `TC-A2A-002`）与当前 FP 无硬映射。
-> **权威的历史 P0 注入**由阶段2.6 `match_faults.py` 经 `.state/fault_matches.json` 完成；本步只是让关联在
+> **权威的历史 P0 注入**由阶段2.6 `match_faults.py` 经 `KnowledgeBase/fault_matches.json` 完成；本步只是让关联在
 > 需求分析阶段尽早可见，未命中不影响任何下游。
 
 1. Read `{fault_lib}` 的 `history_faults`（取 `description` / `tags` / `test_case_id`）。

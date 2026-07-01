@@ -1,6 +1,6 @@
 # 子Agent Prompt模板（故障增强 · 阶段2.6b，可选）
 
-> 可选阶段。仅当 `--fault-enrich on` 且 `.state/fault_matches.json` 含 `enrich.needs_bind=true` 的条目时由编排器启动。
+> 可选阶段。仅当 `--fault-enrich on` 且 `KnowledgeBase/fault_matches.json` 含 `enrich.needs_bind=true` 的条目时由编排器启动。
 > 作用：补 `match_faults.py`（纯脚本）难以确定性处理的**模糊部分**——把自由文本 validation_point 绑定到契约 specId、
 > 替换 overlay 残留占位、并检出 `contract_conflict`。**确定性骨架（匹配/配额/封顶）不在此改动。**
 
@@ -10,8 +10,8 @@
 
 ### 输入（并行 Read）
 
-1. `{output_dir}/.state/fault_matches.json` —— 故障注入计划（**只处理含 `enrich.needs_bind=true` 的条目**，其余原样保留）。
-2. `{output_dir}/contract.md` —— 契约权威性分级表（specId / spec-required / deployment-config-dependent / needs-runtime-verify）+ 各节 specId 目录。
+1. `{output_dir}/KnowledgeBase/fault_matches.json` —— 故障注入计划（**只处理含 `enrich.needs_bind=true` 的条目**，其余原样保留）。
+2. `{output_dir}/Contract/contract.md` —— 契约权威性分级表（specId / spec-required / deployment-config-dependent / needs-runtime-verify）+ 各节 specId 目录。
 3. `{fault_lib}`（及 `{fault_overlay}`，若有）—— 故障 `test_strategy`（trigger_pattern / expected_behavior / validation_points）与 `parameter_config`。
 
 ### 最高红线（与 shared/rules.md §2/§4/§6 一致，违反即任务失败）
@@ -45,7 +45,7 @@
 
 ### 输出
 
-- **原地重写** `{output_dir}/.state/fault_matches.json`：更新被增强的条目（其余逐字保留）；在 `meta` 增
+- **原地重写** `{output_dir}/KnowledgeBase/fault_matches.json`：更新被增强的条目（其余逐字保留）；在 `meta` 增
   `"enrichment": {"enriched": N, "newly_bound": M, "contract_conflict": K, "still_unbound": J}`。
 - 保持 schema 兼容：下游 stage3b 仍按既有字段消费，并会原样透传 `fault_oracles`；`contract_conflict` 项 stage3b 作观察用例（不强断言），但 required 过程/否定 oracle 仍可阻断 pass。
 
@@ -59,7 +59,7 @@
 | 新增绑定 oracle | X |
 | contract_conflict | X |
 | 仍未绑定(观察) | X |
-| 输出 | .state/fault_matches.json（已回写） |
+| 输出 | KnowledgeBase/fault_matches.json（已回写） |
 ```
 
 ## ---END-PROMPT---
