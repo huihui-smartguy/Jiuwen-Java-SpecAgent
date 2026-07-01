@@ -1,7 +1,7 @@
 # 子 Agent Prompt 模板（阶段4b - 批量生成）
 
 > **定位**：参考已通过的 P0 黑盒范例，批量生成 Python pytest 黑盒用例
-> **核心目标**：复制 P0 已验证的代码结构保持一致性；断言独立按 contract.md 设计；同样门禁 + **5分类失败处理** + 轨迹
+> **核心目标**：复制 P0 已验证的代码结构保持一致性；断言独立按 contract.md 设计；同样门禁 + **执行分类处理** + 轨迹
 
 ---
 
@@ -24,6 +24,8 @@
 - 测试步骤: {steps}
 - 预期结果: {expected}
 - oracle 引用: {oracle_refs}（contract.md 的 specId + 断言层级 + 权威性）
+- 故障来源 fault_ref: {fault_ref}
+- 故障过程/否定 oracle: {fault_oracles}
 - 输出路径: {target_output_dir}/test_{case_id_lower}.py
 - 工作目录: {work_dir}
 - SUT 基址: {sut_base_url}
@@ -82,6 +84,7 @@ cp -n {skill_dir}/reference/conftest.py {target_output_dir}/conftest.py
 - 边界E2E：验证边界值处理 + 输入未被静默修正
 - 约束E2E：违规被拦截 + 错误信息具体
 - 变体/质量E2E：验证 expected + 幂等性
+- `fault_ref` 用例：除最终 expected 外，必须产生可供 `fault_oracles` 评估的请求/响应/SSE trace；最终响应成功不代表故障用例成功。
 
 ### 第四步：SUT readiness 门禁（强制，先于运行）
 
@@ -111,9 +114,11 @@ cd {target_output_dir} && BASE_URL={sut_base_url} AUTOTESTFLOW_TRACE_DIR={target
 
 轨迹自动落 `{target_output_dir}/.state/trace/{test_name}.jsonl`。
 
-### 第六步：5分类失败处理 + 有界自我修复循环（最多 {max_fix_attempts} 轮）
+### 第六步：分类处理 + fault oracle 门禁 + 有界自我修复循环（最多 {max_fix_attempts} 轮）
 
-pytest 通过即 **pass**。失败/报错时先判定归类（5 类）：
+分类顺序固定为：`env_issue`（执行前就绪门）→ `harness_defect`（脚本/门禁/语法）→ pytest 断言失败归类 → `fault_oracles` 轨迹门禁 → `passed`。
+
+pytest 失败/报错时先判定归类：
 
 | class | 判定 | 处理 |
 |-------|------|------|
@@ -121,9 +126,22 @@ pytest 通过即 **pass**。失败/报错时先判定归类（5 类）：
 | **sut_unsatisfied**（SUT 当前不满足该用例） | 脚本可跑通 **且** SUT 可达并正常响应（无 5xx/契约违例），但断言不达成 = SUT 当前确实未满足该用例 | **忽略**：`pytest.skip(reason=...)` 或 `xfail` 标注原因（记入结果与报告），**不计失败、不改断言、不洗绿** |
 | **sdk_defect**（确认缺陷） | SUT 报错 / 5xx / 契约违例，且断言基于 **spec-required** specId 且写法正确（contract 确认本应如此） | status=sdk_defect，记 sdk_defect 字段，**绝不弱化 contract-backed 断言** |
 | **env_issue**（环境问题） | 连接 / 就绪 / 依赖问题 | 由第四步就绪门拦截；保留代码，不修，不重试 |
-| **pass** | 断言全过 | status=passed |
+| **requires_human_review**（需人工复核） | `fault_ref` 用例的 required 过程/否定 oracle 缺失、unsupported 或 trace 不可观察 | status=requires_human_review，记录 fault_oracle_summary，禁止写 pass |
+| **pass** | 非故障用例断言全过；或 `fault_ref` 用例断言全过且 required fault_oracles 全部通过 | status=passed |
 
 > 关键区分：报错根因在**测试代码** → harness_defect（修）；脚本能跑、SUT 正常响应但断言不达成 → sut_unsatisfied（skip 忽略，不改断言）；SUT 异常/契约违例 → sdk_defect（记缺陷）。三者不可混淆。
+
+pytest 通过后的 fault oracle 强制门禁：
+
+1. 若本用例无 `fault_ref`：pytest 通过即可写 `passed`。
+2. 若本用例有 `fault_ref`：先写 provisional result（`status=passed`, `pytest_status=passed`, `fault_ref`, `fault_oracles`, `trace_file`），随后运行：
+
+```bash
+python {skill_dir}/scripts/evaluate_fault_oracles.py --output-dir {target_output_dir} --case-id {case_id} --write
+```
+
+3. 读取更新后的 `{target_output_dir}/.state/results/{case_id}.json`。只有 `fault_oracle_summary.classification == "passed"` 时，才允许最终保持 `status=passed`。
+4. 若最终响应通过但 required 过程/否定 oracle 失败：有 spec-required/fault-required 证据时写 `status=sdk_defect`；否则写 `sut_unsatisfied` 或 `requires_human_review`。
 
 修复仅针对 harness_defect。修复后重跑第五步。
 
@@ -133,12 +151,18 @@ pytest 通过即 **pass**。失败/报错时先判定归类（5 类）：
 
 ```json
 {
-    "status": "passed | harness_defect | sut_unsatisfied | sdk_defect | env_issue",
+    "status": "passed | harness_defect | sut_unsatisfied | sdk_defect | env_issue | requires_human_review",
     "target_id": "{target_id}",
-    "class": "harness_defect | sut_unsatisfied | sdk_defect | env_issue | null",
+    "class": "harness_defect | sut_unsatisfied | sdk_defect | env_issue | requires_human_review | null",
     "fix_rounds": 0,
+    "pytest_status": "passed | failed | error | skipped",
     "trace_file": ".state/trace/{test_name}.jsonl（env_issue 未跑时为 null）",
     "oracle_refs": ["SPEC-..."],
+    "fault_ref": "仅 fault_ref 用例填写",
+    "fault_oracle_results": [],
+    "fault_oracle_summary": {
+        "classification": "passed | sdk_defect | sut_unsatisfied | requires_human_review | not_applicable"
+    },
     "skip_reason": "仅 sut_unsatisfied：SUT 当前不满足的具体期望（pytest.skip/xfail 同文案）",
     "sdk_defect": {
         "spec_id": "违背的 contract specId",
@@ -148,7 +172,7 @@ pytest 通过即 **pass**。失败/报错时先判定归类（5 类）：
 }
 ```
 
-> status=passed 时 class=null、skip_reason/sdk_defect 省略。
+> status=passed 时 class=null、skip_reason/sdk_defect 省略。`fault_ref` 用例 status=passed 时仍必须保留 `fault_oracle_summary`。
 
 #### 7b. 仅输出一行
 
@@ -167,6 +191,7 @@ pytest 通过即 **pass**。失败/报错时先判定归类（5 类）：
 - ❌ 臆造响应形态 / 硬假设 result、id、事件流形态（用 helper 容差）
 - ❌ import Java 内部类
 - ❌ 为让用例通过而弱化 contract-backed 断言（L2→L1→L0 降级），或把 sut_unsatisfied 洗成 pass
+- ❌ 对 `fault_ref` 用例仅因最终 pytest/末态响应通过就写 pass，必须先通过 required `fault_oracles`
 - ❌ SUT 不可用时降级断言——应记 env_issue 保留代码待复跑
 - ❌ 把 harness_defect（脚本问题）当 sut_unsatisfied 忽略，或把 sut_unsatisfied 当 harness_defect 去改断言
 - ❌ 只 1 条断言 / 仅断言响应原文

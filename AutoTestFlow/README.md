@@ -6,13 +6,23 @@
 
 ---
 
+## 默认全链路命令（推荐）
+
+```bash
+/auto-test-flow requirements.md --sut-manifest autotestflow.suts.md --remediation-config remediation.config.json --faults on --fault-enrich on --remediate on
+```
+
+运行前只需按项目实际情况修改 `requirements.md`、`autotestflow.suts.md` 和 `remediation.config.json`。该命令默认接入 `TestKnowledgeBase/registry.json`、启用故障库 LLM 增强，并在报告后进入门控式 fault analysis / remediation；外发 evidence issue 仍必须经过人工确认门和 `switches.allow_open_issue=true`。
+
+---
+
 ## 1. 这是什么
 
 | 维度 | 说明 |
 |------|------|
 | **定位** | 需求驱动的测试智能体，按"测试维度"抽象 |
 | **测试维度** | `scenario`（场景化，**已实现**）+ `dfx`（性能/可靠性/安全/兼容性等，**规划中、并行轨道**） |
-| **输入** | 需求文档 + SUT manifest（Markdown + YAML，支持一个或多个 target）+（可选）TestKnowledgeBase |
+| **输入** | 需求文档 + SUT manifest（Markdown + YAML，支持一个或多个 target）+ 默认 TestKnowledgeBase + remediation 配置（门控修复） |
 | **输出** | 每个 target 的校准契约 + 测试场景 + 测试设计 + Python 黑盒用例 + target 报告，以及根级汇总报告 |
 | **被测对象** | Java/Spring、Python Web/API、C++ service/RPC 或未知源码树的 SUT target。每个 target 的协议/端点/响应契约真实形态以 target-local `contract.md` 为准 |
 | **测试栈** | stage4 生成 Python `pytest` + `httpx` 黑盒用例，只经对外协议观测 |
@@ -66,6 +76,7 @@ AutoTestFlow/                       # Skill 本体
 │   ├── merge_enriched.py
 │   ├── merge_test_design.py
 │   ├── select_p0.py
+│   ├── evaluate_fault_oracles.py   # stage4 子步：fault_ref 用例 trace/process/negative oracle 门禁
 │   ├── aggregate_results.py
 │   └── record_faults.py            # stage5 子步：sdk_defect 闭环自积累（默认 overlay/dry-run）
 └── templates/                      # 各阶段子 Agent Prompt
@@ -91,7 +102,13 @@ cp -r AutoTestFlow <你的项目>/.claude/skills/
 
 ## 5. 调用示例
 
+```bash
+/auto-test-flow requirements.md --sut-manifest autotestflow.suts.md --remediation-config remediation.config.json --faults on --fault-enrich on --remediate on
 ```
+
+兼容的最小标准调用仍可使用：
+
+```bash
 /auto-test-flow 需求.md --sut-manifest autotestflow.suts.md
 ```
 
@@ -104,8 +121,10 @@ cp -r AutoTestFlow <你的项目>/.claude/skills/
 | `--knowledge-domain` | 知识域过滤：`all` / `rest_api` / `web` / `agent` / `dfx`，或逗号分隔 package_id |
 | `--fault-lib` | 显式故障库路径，仅用于旧 demo 或临时单文件调试；默认不再自动回退 `Specification_Repository` |
 | `--fault-overlay` | 项目级故障库 overlay（覆盖 / 禁用 / 项目特有故障） |
-| `--faults` | 故障库启用模式：`auto`（默认，探测到库即启用）/ `on` / `off` |
-| `--fault-enrich` | stage2.6b 可选 LLM 增强（模糊绑定 / 占位替换 / contract_conflict 检出）：`on` / `off`（默认）/ `auto` |
+| `--faults` | 故障库启用模式：`on`（默认，读取默认 TestKnowledgeBase）/ `auto` / `off` |
+| `--fault-enrich` | stage2.6b LLM 增强（模糊绑定 / 占位替换 / contract_conflict 检出）：`on`（默认）/ `off` / `auto` |
+| `--remediate` | fault analysis / 自动修复总开关：`on`（默认，门控执行）/ `dry-run` / `off` |
+| `--remediation-config` | 修复配置文件路径；默认命令使用项目根 `remediation.config.json` |
 
 > 不提供代码路径/PR/commit 时进入**纯需求模式**（1→2R→3aR→3b），只产出测试设计文档。
 > 完整参数（`--output-dir` / `--case-batch-size` / `--p0-count` / `--pr` / `--commit` 等）以 `SKILL.md`《参数》为准；此处仅列常用项。
@@ -121,25 +140,28 @@ Manifest 示例见 [`examples/multi_sut/sut-manifest.md`](examples/multi_sut/sut
 ## 6. 端到端流程
 
 ```
-需求.md + SUT manifest +（可选）TestKnowledgeBase
+需求.md + SUT manifest + TestKnowledgeBase + remediation.config.json
    │
    ├─ stage1   需求侧场景分析（flow/framework/quality）        ← 人工裁决 ✅（FP 拆分/场景边界把关）
    ├─ target loop（每个 targets/<target_id>/ 独立执行）
    │  ├─ stage2   通用代码扫描 → code_scan_plan.json + code_analysis.md（profile adapter）
    │  ├─ stage2.5 契约校准：probe_contract.py --target-id → target-local contract.md ← 判据权威性闸
-   │  ├─ stage2.6 TestKnowledgeBase 匹配（可选）：registry/glob discovery + target contract 封顶
-   │            └─ 2.6b（可选，--fault-enrich on）LLM 增强：模糊绑定 / 占位替换 / contract_conflict
+   │  ├─ stage2.6 TestKnowledgeBase 匹配（默认）：registry/glob discovery + target contract 封顶
+   │            └─ 2.6b（默认按需）LLM 增强：模糊绑定 / 占位替换 / contract_conflict
    │  ├─ stage2.P Professional_experience（advisory）：professional_acceptance.py → seed/code_gaps/case_guidance
    │  ├─ stage3a  场景富化（GAP + 框架补充）
    │  ├─ stage3b  测试用例设计（断言按 target contract.md） ← 人工裁决 ✅
    │  ├─ stage4   target 就绪门 → 生成 Python pytest+httpx 用例 → 执行 + 采集交互轨迹
-   │            └─ 执行边界5分类：harness_defect / sut_unsatisfied / sdk_defect / env_issue / pass
+   │            └─ fault_ref 用例追加 fault oracle 门禁：pytest 通过后仍需过程/否定 oracle 通过
+   │            └─ 执行边界分类：harness_defect / sut_unsatisfied / sdk_defect / env_issue / requires_human_review / pass
    │  └─ stage5   target 报告 + record_faults.py 闭环
+   ├─ stage6   fault analysis / 修复方案 / evidence issue 草稿（默认门控，需配置）
+   ├─ stage7   本地应用 + 构建 + 复验 + evidence issue（仅人工确认 + allow_open_issue 后外发）
    └─ root report 聚合全部 target 的覆盖、风险、env_issue 与缺陷摘要
 ```
 
 `校准 → 设计 → 生成 → 就绪门 → 执行+轨迹 → 报告`：判据先校准、再设计断言；执行前先探活；
-失败严格按执行边界5分类——脚本问题自我修复，SUT 当前确实不满足则 skip 标原因，绝不洗绿。
+失败严格按执行边界分类——脚本问题自我修复，SUT 当前确实不满足则 skip 标原因，绝不洗绿。带 `fault_ref` 的故障库用例是缺陷探针，最终 E2E 响应成功后仍必须通过 required `fault_oracles`（过程/否定/结果 oracle），否则归为 `sdk_defect` / `sut_unsatisfied` / `requires_human_review`，不得写 pass。
 
 ---
 
@@ -149,9 +171,9 @@ Manifest 示例见 [`examples/multi_sut/sut-manifest.md`](examples/multi_sut/sut
 
 ### 7.1 默认即启用（零配置）
 
-标准模式下 `--faults auto`（默认）会自动读取 `TestKnowledgeBase/registry.json`；如果当前分支尚未包含 registry，则退化为扫描 `TestKnowledgeBase/Fault/*.json`。AutoTestFlow 不再自动回退 `Specification_Repository`。匹配阶段会按 package/domain/category metadata、场景域、标签、历史缺陷、关联字段、流式信号等规则把知识条目匹配进流水线，并用 `contract.md` 的字段权威性分级对每条故障的断言级别做**契约优先封顶**（spec-required→至多 L2；config-dependent/契约静默/未知→降 L0/L1）。
+标准模式下 `--faults on`（默认）会读取 `TestKnowledgeBase/registry.json`；如果 registry 暂不可用，则读取 `TestKnowledgeBase/Fault/*.json`。AutoTestFlow 不再自动回退 `Specification_Repository`。匹配阶段会按 package/domain/category metadata、场景域、标签、历史缺陷、关联字段、流式信号等规则把知识条目匹配进流水线，并用 `contract.md` 的字段权威性分级对每条故障的断言级别做**契约优先封顶**（spec-required→至多 L2；config-dependent/契约静默/未知→降 L0/L1）。
 
-**优雅降级（硬保证）**：未发现 TestKnowledgeBase / `--faults off` / 无 `contract.md`（纯需求模式）→ **不产出任何文件**，流水线与未接入知识库时**字节级一致**。
+**显式关闭 / 降级**：`--faults off` / 无 `contract.md`（纯需求模式）→ **不产出任何故障匹配文件**，流水线与未接入知识库时**字节级一致**。单独运行确定性脚本时仍可使用 `--faults auto` 做宽松 smoke。
 
 ### 7.2 启用 / 覆盖 / 增强
 
@@ -162,11 +184,11 @@ Manifest 示例见 [`examples/multi_sut/sut-manifest.md`](examples/multi_sut/sut
 | 显式指定库 | `--fault-lib <path> --faults on`（旧 demo / 单文件调试） |
 | 关闭 | `--faults off`（与未接入完全一致） |
 | 项目专化 | 在 `TestKnowledgeBase/Fault/project_faults.json` 或被测项目 `fault_library/project_faults.json` 维护 overlay，用 `--fault-overlay <path>` 注入（覆盖 / 禁用 / 项目特有故障 / 参数占位替换） |
-| LLM 增强（可选） | `--fault-enrich on` 开 stage2.6b：把自由文本判据**模糊绑定**到契约 specId、替换 overlay 残留 `{占位符}`、检出 `contract_conflict`（默认 `off`，opt-in） |
+| LLM 增强 | `--fault-enrich on`（默认）开 stage2.6b：把自由文本判据**模糊绑定**到契约 specId、替换 overlay 残留 `{占位符}`、检出 `contract_conflict` |
 
 ```bash
-# 默认（自动读取 TestKnowledgeBase registry/glob）
-/auto-test-flow 需求.md --sut-manifest autotestflow.suts.md
+# 默认（读取 TestKnowledgeBase registry/glob，并启用 LLM 增强）
+/auto-test-flow 需求.md --sut-manifest autotestflow.suts.md --faults on --fault-enrich on
 
 # 指定知识域 + 项目 overlay + LLM 增强
 /auto-test-flow 需求.md --sut-manifest autotestflow.suts.md \
@@ -188,17 +210,24 @@ python AutoTestFlow/scripts/record_faults.py --output-dir <output_dir> \
 
 安全收敛：绝不收 `sut_unsatisfied / harness_defect / env_issue`（避免把非缺陷沉淀成"历史缺陷"）。overlay→全局的晋升（人工评审 + PR）进入 `TestKnowledgeBase/Fault/`；`Specification_Repository` 不再作为后续晋升目标。
 
-### 7.4 对人工裁决门的影响（保守降级）
+### 7.4 fault_ref 用例的过程/否定 oracle
+
+TestKnowledgeBase 生成的 `fault_ref` 用例不能只验证"最终返回成功/失败"。阶段2.6 会为每条命中补齐 `fault_oracles`，阶段3b 必须原样写入 `test_design.json`，且至少包含 1 条 required 的 `process` 或 `negative` oracle。阶段4 在 pytest 通过后运行 `scripts/evaluate_fault_oracles.py` 读取 `.state/trace/<case>.jsonl`，检查 `no_unexpected_5xx`、`no_unexpected_error_frame`、`correlation_id_preserved`、`sse_terminal_state`、`no_duplicate_terminal_event`、`resource_not_created`、`state_not_mutated`、`retry_or_timeout_observed` 等黑盒可观察项。
+
+只有 `fault_oracle_summary.classification=="passed"` 时，故障导向用例才能保持 `status=passed`。如果最终响应看似成功但中间 trace 暴露 5xx、error frame、重复终态事件、id 未回带或状态副作用，结果会转为 `sdk_defect` / `sut_unsatisfied`；无法机器观察的 required oracle 会转为 `requires_human_review`，而不是静默通过。
+
+### 7.5 对人工裁决门的影响（保守降级）
 
 `fault_matches.json` 存在时，**仅 stage3b 门的"异常/边界/质量覆盖完备性"维度由故障库背书自动通过**（展示故障覆盖摘要）；**stage1 门**与 **stage3b 的"FP 拆分映射 / 断言合理性"维度仍强制人工**（故障库不覆盖这些判据）。
 
-### 7.5 产物与可复现 demo
+### 7.6 产物与可复现 demo
 
 | 产物 | 说明 |
 |------|------|
 | `targets/<target_id>/.state/knowledge_matches.json` | TestKnowledgeBase 主产物（匹配 + 契约调和 + 配额） |
 | `targets/<target_id>/.state/fault_matches.json` | 兼容产物，供 target-local stage3b/stage5 读取 |
 | `targets/<target_id>/.state/fault_contract_alignment.md` | 故障-契约对齐报告 |
+| `targets/<target_id>/.state/results/<case_id>.json` 中的 `fault_oracle_summary` | `fault_ref` 用例的过程/否定 oracle 门禁结果 |
 | `targets/<target_id>/.state/new_knowledge_candidates.json` | 本轮闭环候选（dry-run 输出） |
 | `targets/<target_id>/.state/new_faults_detected.json` | 兼容候选输出 |
 | `targets/<target_id>/.state/professional_acceptance.seed.json` | Phase C：测试计划和需求可测性种子 |
@@ -207,8 +236,9 @@ python AutoTestFlow/scripts/record_faults.py --output-dir <output_dir> \
 | `targets/<target_id>/.state/professional_acceptance.json` | Phase A：stage5 专业验收和发布门禁矩阵 |
 | `targets/<target_id>/.state/ai_eval_readiness.json` | Phase D：AI/Agent eval、grader、redteam、tool-call、监控就绪度 |
 | 用例字段 `fault_ref` | 故障导向用例的溯源标记 |
+| 用例字段 `fault_oracles` | 故障导向用例的 required 过程/否定/结果 oracle |
 
-### 7.6 Professional_experience advisory gates
+### 7.7 Professional_experience advisory gates
 
 `Professional_experience` 不参与 fault matching，也不生成强断言。它通过 `professional_acceptance.py` 生成 advisory artifacts，服务于测试计划、用例设计、执行证据、AI/Agent readiness 和 stage5 报告：
 
@@ -233,23 +263,23 @@ python AutoTestFlow/scripts/professional_acceptance.py \
 > **domain-aware fault analysis**。Stage6 产根因、证据、修复方案和 issue 草稿；只有 spec-required 且可定位的
 > contract defect 才额外产业务补丁和回归自测。Stage7 负责本地应用/构建/复验，并且**只提交 upstream evidence issue**；
 > 自动 PR 提交已移除。
-> **全程门控、默认关闭、不自我认证**：`--remediate=off`（默认）时不产任何修复文件，流水线与 v1.x 字节级一致。
+> **默认开启但全程门控、不自我认证**：默认命令使用 `--remediate on`。缺少 `remediation.config.json`、无可分析目标或配置不合法时跳过 stage6/7 并给出说明；任何 evidence issue 外发仍必须经过人工确认门与 `switches.allow_open_issue=true`。
 
 ### 8.1 开关与配置
 
 | 参数 | 说明 |
 |------|------|
-| `--remediate` | `off`（默认）/ `dry-run`（分析 + 本地复验，**不**提交 issue）/ `on`（经**强制人工确认门**后提交 evidence issue；不再提交 PR） |
-| `--remediation-config` | 修复配置文件路径，默认探测 `<output_dir>/remediation.config.json` |
+| `--remediate` | `on`（默认，经**强制人工确认门**后才可提交 evidence issue；不再提交 PR）/ `dry-run`（分析 + 本地复验，**不**提交 issue）/ `off`（显式关闭） |
+| `--remediation-config` | 修复配置文件路径，默认命令使用 `remediation.config.json`；缺失时跳过 stage6/7 |
 | `--remediation-max-defects` | 单轮最多处理的 patchable contract defect 数（默认 5） |
 
 配置用 JSON 声明**被测对象 + 代码仓**：`sut.base_url`、`repo.{upstream_url,ref,clone_path,local_branch_prefix,business_code_roots,selftest_roots}`、`build.{build_cmd,selftest_cmd}`、`run.{restart_cmd,readiness_probe}`、`issue`/`switches`。多 SUT 模式优先读取 manifest target 的 `remediation.config_path` 或 `targets/<target_id>/remediation.config.json`；全局 `--remediation-config` 仅用于 legacy 单 target 运行。复制模板 `examples/remediation.config.example.json`（spring-ai-ascend），schema 见 `shared/remediation_config_schema.md`。
 
 ```bash
-/auto-test-flow 需求.md --sut-manifest autotestflow.suts.md --remediate on
+/auto-test-flow requirements.md --sut-manifest autotestflow.suts.md --remediation-config remediation.config.json --faults on --fault-enrich on --remediate on
 ```
 
-### 8.2 阶段（stage5 之后，可选门控）
+### 8.2 阶段（stage5 之后，默认门控）
 
 - **stage6 fault analysis**（只读，每目标一个子 Agent）：产 `evidence.json` + `root_cause.md` + `fix_solution.md` + `issue.md` + `confidence.json`；patchable 目标额外产 `patch.diff` + `regression_test.diff`。
 - **强制人工确认门**：`--remediate=on` 时，任何外发动作前必须经 `AskUserQuestion` 确认（展示目标 domain / 类型 / 文件 / ±行 / 置信 / issue 标题）；可选"提交 evidence issue / 仅 dry-run / 取消"。
@@ -297,6 +327,6 @@ python AutoTestFlow/beta/scripts/check_wiki.py          # 护栏校验（覆盖/
 | **stage4 跨栈** | Python 黑盒测 Java SUT，跨栈方案；需用户在可达 SUT 上端到端验证 |
 | **示例锚定** | A2A/agent-runtime 是示例（见 `examples/a2a/`）；其他 SUT 按校准出的 `contract.md` 专化 `reference/http_client.py` |
 | **人工裁决** | TestKnowledgeBase 已接入，后续默认知识源为 `TestKnowledgeBase/registry.json` + `TestKnowledgeBase/Fault/`；stage3b 的故障覆盖完备性维度可由知识库背书自动通过，stage1 与 FP 拆分/断言合理性仍人工 |
-| **Fault analysis / 自动修复(v2.1)** | `--remediate=off` 默认关闭；真实 clone + 构建 + SUT 重启 + `gh issue` 仅在用户用**真实仓 + 构建工具链 + gh 鉴权**运行 `on` 且过门时走通；自动 PR 已移除。本仓含**离线确定性 demo**（`examples/a2a/remediation_demo/`，fake_repo + 模拟复验）验证编排与产物 |
+| **Fault analysis / 自动修复(v2.1)** | 默认命令使用 `--remediate=on`，但缺少/非法 `remediation.config.json` 或无可分析目标会跳过 stage6/7；真实 clone + 构建 + SUT 重启 + `gh issue` 仅在用户用**真实仓 + 构建工具链 + gh 鉴权**且过门、并设置 `switches.allow_open_issue=true` 时走通；自动 PR 已移除。本仓含**离线确定性 demo**（`examples/a2a/remediation_demo/`，fake_repo + 模拟复验）验证编排与产物 |
 
 > 设计立场：Oracle（`contract.md`）必须可信、可追溯，生成器不得自我认证。详见 `DESIGN.md`。

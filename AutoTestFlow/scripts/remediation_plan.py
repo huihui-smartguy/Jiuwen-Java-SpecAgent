@@ -232,6 +232,7 @@ def _fault_context(fault_ref, match, fault_doc):
             ((fault_doc or {}).get("test_strategy") or {}).get("expected_behavior", "")
         ),
         "oracle_refs": (match or {}).get("oracle_refs", []),
+        "fault_oracles": (match or {}).get("fault_oracles", []),
         "validation_points": ((fault_doc or {}).get("test_strategy") or {}).get("validation_points", []),
         "match_reason": (match or {}).get("match_reason", []),
     }
@@ -247,7 +248,9 @@ def _target_from_result(case_id, result, ctx, matches, fault_index, profiles, de
     spec_id = sd.get("spec_id", "")
     authority = _contract_authority(output_dir, spec_id)
     patchable = status == "sdk_defect" and authority == "spec-required"
+    has_fault_oracle_evidence = bool(result.get("fault_oracle_summary"))
     evidence_level = "contract_trace" if patchable else (
+        "fault_oracle_trace" if has_fault_oracle_evidence else
         "runtime_trace" if result.get("trace_file") else "result_summary"
     )
     if patchable:
@@ -285,6 +288,8 @@ def _target_from_result(case_id, result, ctx, matches, fault_index, profiles, de
         "actual": sd.get("actual", ""),
         "trace_file": result.get("trace_file"),
         "oracle_refs": result.get("oracle_refs", []),
+        "fault_oracle_summary": result.get("fault_oracle_summary"),
+        "fault_oracle_results": result.get("fault_oracle_results", []),
         "contract_authority": authority,
         "evidence_level": evidence_level,
         "recommended_action": recommended_action,
@@ -322,6 +327,7 @@ def _target_from_match(match, fault_index, profiles, default_profile, seen_ids):
         "actual": "",
         "trace_file": None,
         "oracle_refs": match.get("oracle_refs", []),
+        "fault_oracles": match.get("fault_oracles", []),
         "contract_authority": "unknown",
         "evidence_level": "planned_fault_pattern",
         "recommended_action": "design_or_execute_fault_case",

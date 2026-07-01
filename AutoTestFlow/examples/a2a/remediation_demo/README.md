@@ -62,8 +62,7 @@ python AutoTestFlow/scripts/submit_remediation.py --output-dir AutoTestFlow/exam
 - **第二层保险**：`--remediate on --gate-confirmed` 但配置 `switches.allow_open_issue=false` → 仍**零 gh 调用**，
   `submitted.json` 记 issue 跳过。
 - **实证前提红线**：把 `switches.require_evidence_before_issue` 改成 `false` → 配置加载即被拒绝（ConfigError）。
-- **禁用回归**：真实流程中 `--remediate=off`（默认）→ 不进入 stage6/7，不产 `.state/remediation/`，
-  流水线与 v1.x 字节级一致。
+- **显式关闭回归**：真实流程中传入 `--remediate=off` → 不进入 stage6/7，不产 `.state/remediation/`。
 
 > **真实 live 路径**（`reverify.simulate=false`：真克隆 + `mvn/gradle` 构建 + SUT 重启 + pytest 重跑 +
 > `gh issue` 提交 evidence issue）仅在用户用真实仓 + 构建工具链 + `gh` 鉴权运行 `--remediate=on` 且过门时走通；
