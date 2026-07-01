@@ -231,8 +231,22 @@ def save_json(path: str, data, indent=2):
 
 
 def _case_kind(c: dict) -> str:
-    """用例 E2E 类别：优先新字段 case_kind，回退旧字段 test_type。"""
-    return c.get("case_kind") or c.get("test_type", "")
+    """用例 E2E 类别：优先新字段 case_kind，回退旧字段 test_type。
+
+    如果都没有，则根据 branches_covered 和 case_name 推断：
+    - 正常E2E: branches_covered 为空数组（主流程）
+    - 异常E2E: branches_covered 包含 "A01" 等异常分支标识
+    """
+    if "case_kind" in c:
+        return c["case_kind"]
+    if "test_type" in c:
+        return c["test_type"]
+
+    # 推断类别：有 branches_covered 的是异常分支，否则是正常流程
+    branches = c.get("branches_covered", [])
+    if branches and len(branches) > 0:
+        return "异常E2E"
+    return "正常E2E"
 
 
 def select_p0_cases(cases: list[dict], p0_count: int) -> list[dict]:
@@ -246,7 +260,7 @@ def select_p0_cases(cases: list[dict], p0_count: int) -> list[dict]:
     """
     type_order = ["正常E2E", "异常E2E", "变体E2E", "边界E2E", "约束E2E", "质量E2E"]
 
-    p0_pool = [c for c in cases if c.get("priority") == "P0"]
+    p0_pool = [c for c in cases if isinstance(c, dict) and c.get("priority") == "P0"]
     by_type = defaultdict(list)
     for c in p0_pool:
         by_type[_case_kind(c)].append(c)
