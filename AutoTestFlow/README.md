@@ -8,6 +8,30 @@
 
 ## 默认全链路命令（推荐）
 
+首次运行先准备默认输入文件：
+
+```bash
+cp AutoTestFlow/examples/quickstart/autotestflow.suts.md .
+cp AutoTestFlow/examples/quickstart/remediation.config.json .
+```
+
+然后按项目实际情况修改：
+
+| 文件 | 用途 | 参考 |
+|------|------|------|
+| `requirements.md` | 需求文档 | 用户自备 |
+| `autotestflow.suts.md` | 自然语言 SUT 描述，默认命令直接读取 | [`examples/quickstart/autotestflow.suts.md`](examples/quickstart/autotestflow.suts.md)，[`shared/sut_manifest_schema.md`](shared/sut_manifest_schema.md) |
+| `remediation.config.json` | 门控修复配置，默认 `allow_open_issue=false` 不外发 issue | [`examples/quickstart/remediation.config.json`](examples/quickstart/remediation.config.json)，[`examples/remediation.config.example.json`](examples/remediation.config.example.json)，[`shared/remediation_config_schema.md`](shared/remediation_config_schema.md) |
+
+运行前可先校验输入：
+
+```bash
+python AutoTestFlow/scripts/sut_manifest.py --sut-manifest autotestflow.suts.md
+python AutoTestFlow/reference/remediation_config.py --check remediation.config.json
+```
+
+校验通过后运行默认全链路命令：
+
 ```bash
 /auto-test-flow requirements.md --sut-manifest autotestflow.suts.md --remediation-config remediation.config.json --faults on --fault-enrich on --remediate on
 ```
@@ -66,7 +90,8 @@ AutoTestFlow/                       # Skill 本体
 │   └── client_reference.md         # 客户端方法表与判据约定
 ├── examples/
 │   ├── a2a/                        # A2A 示例锚点（客户端专化 + 参考资产）
-│   └── multi_sut/                  # 多 SUT 示例
+│   ├── multi_sut/                  # 多 SUT 示例
+│   └── quickstart/                 # 默认命令 starter：autotestflow.suts.md + remediation.config.json
 ├── scripts/                        # 确定性脚本（scan-prep / probe / match / merge / select / aggregate / record）
 │   ├── prepare_code_scan.py        # stage2 profile adapter 预扫描计划
 │   ├── sut_manifest.py             # 自然语言 SUT 描述解析 / YAML manifest 兼容 / legacy 单 SUT 归一化

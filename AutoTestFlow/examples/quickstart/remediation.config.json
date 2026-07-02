@@ -1,0 +1,40 @@
+{
+  "version": "2.1",
+  "sut": {
+    "name": "quickstart-demo",
+    "base_url": "http://localhost:8080",
+    "readiness_probe": {
+      "method": "GET",
+      "path": "/health",
+      "expect_status_lt": 500
+    }
+  },
+  "repo": {
+    "upstream_url": "https://github.com/example/your-sut.git",
+    "ref": "main",
+    "clone_path": ".state/remediation/repo",
+    "local_branch_prefix": "autotestflow/fix",
+    "business_code_roots": ["src/main"],
+    "selftest_roots": ["src/test"],
+    "default_branch": "main"
+  },
+  "build": {
+    "tool": "maven",
+    "workdir": "."
+  },
+  "run": {
+    "restart_in_background": true,
+    "readiness_timeout_sec": 60
+  },
+  "issue": {
+    "labels": ["bug", "spec-violation", "auto-remediation"]
+  },
+  "switches": {
+    "allow_open_issue": false,
+    "require_evidence_before_issue": true
+  },
+  "reverify": {
+    "simulate": false,
+    "simulated_after": {}
+  }
+}

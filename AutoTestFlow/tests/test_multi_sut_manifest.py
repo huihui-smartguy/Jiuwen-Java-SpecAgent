@@ -241,6 +241,15 @@ class MultiSutManifestTests(unittest.TestCase):
         normalized = sut_manifest.validate_and_normalize(data, manifest_path=str(example))
         self.assertEqual([t["id"] for t in normalized["targets"]], ["catalog", "checkout"])
 
+    def test_quickstart_manifest_validates_with_default_filename(self):
+        example = REPO / "AutoTestFlow/examples/quickstart/autotestflow.suts.md"
+        data = sut_manifest.load_manifest(str(example))
+        normalized = sut_manifest.validate_and_normalize(data, manifest_path=str(example))
+        self.assertEqual(normalized["input_format"], "natural_language")
+        self.assertEqual([t["id"] for t in normalized["targets"]], ["demo-api"])
+        self.assertEqual(normalized["targets"][0]["runtime"]["base_url"], "http://localhost:8080")
+        self.assertTrue(normalized["targets"][0]["source"]["skip_code_scan"])
+
     def test_natural_language_direct_access_target_normalizes_without_source(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -557,10 +566,23 @@ class DocumentationGuardTests(unittest.TestCase):
     def test_docs_present_manifest_as_primary_invocation(self):
         readme = (REPO / "AutoTestFlow/README.md").read_text(encoding="utf-8")
         skill = (REPO / "AutoTestFlow/SKILL.md").read_text(encoding="utf-8")
+        default_section = readme.split("## 默认全链路命令（推荐）", 1)[1].split("\n---", 1)[0]
         self.assertIn("/auto-test-flow 需求.md --sut-manifest autotestflow.suts.md", readme)
         self.assertIn("`--sut-manifest`", skill)
         self.assertNotIn("/auto-test-flow 需求.md <sut源码>/<模块> --sut-base-url", readme)
         self.assertIn("Deprecated compatibility", readme)
+        self.assertIn("AutoTestFlow/examples/quickstart/autotestflow.suts.md", default_section)
+        self.assertIn("AutoTestFlow/examples/quickstart/remediation.config.json", default_section)
+        self.assertIn("shared/sut_manifest_schema.md", default_section)
+        self.assertIn("shared/remediation_config_schema.md", default_section)
+        self.assertIn("python AutoTestFlow/reference/remediation_config.py --check remediation.config.json", default_section)
+        self.assertLess(
+            default_section.index("cp AutoTestFlow/examples/quickstart/autotestflow.suts.md ."),
+            default_section.index("/auto-test-flow requirements.md --sut-manifest autotestflow.suts.md"),
+        )
+        self.assertIn("AutoTestFlow/examples/quickstart/autotestflow.suts.md", skill)
+        self.assertIn("AutoTestFlow/examples/remediation.config.example.json", skill)
+        self.assertIn("AutoTestFlow/shared/remediation_config_schema.md", skill)
 
 
 if __name__ == "__main__":
