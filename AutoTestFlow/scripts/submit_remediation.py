@@ -17,6 +17,7 @@ Usage:
 """
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -41,7 +42,10 @@ def _run(cmd, cwd=None, timeout=120):
 
 
 def _read(path):
-    return open(path, encoding="utf-8").read() if os.path.exists(path) else ""
+    if not os.path.exists(path):
+        return ""
+    with open(path, encoding="utf-8") as f:
+        return f.read()
 
 
 def _clip(text, limit=6000):
@@ -52,6 +56,62 @@ def _clip(text, limit=6000):
 
 def _rel(path, base):
     return os.path.relpath(path, base) if path and os.path.exists(path) else path
+
+
+def _first_heading(text):
+    for line in (text or "").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            return stripped.lstrip("#").strip()
+    return ""
+
+
+def _strip_first_heading(text):
+    lines = (text or "").splitlines()
+    for idx, line in enumerate(lines):
+        if line.strip().startswith("#"):
+            return "\n".join(lines[:idx] + lines[idx + 1:]).strip()
+    return (text or "").strip()
+
+
+def _issue_title(entry, issue_text, case):
+    return (
+        entry.get("issue_title") or
+        _first_heading(issue_text) or
+        "[fault-analysis] %s (%s)" % (entry.get("spec_id") or entry.get("fault_id") or "target", case)
+    )
+
+
+def _append_section(parts, title, body, fallback):
+    parts.append("\n\n## %s\n" % title)
+    content = (body or "").strip()
+    parts.append(content if content else fallback)
+
+
+def _json_object(text):
+    if not text:
+        return {}
+    try:
+        data = json.loads(text)
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _evidence_value(evidence_data, *keys):
+    for key in keys:
+        value = evidence_data.get(key)
+        if value not in (None, "", [], {}):
+            return value
+    return None
+
+
+def _format_value(value):
+    if value in (None, "", [], {}):
+        return "-"
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
 
 
 def _load_manifests(rem_dir, output_dir):
@@ -108,57 +168,116 @@ def _reverify_block(case, reverify):
 
 def _build_issue_body(output_dir, rem_dir, entry, artifact_dir, reverify):
     case = entry.get("case_id") or entry.get("target_id") or "unknown"
-    issue = _read(os.path.join(artifact_dir, "issue.md"))
+    issue_raw = _read(os.path.join(artifact_dir, "issue.md"))
+    issue = _strip_first_heading(issue_raw)
     root_cause = _read(os.path.join(artifact_dir, "root_cause.md"))
     fix_solution = _read(os.path.join(artifact_dir, "fix_solution.md"))
     patch = _read(os.path.join(artifact_dir, "patch.diff"))
     regression = _read(os.path.join(artifact_dir, "regression_test.diff"))
     evidence = _read(os.path.join(artifact_dir, "evidence.json"))
+    evidence_data = _json_object(evidence)
 
     parts = []
-    parts.append(issue or "# Evidence issue for %s\n\nStage6 did not provide issue.md." % case)
-    parts.append("\n\n## Stage6 analysis metadata\n")
-    parts.append("- case_id: %s" % case)
-    parts.append("- target_id: %s" % entry.get("target_id", case))
-    parts.append("- analysis_type: %s" % entry.get("analysis_type", "unknown"))
-    parts.append("- domain: %s" % entry.get("domain", "unknown"))
-    parts.append("- fault_id: %s" % (entry.get("fault_id") or "-"))
-    parts.append("- evidence_level: %s" % entry.get("evidence_level", "unknown"))
-    parts.append("- recommended_action: %s" % entry.get("recommended_action", "unknown"))
-    parts.append("- confidence: %s" % entry.get("confidence", "unknown"))
-    parts.append("- needs_human: %s" % entry.get("needs_human", True))
+    parts.append("# %s" % _issue_title(entry, issue_raw, case))
+    _append_section(
+        parts,
+        "Problem",
+        issue,
+        "Stage6 did not provide issue.md. Review the metadata and evidence sections below for the target.",
+    )
+    _append_section(
+        parts,
+        "Root Cause",
+        root_cause,
+        "Stage6 did not provide root_cause.md. Treat this issue as needing human localization.",
+    )
 
-    parts.append("\n\n## Proposed fixed solution\n")
-    if fix_solution:
-        parts.append(fix_solution)
-    elif root_cause:
-        parts.append(root_cause)
-    else:
-        parts.append("No standalone fix_solution.md/root_cause.md was produced; see Stage6 metadata and patch summary.")
-
-    parts.append("\n\n## Empirical reverify evidence\n")
-    parts.append(_reverify_block(case, reverify))
+    positioning = [
+        "The issue is positioned by correlating the authoritative contract or fault knowledge with "
+        "the failing run evidence, then checking the localized source or runtime evidence recorded by Stage6.",
+        "",
+        "- contract_refs: %s" % _format_value(_evidence_value(evidence_data, "contract_refs", "contract_ref")),
+        "- fault_ref: %s" % (entry.get("fault_id") or _format_value(_evidence_value(evidence_data, "fault_ref", "fault_id"))),
+        "- trace_refs: %s" % _format_value(_evidence_value(evidence_data, "trace_refs", "trace_ref")),
+        "- source_refs: %s" % _format_value(_evidence_value(evidence_data, "source_refs", "source_ref", "source_location")),
+        "",
+        "- case_id: %s" % case,
+        "- target_id: %s" % entry.get("target_id", case),
+        "- analysis_type: %s" % entry.get("analysis_type", "unknown"),
+        "- domain: %s" % entry.get("domain", "unknown"),
+        "- fault_id: %s" % (entry.get("fault_id") or "-"),
+        "- spec_id: %s" % (entry.get("spec_id") or "-"),
+        "- evidence_level: %s" % entry.get("evidence_level", "unknown"),
+        "- recommended_action: %s" % entry.get("recommended_action", "unknown"),
+        "- confidence: %s" % entry.get("confidence", "unknown"),
+        "- needs_human: %s" % entry.get("needs_human", True),
+        "- stage6_artifact_dir: `%s`" % _rel(artifact_dir, output_dir),
+    ]
+    _append_section(parts, "Problem Positioning Process", "\n".join(positioning), "")
+    _append_section(
+        parts,
+        "Fix Construction",
+        fix_solution,
+        "Stage6 did not provide fix_solution.md. Use the root-cause and evidence sections to plan the repair.",
+    )
+    _append_section(parts, "Empirical Reverify Evidence", _reverify_block(case, reverify), "")
 
     if evidence:
-        parts.append("\n\n## Structured evidence\n")
+        parts.append("\n\n## Structured Evidence\n")
         parts.append("```json\n%s\n```" % _clip(evidence, 4000))
 
     if patch:
-        parts.append("\n\n## Patch summary / excerpt\n")
+        parts.append("\n\n## Patch Summary / Excerpt\n")
         parts.append("Source: `%s`\n" % _rel(os.path.join(artifact_dir, "patch.diff"), output_dir))
         parts.append("```diff\n%s\n```" % _clip(patch, 5000))
     else:
-        parts.append("\n\n## Patch summary / excerpt\n")
+        parts.append("\n\n## Patch Summary / Excerpt\n")
         parts.append("No patch.diff was produced; this is an issue-only diagnostic or needs-human target.")
 
     if regression:
-        parts.append("\n\n## Regression test excerpt\n")
+        parts.append("\n\n## Regression Test Excerpt\n")
         parts.append("```diff\n%s\n```" % _clip(regression, 3000))
 
     return "\n".join(parts).rstrip() + "\n"
 
 
-def main():
+def _public_body_record(record, output_dir):
+    return {
+        "case_id": record["case_id"],
+        "target_id": record["entry"].get("target_id", record["case_id"]),
+        "title": record["title"],
+        "body_file": record["body_file"],
+        "body_file_rel": _rel(record["body_file"], output_dir),
+        "artifact_dir": _rel(record["artifact_dir"], output_dir),
+    }
+
+
+def _generate_issue_bodies(output_dir, rem_dir, reverify):
+    body_dir = layout.target_dir(output_dir, "remediation_issue_bodies", create=True)
+    os.makedirs(body_dir, exist_ok=True)
+    records = []
+    for d in _load_manifests(rem_dir, output_dir):
+        case = d.get("case_id") or d.get("target_id")
+        if not case:
+            continue
+        artifact_dir = _artifact_dir(rem_dir, output_dir, d)
+        issue_text = _read(os.path.join(artifact_dir, "issue.md"))
+        title = _issue_title(d, issue_text, case)
+        body = _build_issue_body(output_dir, rem_dir, d, artifact_dir, reverify)
+        body_fp = os.path.join(body_dir, "%s.md" % case)
+        with open(body_fp, "w", encoding="utf-8") as f:
+            f.write(body)
+        records.append({
+            "case_id": case,
+            "entry": d,
+            "title": title,
+            "body_file": body_fp,
+            "artifact_dir": artifact_dir,
+        })
+    return records
+
+
+def main(argv=None):
     parser = argparse.ArgumentParser(description="stage7 evidence issue submission (issue-only)")
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--remediation-config", default=None)
@@ -168,7 +287,7 @@ def main():
                         help="orchestrator passes this after the human confirmation gate")
     parser.add_argument("--issue-only", action="store_true",
                         help="deprecated no-op; submission is always issue-only")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     rem_dir = layout.target_dir(args.output_dir, "remediation", create=True)
     submitted = {
@@ -184,6 +303,11 @@ def main():
         save_json(layout.target_artifact(args.output_dir, "remediation_submitted", create_parent=True), submitted)
         print("[submit_remediation] %s" % msg)
         return 0
+
+    reverify_path = layout.existing_target_artifact(args.output_dir, "remediation_reverify")
+    reverify = load_json(reverify_path) if os.path.exists(reverify_path) else {}
+    body_records = _generate_issue_bodies(args.output_dir, rem_dir, reverify)
+    submitted["issue_bodies"] = [_public_body_record(r, args.output_dir) for r in body_records]
 
     cfg_path = resolve_config_path(args.output_dir, args.work_dir, args.remediation_config)
     if not cfg_path:
@@ -211,22 +335,10 @@ def main():
         return finish("issue disabled by config.")
 
     slug = upstream_slug(cfg["repo"]["upstream_url"])
-    reverify_path = layout.existing_target_artifact(args.output_dir, "remediation_reverify")
-    reverify = load_json(reverify_path) if os.path.exists(reverify_path) else {}
-    candidates = _load_manifests(rem_dir, args.output_dir)
-    body_dir = layout.target_dir(args.output_dir, "remediation_issue_bodies", create=True)
-    os.makedirs(body_dir, exist_ok=True)
-
-    for d in candidates:
-        case = d.get("case_id") or d.get("target_id")
-        if not case:
-            continue
-        artifact_dir = _artifact_dir(rem_dir, args.output_dir, d)
-        title = d.get("issue_title") or ("[fault-analysis] %s (%s)" % (d.get("spec_id") or d.get("fault_id") or "target", case))
-        body = _build_issue_body(args.output_dir, rem_dir, d, artifact_dir, reverify)
-        body_fp = os.path.join(body_dir, "%s.md" % case)
-        with open(body_fp, "w", encoding="utf-8") as f:
-            f.write(body)
+    for record in body_records:
+        case = record["case_id"]
+        title = record["title"]
+        body_fp = record["body_file"]
 
         rc, out = _run(["gh", "issue", "list", "--repo", slug, "--search", case,
                         "--json", "url", "-q", ".[0].url"])

@@ -21,6 +21,7 @@ def load_module(rel_path, name):
 
 remediation_plan = load_module("AutoTestFlow/scripts/remediation_plan.py", "remediation_plan")
 remediation_config = load_module("AutoTestFlow/reference/remediation_config.py", "remediation_config")
+submit_remediation = load_module("AutoTestFlow/scripts/submit_remediation.py", "submit_remediation_for_stage6_tests")
 
 
 def write_json(path, data):
@@ -112,6 +113,92 @@ class Stage6Iteration2Tests(unittest.TestCase):
         self.assertNotIn('"gh", "pr"', text)
         self.assertNotIn('"git", "push"', text)
         self.assertIn('"issue"', text)
+
+    def test_submitter_generates_final_issue_body_in_dry_run_without_gh(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td)
+            case_id = "TC_FINAL"
+            defect_dir = out / "Remediation" / "defects" / case_id
+            defect_dir.mkdir(parents=True, exist_ok=True)
+            (defect_dir / "issue.md").write_text(
+                "# Original issue title\n\nThe response is wrong for the public API.",
+                encoding="utf-8",
+            )
+            (defect_dir / "root_cause.md").write_text(
+                "The controller forwards the request, but the service never validates the missing resource.",
+                encoding="utf-8",
+            )
+            (defect_dir / "fix_solution.md").write_text(
+                "Add resource validation before creating the success response and re-run the failing case.",
+                encoding="utf-8",
+            )
+            (defect_dir / "evidence.json").write_text(
+                json.dumps({"case_id": case_id, "trace_refs": ["TestRun/trace/TC_FINAL.jsonl"]}, indent=2),
+                encoding="utf-8",
+            )
+            (defect_dir / "patch.diff").write_text(
+                "diff --git a/src/main/App.java b/src/main/App.java\n+validateResource();\n",
+                encoding="utf-8",
+            )
+            write_json(out / "Remediation" / "manifest.json", {
+                "defects": [{
+                    "case_id": case_id,
+                    "target_id": case_id,
+                    "spec_id": "SPEC-RESP-WRAP",
+                    "fault_id": "F-REQ-011",
+                    "analysis_type": "patchable_contract_defect",
+                    "domain": "agent",
+                    "evidence_level": "contract_trace",
+                    "recommended_action": "patch_and_reverify",
+                    "confidence": "high",
+                    "needs_human": False,
+                    "issue_title": "Final merged issue",
+                }]
+            })
+            write_json(out / "Remediation" / "reverify.json", {
+                "mode": "dry-run",
+                "build": "passed",
+                "sut_ready": "passed",
+                "selftest": "passed",
+                "defects": {
+                    case_id: {"before": "sdk_defect", "after": "passed", "applied": "yes"}
+                },
+            })
+            cfg_path = out / "remediation.config.json"
+            write_json(cfg_path, {
+                "sut": {"base_url": "http://localhost"},
+                "repo": {"upstream_url": "https://github.com/example/project.git", "ref": "main", "clone_path": "repo"},
+                "switches": {"require_evidence_before_issue": True, "allow_open_issue": True},
+            })
+
+            calls = []
+            original_run = submit_remediation._run
+            submit_remediation._run = lambda *args, **kwargs: calls.append((args, kwargs)) or (0, "")
+            try:
+                rc = submit_remediation.main([
+                    "--output-dir", str(out),
+                    "--remediation-config", str(cfg_path),
+                    "--remediate", "dry-run",
+                ])
+            finally:
+                submit_remediation._run = original_run
+
+            self.assertEqual(rc, 0)
+            self.assertEqual(calls, [])
+            body = (out / "Remediation" / "issue_bodies" / f"{case_id}.md").read_text(encoding="utf-8")
+            self.assertIn("# Final merged issue", body)
+            self.assertIn("## Problem", body)
+            self.assertIn("The response is wrong", body)
+            self.assertIn("## Root Cause", body)
+            self.assertIn("never validates the missing resource", body)
+            self.assertIn("## Problem Positioning Process", body)
+            self.assertIn("## Fix Construction", body)
+            self.assertIn("Add resource validation", body)
+            self.assertIn("## Empirical Reverify Evidence", body)
+            self.assertIn("- after: passed", body)
+            submitted = json.loads((out / "Remediation" / "submitted.json").read_text(encoding="utf-8"))
+            self.assertEqual(submitted["mode"], "dry-run")
+            self.assertEqual(submitted["issue_bodies"][0]["case_id"], case_id)
 
 
 if __name__ == "__main__":

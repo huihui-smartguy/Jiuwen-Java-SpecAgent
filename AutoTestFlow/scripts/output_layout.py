@@ -48,6 +48,7 @@ ROOT_ARTIFACTS = {
 TARGET_ARTIFACTS = {
     "code_scan_plan": ("FeatureAnalysis/code_scan_plan.json", [".state/code_scan_plan.json"]),
     "requirement_analysis": ("FeatureAnalysis/requirement_analysis.md", ["requirement_analysis.md"]),
+    "s1_scenario_examples": ("FeatureAnalysis/s1_scenario_examples.md", [".state/s1_scenario_examples.md"]),
     "code_analysis": ("FeatureAnalysis/code_analysis.md", ["code_analysis.md"]),
     "s1_index": ("FeatureAnalysis/s1_index.json", [".state/s1_index.json"]),
     "s2_code_facts": ("FeatureAnalysis/s2_code_facts.json", [".state/s2_code_facts.json"]),
@@ -56,6 +57,7 @@ TARGET_ARTIFACTS = {
     "fp_mapping": ("FeatureAnalysis/fp_mapping.json", [".state/fp_mapping.json"]),
     "s3a_framework": ("FeatureAnalysis/s3a_framework.json", [".state/s3a_framework.json"]),
     "s3a_enriched_index": ("FeatureAnalysis/s3a_enriched_index.json", [".state/s3a_enriched_index.json"]),
+    "s3a_scenario_landscape": ("FeatureAnalysis/s3a_scenario_landscape.md", [".state/s3a_scenario_landscape.md"]),
     "defect_hints": ("FeatureAnalysis/defect_hints.json", [".state/defect_hints.json"]),
     "contract": ("Contract/contract.md", ["contract.md"]),
     "contract_samples": ("Contract/contract_samples.json", [".state/contract_samples.json"]),
@@ -83,6 +85,7 @@ TARGET_ARTIFACTS = {
     ),
     "ai_eval_readiness": ("QualityGates/ai_eval_readiness.json", [".state/ai_eval_readiness.json"]),
     "test_design": ("TestCases/test_design.json", ["test_design.json"]),
+    "test_examples": ("TestCases/test_examples.md", ["test_examples.md"]),
     "scene_tc_mapping": ("TestCases/scene_tc_mapping.json", ["scene_tc_mapping.json"]),
     "e2e_scenes_json": ("TestCases/e2e_scenes.json", ["e2e_scenes.json"]),
     "e2e_scenes_md": ("TestCases/e2e_scenes.md", ["e2e_scenes.md"]),

@@ -135,6 +135,14 @@
 **统计**：flow X | framework X | quality X | 总计 X
 ```
 
+#### LLM 可读场景景观（确定性 Markdown 投影）
+
+```bash
+python {skill_dir}/scripts/render_design_markdown.py --output-dir {output_dir} --stage s3a
+```
+
+生成 `{output_dir}/FeatureAnalysis/s3a_scenario_landscape.md`。该文件只从 Stage 3 JSON 产物渲染，JSON 仍是权威源。
+
 #### 完整性验证
 
 | 验证项 | 预期值 | 状态 |
@@ -142,6 +150,7 @@
 | 每个flow场景保持完整steps | ✅ | ✅/❌ |
 | 每个相关框架场景 ≥ 1个场景 | ✅ | ✅/❌ |
 | branches 6类分支齐全 | ✅ | ✅/❌ |
+| s3a_scenario_landscape.md 已生成 | ✅ | ✅/❌ |
 
 ### 第五步：仅返回摘要
 
@@ -156,7 +165,7 @@
 | 新增framework | X |
 | flow | X | framework | X | quality | X | 总计 | X |
 | 覆盖验证 | {全部✅或有❌} |
-| 输出文件 | TestCases/e2e_scenes.md, TestCases/e2e_scenes.json |
+| 输出文件 | TestCases/e2e_scenes.md, TestCases/e2e_scenes.json, FeatureAnalysis/s3a_scenario_landscape.md |
 ```
 
 > **阶段3aR完成后自动进入阶段3b，无需人工确认。阶段3b完成后，纯需求模式终止。**

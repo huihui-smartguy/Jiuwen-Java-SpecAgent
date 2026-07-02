@@ -18,6 +18,7 @@ if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 
 import output_layout as layout
+import render_design_markdown
 
 
 def load_json(path: str) -> dict | list:
@@ -185,6 +186,9 @@ def main():
     save_json(output_path, enriched_index)
 
     print(f"输出: {output_path}")
+    markdown_path = render_design_markdown.render_s3a(output_dir)
+    if markdown_path:
+        print(f"输出: {markdown_path}")
 
     # 5. 统计摘要
     total_scenes = len(enriched_index.get("scenario_index", []))

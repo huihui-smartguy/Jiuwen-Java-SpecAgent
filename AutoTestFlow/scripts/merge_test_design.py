@@ -22,6 +22,7 @@ if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 
 import output_layout as layout
+import render_design_markdown
 
 
 def load_json(path: str) -> dict | list:
@@ -236,6 +237,9 @@ def main(argv=None):
     test_design_path = layout.target_artifact(output_dir, "test_design", create_parent=True)
     save_json(test_design_path, all_cases)
     print(f"输出: {test_design_path}")
+    markdown_path = render_design_markdown.render_tests(output_dir)
+    if markdown_path:
+        print(f"输出: {markdown_path}")
 
     # 5. 生成scene_tc_mapping.json
     mapping = build_scene_tc_mapping(all_cases)

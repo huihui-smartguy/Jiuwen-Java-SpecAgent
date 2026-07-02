@@ -235,7 +235,7 @@ AskUserQuestion(questions=[{
 
 | 阶段 | 模板 | 脚本/共享 | 输出 | 后台 | 人工裁决 |
 |------|------|-----------|------|------|------|
-| 1 需求侧分析 | `templates/stage1_req_analyze.md` | `shared/scenario_schema.md` | `FeatureAnalysis/s1_index.json` + `FeatureAnalysis/s1_scenarios/*` + `FeatureAnalysis/requirement_analysis.md` | ✅ | **✅** |
+| 1 需求侧分析 | `templates/stage1_req_analyze.md` | `shared/scenario_schema.md` + `scripts/render_design_markdown.py` | `FeatureAnalysis/s1_index.json` + `FeatureAnalysis/s1_scenarios/*` + `FeatureAnalysis/requirement_analysis.md` + `FeatureAnalysis/s1_scenario_examples.md` | ✅ | **✅** |
 | 2 通用代码扫描 | `templates/stage2_code_scan.md` | `scripts/prepare_code_scan.py` + `shared/code_scan_profiles.json` + `shared/code_scan_guide.md` + `shared/code_analysis_template.md` | `FeatureAnalysis/code_scan_plan.json` + `FeatureAnalysis/s2_code_facts.json` + `FeatureAnalysis/stage_summary.json` + `FeatureAnalysis/framework_scenes.json` | ✅ | ❌ |
 | 2.5 契约校准 | `templates/stage2_5_contract_calibrate.md` | `scripts/probe_contract.py` | `Contract/contract.md` + `Contract/contract_samples.json` | — | ❌ |
 | 2.6 知识/故障匹配（默认） | —（纯脚本） | `scripts/match_faults.py` | `KnowledgeBase/knowledge_matches.json` + `KnowledgeBase/fault_matches.json` + `KnowledgeBase/fault_contract_alignment.md` | — | ❌ |
@@ -244,9 +244,9 @@ AskUserQuestion(questions=[{
 | 2R 需求摘要（纯需求） | `templates/stage2R_req_summary.md` | — | `FeatureAnalysis/stage_summary.json` | — | ❌ |
 | 3a-gap GAP场景 | `templates/stage3a_gap.md` | — | `FeatureAnalysis/s3a_enriched/FS-GAP-*.json` | ✅ | ❌ |
 | 3a-fw 框架场景 | `templates/stage3a_framework.md` | 输入 `FeatureAnalysis/framework_scenes.json`（stage2 派生） | `FeatureAnalysis/s3a_framework.json` | ✅ | ❌ |
-| 3aR 框架场景（纯需求） | `templates/stage3aR_framework.md` | — | `TestCases/e2e_scenes.json` + `TestCases/e2e_scenes.md` | — | ❌ |
-| 3b 用例设计 | `templates/stage3b_batch_design.md` | `scripts/merge_test_design.py` + `shared/rules.md` | `TestCases/test_design.json` + `TestCases/scene_tc_mapping.json` | ✅ | **✅** |
-| 3a 合并 | — | `scripts/merge_enriched.py` | `FeatureAnalysis/s3a_enriched_index.json` | — | ❌ |
+| 3aR 框架场景（纯需求） | `templates/stage3aR_framework.md` | `scripts/render_design_markdown.py` | `TestCases/e2e_scenes.json` + `TestCases/e2e_scenes.md` + `FeatureAnalysis/s3a_scenario_landscape.md` | — | ❌ |
+| 3b 用例设计 | `templates/stage3b_batch_design.md` | `scripts/merge_test_design.py` + `scripts/render_design_markdown.py` + `shared/rules.md` | `TestCases/test_design.json` + `TestCases/test_examples.md` + `TestCases/scene_tc_mapping.json` | ✅ | **✅** |
+| 3a 合并 | — | `scripts/merge_enriched.py` + `scripts/render_design_markdown.py` | `FeatureAnalysis/s3a_enriched_index.json` + `FeatureAnalysis/s3a_scenario_landscape.md` | — | ❌ |
 | 4a P0验证 | `templates/stage4a_p0_verify.md` | `scripts/select_p0.py` + `reference/http_client.py` + `reference/conftest.py` | `TestRun/tests/test_{id}.py` + `TestRun/results/{id}.json` | ✅ | ✅ |
 | 4b 批量生成 | `templates/stage4b_batch_gen.md` | `scripts/aggregate_results.py` + `reference/` | `TestRun/tests/test_{id}.py` + `TestRun/case_results.json` | ✅ | ✅ |
 | 5 报告 | `templates/stage5_report.md` | — | `Reports/report.md` | ✅ | ❌ |
@@ -270,7 +270,7 @@ AskUserQuestion(questions=[{
   → Agent-S1（需求侧场景分析）
     模板: templates/stage1_req_analyze.md
     参数: {skill_dir} {output_dir} {requirement_doc} {work_dir} [{fault_lib}]
-    输出: FeatureAnalysis/s1_index.json + FeatureAnalysis/s1_scenarios/FS-*.json + FeatureAnalysis/requirement_analysis.md（摘要）
+    输出: FeatureAnalysis/s1_index.json + FeatureAnalysis/s1_scenarios/FS-*.json + FeatureAnalysis/requirement_analysis.md（摘要）+ FeatureAnalysis/s1_scenario_examples.md（JSON投影）
     子Agent内部读取 shared/scenario_schema.md；若传入 {fault_lib} 则做可选历史 P0 富化（best-effort，见模板"第七步（续）"）
 
   → 编排器前景执行 stage2 profile 预扫描（不启动 Agent）
@@ -610,7 +610,7 @@ AskUserQuestion(questions=[{
 步骤2: evidence issue 提交（仅 --remediate=on 且门确认；dry-run/取消 → 零 gh 调用）
   → python {skill_dir}/scripts/submit_remediation.py --output-dir {output_dir} --remediate {on|dry-run} [--gate-confirmed]
   → 守卫：remediate=on + gate-confirmed + switches.allow_open_issue + require_evidence_before_issue → 才动作
-  → 生成 Remediation/issue_bodies/{case}.md（stage6 issue + fix_solution + patch 摘要 + reverify 实证）
+  → 先生成 Remediation/issue_bodies/{case}.md（stage6 issue + root_cause + fix_solution + 定位过程 + patch 摘要 + reverify 实证；dry-run 也生成）
   → gh issue create (upstream, --body-file issue_bodies/{case}.md)；幂等：先 list 去重复用 URL
   → Remediation/submitted.json（issues / skipped；无 pr 字段）
 
@@ -668,12 +668,14 @@ AskUserQuestion(questions=[{
 │       │   ├── code_analysis.md
 │       │   ├── s1_index.json
 │       │   ├── s1_scenarios/
+│       │   ├── s1_scenario_examples.md
 │       │   ├── s2_code_facts.json
 │       │   ├── stage_summary.json
 │       │   ├── framework_scenes.json
 │       │   ├── s3a_enriched/
 │       │   ├── s3a_framework.json
-│       │   └── s3a_enriched_index.json
+│       │   ├── s3a_enriched_index.json
+│       │   └── s3a_scenario_landscape.md
 │       ├── Contract/
 │       │   ├── contract.md        # target 阶段2.5（真实契约，权威 Oracle）★
 │       │   ├── contract_samples.json
@@ -691,6 +693,7 @@ AskUserQuestion(questions=[{
 │       │   └── ai_eval_readiness.json
 │       ├── TestCases/
 │       │   ├── test_design.json
+│       │   ├── test_examples.md
 │       │   ├── scene_tc_mapping.json
 │       │   └── e2e_scenes.json
 │       ├── TestRun/
@@ -729,6 +732,7 @@ AutoTestFlow/
 │   ├── probe_contract.py                 # 阶段2.5 契约校准探针（探活+采样真实响应）★
 │   ├── merge_enriched.py                 # 阶段3a 场景合并
 │   ├── merge_test_design.py              # 阶段3b 用例合并
+│   ├── render_design_markdown.py         # 阶段1/3 JSON → LLM可读Markdown投影 ★
 │   ├── select_p0.py                      # 阶段4-prep P0筛选+门禁脚本生成
 │   ├── evaluate_fault_oracles.py         # 阶段4 fault_ref trace/process/negative oracle 门禁 ★
 │   ├── aggregate_results.py              # 阶段4-agg 结果聚合（执行分类 + fault oracle coverage）
