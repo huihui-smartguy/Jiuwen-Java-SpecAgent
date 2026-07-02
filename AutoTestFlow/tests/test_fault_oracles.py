@@ -35,6 +35,11 @@ def write_json(path, data):
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def write_text(path, text):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
 def write_trace(path, records):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -75,6 +80,120 @@ class FaultOracleNormalizationTests(unittest.TestCase):
         self.assertTrue(oracles)
         self.assertTrue(any(o["required"] and o["kind"] in {"process", "negative"} for o in oracles))
         self.assertIn("correlation_id_preserved", {o["check"] for o in oracles})
+
+
+class FaultMatcherDomainTests(unittest.TestCase):
+    CONTRACT_MD = """
+# Contract
+
+## 1. Response wrapper（specId: SPEC-RESP-WRAP）
+## 2. ID type（specId: SPEC-ID-TYPE）
+## 3. SSE（specId: SPEC-SSE）
+
+| error.code | meaning |
+|---|---|
+| -32603 | Internal error |
+
+## 7. 字段权威性分级表
+
+| specId | 字段 | spec-required | deployment-config-dependent | needs-runtime-verify | 来源 |
+|---|---|---|---|---|---|
+| SPEC-RESP-WRAP | result.status | ✅ |  |  | requirement |
+| SPEC-ID-TYPE | id | ✅ |  |  | requirement |
+| SPEC-SSE | event stream | ✅ |  |  | requirement |
+| SPEC-ERR-32603 | error.code | ✅ |  |  | requirement |
+"""
+
+    def build_fixture(self, root, scene_name, scene_body, target_id=None, target_name=None):
+        base = Path(root)
+        out = base / "targets" / target_id if target_id else base
+        write_text(out / "Contract" / "contract.md", self.CONTRACT_MD)
+        write_json(out / "FeatureAnalysis" / "s1_index.json", {
+            "meta": {"source": "requirement"},
+            "function_points": [{"id": "FP-001", "name": scene_name, "entry": "POST /run", "priority": "P1", "constraints": [], "source_ids": ["REQ-1"]}],
+            "scenario_index": [{
+                "id": "FS-001",
+                "name": scene_name,
+                "type": "flow",
+                "priority": "P1",
+                "fp_refs": ["FP-001"],
+                "file": "FeatureAnalysis/s1_scenarios/FS-001.json",
+            }],
+        })
+        write_json(out / "FeatureAnalysis" / "s1_scenarios" / "FS-001.json", {
+            "id": "FS-001",
+            "name": scene_name,
+            "type": "flow",
+            "priority": "P1",
+            "verify_points": ["request completes"],
+            "steps": [{"seq": 1, "action": scene_body, "fp_ref": "FP-001", "data_scope": "taskId", "check": "observable response"}],
+            "branches": {"parameter": [], "boundary": [], "exception": [], "quality": [], "constraint": [], "cross": []},
+        })
+        if target_id:
+            write_json(base / "RunMetadata" / "sut_manifest.normalized.json", {
+                "schema_version": "1.0",
+                "targets": [{
+                    "id": target_id,
+                    "name": target_name or target_id,
+                    "role": "dependency",
+                    "source": {"path": target_name or target_id, "available": False},
+                }],
+            })
+        return out
+
+    def test_all_domains_load_and_agent_scene_preserves_agent_and_dfx_matches(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = self.build_fixture(
+                td,
+                "Agent LLM tool streaming workflow",
+                "User sends an agent task, the LLM invokes a tool, and the response is streamed back over SSE.",
+            )
+
+            plan = match_faults.match(
+                str(out),
+                fault_lib=None,
+                overlay=None,
+                max_exception=3,
+                max_quality=2,
+                knowledge_root=str(REPO / "TestKnowledgeBase"),
+                domains=None,
+            )
+
+            domains = {m["domain"] for m in plan["fault_matches"]}
+            breakdown = plan["meta"]["stats"]["domain_breakdown"]
+            self.assertTrue({"rest_api", "web", "agent", "dfx"}.issubset(breakdown.keys()))
+            self.assertIn("agent", domains)
+            self.assertIn("dfx", domains)
+            self.assertGreater(breakdown["agent"]["matched"], 0)
+            self.assertGreater(breakdown["dfx"]["matched"], 0)
+
+    def test_front_tool_target_metadata_preserves_web_and_dfx_matches(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = self.build_fixture(
+                td,
+                "Operator validates a configured service",
+                "User opens the configured service and submits the normal workflow.",
+                target_id="front_tool",
+                target_name="front_tool",
+            )
+
+            plan = match_faults.match(
+                str(out),
+                fault_lib=None,
+                overlay=None,
+                max_exception=3,
+                max_quality=2,
+                knowledge_root=str(REPO / "TestKnowledgeBase"),
+                domains=None,
+            )
+
+            domains = {m["domain"] for m in plan["fault_matches"]}
+            breakdown = plan["meta"]["stats"]["domain_breakdown"]
+            self.assertIn("web", domains)
+            self.assertIn("dfx", domains)
+            self.assertGreater(breakdown["web"]["matched"], 0)
+            self.assertGreater(breakdown["dfx"]["matched"], 0)
+            self.assertTrue(breakdown["web"]["matched_by_branch"])
 
 
 class FaultOracleEvaluatorTests(unittest.TestCase):

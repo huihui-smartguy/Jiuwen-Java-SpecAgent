@@ -8,6 +8,8 @@ merge_test_design.py - 阶段3b用例合并脚本
 - e2e_scenes.json（可选，合并后的场景文件）
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import os
@@ -64,6 +66,35 @@ def build_scene_tc_mapping(cases: list[dict]) -> dict:
     return dict(mapping)
 
 
+def _as_id_list(value) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        raw = value
+    else:
+        raw = [value]
+    out = []
+    for item in raw:
+        text = str(item).strip()
+        if text and text not in out:
+            out.append(text)
+    return out
+
+
+def collect_expected_scene_ids(enriched_index: dict, framework_data: dict) -> set[str]:
+    """收集应覆盖场景ID。"""
+    scene_ids = set()
+    for si in enriched_index.get("scenario_index", []):
+        sid = si.get("id")
+        if sid:
+            scene_ids.add(sid)
+    for fs in framework_data.get("framework_scenarios", []):
+        sid = fs.get("id")
+        if sid:
+            scene_ids.add(sid)
+    return scene_ids
+
+
 def count_by_type(cases: list[dict]) -> dict:
     """按用例类别(case_kind)统计用例数（兼容旧字段 test_type）。"""
     counts = defaultdict(int)
@@ -77,16 +108,7 @@ def validate_coverage(cases: list[dict], enriched_index: dict, framework_data: d
     """验证场景覆盖完整性，返回缺失场景列表。"""
     errors = []
 
-    # 获取所有场景ID
-    scene_ids = set()
-
-    # 从enriched索引获取flow场景ID
-    for si in enriched_index.get("scenario_index", []):
-        scene_ids.add(si.get("id", ""))
-
-    # 从framework数据获取framework场景ID
-    for fs in framework_data.get("framework_scenarios", []):
-        scene_ids.add(fs.get("id", ""))
+    scene_ids = collect_expected_scene_ids(enriched_index, framework_data)
 
     # 获取已覆盖的场景ID
     covered = set(case.get("source_scene", "") for case in cases)
@@ -98,6 +120,57 @@ def validate_coverage(cases: list[dict], enriched_index: dict, framework_data: d
         errors.append(f"缺失场景覆盖: {list(missing)[:10]}")
 
     return errors, list(missing)
+
+
+def build_test_suggestion_coverage(cases: list[dict], enriched_index: dict) -> dict:
+    """构建显式测试建议→用例覆盖映射。"""
+    suggestions = []
+    seen = set()
+    for item in enriched_index.get("test_suggestions", []) or []:
+        ts_id = str(item.get("id", "")).strip()
+        if not ts_id or ts_id in seen:
+            continue
+        seen.add(ts_id)
+        suggestions.append(item)
+
+    mapping = defaultdict(list)
+    invalid_refs = defaultdict(list)
+    known_ids = {str(item.get("id", "")).strip() for item in suggestions if item.get("id")}
+
+    for case in cases:
+        case_id = case.get("case_id")
+        for ts_id in _as_id_list(case.get("test_suggestion_refs")):
+            if ts_id in known_ids:
+                mapping[ts_id].append(case_id)
+            else:
+                invalid_refs[ts_id].append(case_id)
+
+    not_applicable = []
+    missing = []
+    for item in suggestions:
+        ts_id = str(item.get("id", "")).strip()
+        status = str(item.get("status", "mapped")).strip() or "mapped"
+        if status == "not_applicable":
+            not_applicable.append({
+                "id": ts_id,
+                "reason": item.get("not_applicable_reason", ""),
+            })
+        elif not mapping.get(ts_id):
+            missing.append(ts_id)
+
+    covered = sorted(mapping.keys())
+    actionable_total = max(0, len(suggestions) - len(not_applicable))
+    coverage_pct = (len(covered) / actionable_total * 100) if actionable_total else 100.0
+    return {
+        "total": len(suggestions),
+        "actionable_total": actionable_total,
+        "covered": len(covered),
+        "not_applicable": not_applicable,
+        "missing": sorted(missing),
+        "invalid_refs": {k: v for k, v in sorted(invalid_refs.items())},
+        "coverage": f"{len(covered)}/{actionable_total} ({coverage_pct:.0f}%)",
+        "mapping": {k: v for k, v in sorted(mapping.items())},
+    }
 
 
 def merge_scenes(enriched_dir: str, enriched_index: dict, framework_data: dict) -> list[dict]:
@@ -115,11 +188,11 @@ def merge_scenes(enriched_dir: str, enriched_index: dict, framework_data: dict) 
     return scenarios
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="合并测试用例和场景")
     parser.add_argument("--output-dir", required=True, help="输出目录")
     parser.add_argument("--generate-e2e", action="store_true", help="是否生成e2e_scenes.json")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     output_dir = args.output_dir
 
@@ -147,6 +220,11 @@ def main():
 
     # 3. 覆盖验证
     errors, missing = validate_coverage(all_cases, enriched_index, framework_data)
+    test_suggestion_coverage = build_test_suggestion_coverage(all_cases, enriched_index)
+    if test_suggestion_coverage["missing"]:
+        errors.append(f"缺失测试建议覆盖: {test_suggestion_coverage['missing'][:10]}")
+    if test_suggestion_coverage["invalid_refs"]:
+        errors.append(f"未知测试建议引用: {list(test_suggestion_coverage['invalid_refs'].keys())[:10]}")
     if errors:
         print(f"[WARN] 覆盖验证发现问题:")
         for e in errors:
@@ -161,14 +239,18 @@ def main():
 
     # 5. 生成scene_tc_mapping.json
     mapping = build_scene_tc_mapping(all_cases)
-    scene_total = len(set(case.get("source_scene", "") for case in all_cases if case.get("source_scene")))
+    expected_scene_ids = collect_expected_scene_ids(enriched_index, framework_data)
+    scene_total = len(expected_scene_ids) if expected_scene_ids else len(mapping)
+    covered_scene_count = len(set(mapping.keys()) & expected_scene_ids) if expected_scene_ids else len(mapping)
+    coverage_pct = (covered_scene_count / scene_total * 100) if scene_total else 100.0
 
     mapping_data = {
         "scene_total": scene_total,
         "tc_total": len(all_cases),
-        "coverage": f"{len(mapping)}/{scene_total * 100 if scene_total else 100:.0f}%",
+        "coverage": f"{covered_scene_count}/{scene_total} ({coverage_pct:.0f}%)",
         "mapping": mapping,
-        "missing_scenes": missing
+        "missing_scenes": missing,
+        "test_suggestion_coverage": test_suggestion_coverage,
     }
 
     mapping_path = layout.target_artifact(output_dir, "scene_tc_mapping", create_parent=True)

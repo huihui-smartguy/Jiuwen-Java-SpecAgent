@@ -57,7 +57,31 @@ Read `{requirement_doc}`（需求文档）
 
 **过滤规则**：仅提取展示用户可独立触发入口的示例（引用第四步FP单入口原则）。跳过展示内部实现的示例。
 
-### 第三步（续）3c. 主流程链路识别
+#### 3c. 显式测试建议提取
+
+扫描需求文档中的显式测试建议/测试重点/自测门禁/推荐测试点，并建立**可追踪台账**。典型标题包括：
+
+- `测试建议` / `建议测试重点` / `测试关注点` / `开发自测门禁`
+- `recommended tests` / `testing recommendations` / `test suggestions` / `release gates`
+
+对每条建议生成稳定编号 `TS-001` 起，并记录：
+
+| 字段 | 说明 |
+|------|------|
+| id | TS-NNN |
+| trigger | 触发条件/输入/场景线索 |
+| focus | 测试关注点 |
+| expected | 期望结果/门禁标准 |
+| priority | P0/P1/P2；无显式优先级时按风险推断 |
+| method | 建议的测试方法（E2E/异常/边界/DFX/人工观察等） |
+| gate | 是否作为发布/验收门禁；无则为 null |
+| source | 文档章节、表格标题、行号线索或原文摘要 |
+| status | `mapped` 或 `not_applicable` |
+| not_applicable_reason | 仅 status=not_applicable 时填写，必须说明原因 |
+
+**覆盖规则**：每条 `TS-*` 必须在后续场景、分支或用例中被引用；确实不适用时必须标记 `not_applicable` 并给出理由。禁止只在摘要中复述测试建议而不落到可执行/可审阅对象。
+
+### 第三步（续）3d. 主流程链路识别
 
 **示例优先**：如文档包含完整调用示例（如"快速开始"/"Quick Start"/端到端时序），该示例展示的完整调用链即为**第一主流程**，直接作为FS-001。其他主流程从文档的独立章节提取。
 
@@ -160,6 +184,7 @@ Read `{requirement_doc}`（需求文档）
 - step_ref: 偏离的步骤序号（quality无此字段）
 - trigger: 触发条件
 - expected: 预期结果
+- test_suggestion_refs: 覆盖的显式测试建议ID列表（无则空数组）
 - 类型特有字段：parameter有param/values，quality有risk_ref，constraint有constraint，cross有cross_refs/fp_refs
 
 **cross 分支识别条件**（满足任一即生成）：
@@ -225,7 +250,12 @@ Read `{requirement_doc}`（需求文档）
 
 1. **Write `{output_dir}/FeatureAnalysis/s1_scenarios/FS-001.json` ... `FS-NNN.json`**：每个场景独立文件，schema 遵循已读取的 `shared/scenario_schema.md` 中的"单场景文件结构"。
 
-2. **Write `{output_dir}/FeatureAnalysis/s1_index.json`**：轻量索引，包含 meta + function_points + scenario_index。schema 遵循 `shared/scenario_schema.md` 中的"s1_index.json 结构"。meta.source=requirement。
+2. **Write `{output_dir}/FeatureAnalysis/s1_index.json`**：轻量索引，包含 meta + function_points + scenario_index + test_suggestions。schema 遵循 `shared/scenario_schema.md` 中的"s1_index.json 结构"。meta.source=requirement。
+
+   - `test_suggestions[]` 来自第三步3c。
+   - `scenario_index[].test_suggestion_refs` 标记该场景整体覆盖的建议。
+   - 单场景文件中场景顶层与各分支均可填写 `test_suggestion_refs`。
+   - 所有 `status=mapped` 的 TS 必须至少被一个场景/分支引用；所有未引用的 TS 必须改为 `status=not_applicable` 并填写原因。
 
 3. **Write `{output_dir}/FeatureAnalysis/requirement_analysis.md`**（人类可读摘要，从索引生成）：
 
@@ -233,7 +263,8 @@ Read `{requirement_doc}`（需求文档）
 一、需求概述
 二、功能点清单（FP汇总表：ID/名称/入口/优先级/约束）
 三、场景总览（ID/名称/步骤数/分支数/优先级）
-四、统计（FP数/场景数/各类分支数）
+四、测试建议覆盖表（TS ID/关注点/映射场景或不适用原因）
+五、统计（FP数/场景数/各类分支数/测试建议覆盖率）
 ```
 
 如有调用示例，Write `{output_dir}/FeatureAnalysis/skeleton/*`。
@@ -269,6 +300,7 @@ Read `{requirement_doc}`（需求文档）
 | 跨场景依赖 | 有数据依赖关系的场景对都生成了跨流程交互场景？ |
 | 追问执行 | 每个场景都执行了递归追问并记录exploration_log？ |
 | cross分支上限 | 每个场景的cross分支数 ≤ 5？ |
+| 测试建议覆盖 | 每条 `test_suggestions[]` 要么被 `test_suggestion_refs` 引用，要么标记 `not_applicable` 且有理由？ |
 | 术语一致性 | 同一概念在FP/场景/分支中使用相同名称 |
 | 引用一致性 | 所有fp_ref/source_ids指向的ID均存在 |
 | 文件完整性 | s1_index.json 的 scenario_index 条目数 = s1_scenarios/ 下的文件数？ |
@@ -278,7 +310,7 @@ Read `{requirement_doc}`（需求文档）
 
 > **理由**：本 skill 无规格库（spec DB），需求理解正确性无法由机器自洽校验，必须由**人工补位评判**。需求分析是全链路的源头，源头错则全链路错——因此在进入代码扫描/契约校准前**强制**让人确认或修正分析结果。
 
-1. 先向用户**简要呈现**第八步自检后的分析结论：FP 清单（ID/名称/入口/优先级）、场景总览（ID/名称/步骤数/分支数）、关键约束与存疑点（标注"⚠️ 推断"的隐含异常/变体）。
+1. 先向用户**简要呈现**第八步自检后的分析结论：FP 清单（ID/名称/入口/优先级）、场景总览（ID/名称/步骤数/分支数）、测试建议覆盖表（TS ID→场景/分支或不适用原因）、关键约束与存疑点（标注"⚠️ 推断"的隐含异常/变体）。
 2. 调用 **AskUserQuestion**，请用户审阅并**修正**需求分析。建议提问维度（按实际取舍）：
    - 功能点粒度/取舍是否正确（有无漏提、误拆、误合）？
    - 主流程链路是否完整、是否符合真实业务？
@@ -302,6 +334,7 @@ Read `{requirement_doc}`（需求文档）
 | 功能点 | X 个 |
 | 流程场景 | X 个 |
 | 分支统计 | parameter X / boundary X / exception X / quality X / constraint X / cross X |
+| 测试建议覆盖 | X/Y（不适用 Z） |
 | 追问发现 | X 个新分支 |
 | 约束验证 | 未查看任何代码文件 |
 | 人工评判 | ✅ 已由用户审阅/修正并确认（AskUserQuestion） |

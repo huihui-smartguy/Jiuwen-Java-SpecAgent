@@ -48,6 +48,30 @@ commands still require the existing runtime `--allow-commands` confirmation.
 
 Secret-like environment variable values are redacted in parse/review artifacts.
 
+## Compact Paired Natural-Language Format
+
+For short multi-SUT descriptions, Stage 0 also supports a paired-list sentence
+when the number and order of module names, environment URLs, and optional source
+paths match:
+
+```markdown
+The modules tested here are xx and yy, with corresponding test environments at
+http://xx:xx and http://yy:yy, and their corresponding source code addresses at
+xx and yy, respectively.
+```
+
+This is normalized as two targets:
+
+| target | base_url | source.path |
+|---|---|---|
+| `xx` | `http://xx:xx` | `xx` |
+| `yy` | `http://yy:yy` | `yy` |
+
+Because the parser infers target ordering and roles from prose, the parse review
+records `paired_list_targets_inferred_requires_review` and
+`role_inference_requires_review`. Prefer bracketed sections when a target has
+commands, dependencies, LLM config, probes, or non-obvious roles.
+
 ## Canonical Manifest Shape
 
 The parser validates the canonical shape below. LLM-produced candidate manifests
@@ -119,8 +143,11 @@ targets:
 |---|---|
 | `targets[].depends_on` | Target ids that should be prepared before this target. Dependency metadata controls startup/readiness ordering and report grouping; it does not create cross-target assertions. |
 | `targets[].source.available` | `false` means AutoTestFlow should skip source scan/code-only gap generation for this target and rely on live contract probing when reachable. |
+| `targets[].source.remote_url` | Optional fallback repository URL extracted from natural-language descriptions. It is recorded for review and reporting; this iteration does not auto-clone it. |
+| `targets[].source.redacted` | `true` when the supplied source path is masked (for example `********`). Redacted paths never make `source.available=true`. |
 | `targets[].runtime.commands` | Optional `build`, `start`, and `stop` shell commands for managed targets. Commands are never run unless orchestration has explicit human confirmation and passes `--allow-commands`. |
 | `targets[].environment` | Redacted environment variable names, values, and env files inferred from the SUT description. |
+| `suite.defaults.environment` | Suite-level redacted config such as `[LLM]` blocks. These values are not target identities. |
 | `targets[].probes` | Target-specific contract probes. If omitted, `probe_contract.py` uses the existing A2A example probes as a legacy fallback. |
 | `targets[].knowledge_domain` | Overrides suite-level knowledge domain for this target. |
 | `targets[].remediation.config_path` | Target-local remediation config. If omitted, AutoTestFlow may look for `targets/<target_id>/remediation.config.json`. |

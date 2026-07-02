@@ -36,6 +36,20 @@ S1和S3a采用**拆分文件模式**：索引文件 + 逐场景文件。S2产出
       "source_ids": ["FN_001"]
     }
   ],
+  "test_suggestions": [
+    {
+      "id": "TS-NNN",
+      "trigger": "触发条件/输入/场景线索",
+      "focus": "测试关注点",
+      "expected": "期望结果/门禁标准",
+      "priority": "P0 | P1 | P2",
+      "method": "E2E | exception | boundary | DFX | manual | null",
+      "gate": "发布/验收门禁或 null",
+      "source": "文档章节/表格标题/行号线索",
+      "status": "mapped | not_applicable",
+      "not_applicable_reason": ""
+    }
+  ],
   "scenario_index": [
     {
       "id": "FS-NNN",
@@ -43,6 +57,7 @@ S1和S3a采用**拆分文件模式**：索引文件 + 逐场景文件。S2产出
       "type": "flow",
       "priority": "P0 | P1 | P2",
       "fp_refs": ["FP-NNN"],
+      "test_suggestion_refs": ["TS-NNN"],
       "file": "s1_scenarios/FS-NNN.json"
     }
   ]
@@ -59,6 +74,7 @@ S1和S3a采用**拆分文件模式**：索引文件 + 逐场景文件。S2产出
   "test_type": "scenario | dfx",
   "priority": "P0 | P1 | P2",
   "source": "requirement | code",
+  "test_suggestion_refs": ["TS-NNN"],
   "verify_points": ["验证点1"],
   "steps": [
     {
@@ -164,7 +180,25 @@ flow_scenarios 中每个元素与单场景文件结构相同，额外字段：
 | type | 是 | flow / framework / quality |
 | priority | 是 | P0/P1/P2 |
 | fp_refs | 是 | 涉及的FP ID列表 |
+| test_suggestion_refs | 否 | 该场景整体覆盖的显式测试建议ID列表（TS-NNN） |
 | file | 是 | 对应的场景文件相对路径 |
+
+### test_suggestions
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| id | 是 | 显式测试建议编号 TS-NNN |
+| trigger | 是 | 文档给出的触发条件、输入或场景线索；无明确触发时写关注对象 |
+| focus | 是 | 测试关注点 |
+| expected | 是 | 期望结果、验收门禁或应观察的现象 |
+| priority | 是 | P0/P1/P2；无显式优先级时按风险推断 |
+| method | 否 | 建议测试方法，如 E2E/exception/boundary/DFX/manual |
+| gate | 否 | 发布/验收门禁；无则为 null |
+| source | 是 | 文档章节、表格标题、行号线索或原文摘要 |
+| status | 是 | mapped / not_applicable |
+| not_applicable_reason | 否 | status=not_applicable 时必填 |
+
+每条 `status=mapped` 的建议必须被至少一个场景、分支或用例的 `test_suggestion_refs` 引用；确实不可测或不适用时使用 `not_applicable`，并保留理由。
 
 ### function_points
 
@@ -186,6 +220,7 @@ flow_scenarios 中每个元素与单场景文件结构相同，额外字段：
 | id | 是 | 编号 FS-NNN |
 | type | 是 | flow=流程 / framework=框架 / quality=质量 |
 | test_type | 是 | 测试维度。`scenario`=场景维度（flow/framework/quality，本 skill 已实现并落地执行）；`dfx`=DFX 维度（可靠性/性能/安全等非功能，当前为**规划占位**，仅登记不生成可执行用例）。默认 `scenario` |
+| test_suggestion_refs | 否 | 该场景覆盖的显式测试建议ID列表 |
 | verify_points | 是 | 主流程验证点列表 |
 | steps | 是 | 至少1个步骤 |
 | branches | 是 | 6类分支，无分支填空数组 |
@@ -234,6 +269,7 @@ flow_scenarios 中每个元素与单场景文件结构相同，额外字段：
 | step_ref | 偏离的步骤序号（quality无此字段） |
 | trigger | 触发/注入条件（boundary合并分支用values时不填，exception合并分支用sub_conditions时不填） |
 | expected | 预期结果（同上，合并分支不填） |
+| test_suggestion_refs | 覆盖的显式测试建议ID列表（TS-NNN），无则为空数组或省略 |
 
 类型特有字段：
 
