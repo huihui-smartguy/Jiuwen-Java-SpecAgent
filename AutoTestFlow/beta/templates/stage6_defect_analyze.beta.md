@@ -34,6 +34,8 @@
 
 ## 步骤
 
+> **叙事要求**：`issue.md`、`root_cause.md`、`fix_solution.md` 都要用接近人工排障对话的自然语言写清楚，避免只给零散字段。Stage7 会把三者合并为最终 evidence issue，因此每个文件都必须能单独读懂，并且相互补充而不互相替代。
+
 1. **判真伪**：核对 `{contract_path}` §7，确认 `spec_id` 权威性=spec-required。若为
    deployment-config-dependent / needs-runtime-verify → 非可修缺陷：写 `confidence.json`
    置 `needs_human=true, localizable=false`，写 `root_cause.md`/`issue.md`（仍可记 issue），**不产 patch**。
@@ -45,16 +47,16 @@
    **仅触及 `business_code_roots`**。修复方向：让 SUT 行为符合 `{contract_path}` 的 spec-required 形态。
 4. **回归自测 `regression_test.diff`**：在 `selftest_roots` **新增**一个开发仓自测（修前红/修后绿），
    断言引用契约/`validation_point`。**禁止**修改/删除既有测试断言来制造通过。
-5. **issue.md（强制两段证据）**：
+5. **issue.md（问题说明，强制两段证据）**：
    - (a) **规格库/契约知识**：引 `{contract_path}` 的 `spec_id`(spec-required) + 字段；若有 `fault_ref` 引
      `fault_id/name` + `validation_point` + `expected_behavior_raw`。
      - 【Beta · LLM Wiki】可引用 `{wiki_dir}/{fault_ref}.md` 的通俗描述/复现/关联历史**增强可读性与可追溯性**；
        引用时**须注明出处**（`wiki/{fault_ref}.md`，由结构化库派生），且**不得替代** contract 的 spec-required 锚点作为判据。
    - (b) **实测结果**：引 `{case_id}` + trace 的触发请求与违例响应帧 + `expected` vs `actual`；若是 fault oracle 触发的 `sdk_defect`，明确写出失败的 oracle id/check/kind。
-   - 结论：为何是**真实** spec-required 违例（非 sut_unsatisfied/config-dependent），及代码定位。
-6. **evidence.json**：结构化记录 contract 引用、fault_ref、trace 摘录、源码定位、patch/selftest 摘要。
-7. **fix_solution.md**：修复方案说明，含代码改动点、为什么符合 contract、复验方式。
-8. **issue.md（issue-only）**：正文不得引用“关联 PR”；必须包含修复方案与待 stage7 回填的实证复验位置。
+   - 结论：为何是**真实** spec-required 违例（非 sut_unsatisfied/config-dependent），并给出定位摘要。
+6. **root_cause.md（定位过程 + 根因）**：按“从契约/故障知识 → trace 现象 → 代码入口 → 具体根因”的顺序写清定位过程；如果定位不足，明确缺哪类证据、为什么需要人工补证。
+7. **evidence.json**：结构化记录 contract 引用、fault_ref、trace 摘录、源码定位、patch/selftest 摘要。
+8. **fix_solution.md（修复构造）**：说明改哪些代码、为什么该改动符合 contract、如何新增回归自测、Stage7 应如何复验；正文不得引用“关联 PR”，必须包含待 Stage7 回填实证复验的位置。
 9. **confidence.json**：`{target_id,case_id,spec_id,fault_id,analysis_type,domain,evidence_level,recommended_action,publishable,patchable,localizable,confidence(high|medium|low),files_touched[],adds,dels,needs_human,issue_title,reason}`。
    - 【Beta · LLM Wiki】可在 `reason` 注明是否参考了 wiki（如 `wiki_ref:F-REQ-011`）；**confidence 评级仍以 contract+实测为准**。
 

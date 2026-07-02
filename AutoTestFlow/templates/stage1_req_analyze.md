@@ -269,6 +269,14 @@ Read `{requirement_doc}`（需求文档）
 
 如有调用示例，Write `{output_dir}/FeatureAnalysis/skeleton/*`。
 
+4. **执行确定性 Markdown 投影**：
+
+```bash
+python {skill_dir}/scripts/render_design_markdown.py --output-dir {output_dir} --stage s1
+```
+
+生成 `{output_dir}/FeatureAnalysis/s1_scenario_examples.md`。该文件只从 `s1_index.json` 与 `s1_scenarios/*.json` 渲染，JSON 仍是权威源。
+
 ### 第七步（续）：可选历史缺陷 P0 富化（best-effort，仅当传入 `{fault_lib}`）
 
 > 仅当编排器传入了故障库路径 `{fault_lib}` 时执行；否则跳过，对产物零影响。
@@ -304,6 +312,7 @@ Read `{requirement_doc}`（需求文档）
 | 术语一致性 | 同一概念在FP/场景/分支中使用相同名称 |
 | 引用一致性 | 所有fp_ref/source_ids指向的ID均存在 |
 | 文件完整性 | s1_index.json 的 scenario_index 条目数 = s1_scenarios/ 下的文件数？ |
+| Markdown投影 | s1_scenario_examples.md 已由 render_design_markdown.py 从 JSON 生成？ |
 | 禁止代码 | 全程未Read/Grep/Glob代码文件？ |
 
 ### 第九步：人工评判（强制，不可跳过）　人工确认：✅
@@ -336,6 +345,7 @@ Read `{requirement_doc}`（需求文档）
 | 分支统计 | parameter X / boundary X / exception X / quality X / constraint X / cross X |
 | 测试建议覆盖 | X/Y（不适用 Z） |
 | 追问发现 | X 个新分支 |
+| Markdown投影 | FeatureAnalysis/s1_scenario_examples.md |
 | 约束验证 | 未查看任何代码文件 |
 | 人工评判 | ✅ 已由用户审阅/修正并确认（AskUserQuestion） |
 ```

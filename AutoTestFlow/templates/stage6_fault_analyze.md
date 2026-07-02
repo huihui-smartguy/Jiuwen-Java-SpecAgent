@@ -29,9 +29,9 @@
 写入 `{analysis_output_dir}/`：
 
 - `evidence.json`：结构化证据，至少含 `{target_id,case_id,analysis_type,domain,fault_id,evidence_level,contract_refs,trace_refs,source_refs,decision}`。
-- `root_cause.md`：根因或诊断结论；若证据不足，明确缺口。
-- `fix_solution.md`：推荐修复方案。可包含代码级建议、配置/运维建议、监控建议或复测建议。
-- `issue.md`：可提交 issue 的正文草稿，必须含规格/故障知识、实测证据、修复方案。
+- `issue.md`：问题说明草稿，必须含规格/故障知识、实测证据、为什么这是问题；语言要接近人工排障对话，避免只列字段。
+- `root_cause.md`：定位过程 + 根因或诊断结论；按“知识/契约线索 → trace/结果现象 → 源码/配置/运行时定位 → 根因或证据缺口”描述，若证据不足，明确缺口。
+- `fix_solution.md`：修复构造或处置方案。可包含代码级建议、配置/运维建议、监控建议或复测建议；说明如何复验以及哪些动作需要人工确认。
 - `confidence.json`：`{target_id,case_id,spec_id,fault_id,analysis_type,domain,evidence_level,recommended_action,publishable,patchable,localizable,confidence,files_touched,adds,dels,needs_human,issue_title,reason}`。
 - 仅当 `patchable=true` 且 `contract_authority=spec-required` 且源码可安全定位时，额外输出：
   - `patch.diff`：只触及 `business_code_roots`
@@ -42,7 +42,7 @@
 1. **判据边界**：故障库、wiki、经验描述均为 advisory；是否缺陷成立只看 `contract.md` + 实测 trace。
 2. **可扩展域**：不要假设 domain 只有 Web/REST/Agent/DFX；对未知 domain 使用通用证据链和修复方案结构。
 3. **patch 红线**：非 `patchable=true`、非 spec-required、无法定位、或越出白名单时，不产 patch，只产 issue/evidence。
-4. **issue 证据**：issue.md 必须写清“为什么这是问题”与“建议怎么修”；若 fault oracle 阻断了 pass，必须列出 oracle id/check/kind 与 trace 证据，但不得声称已经提交 PR。
+4. **issue 证据**：issue.md 必须写清“为什么这是问题”，root_cause.md 写清“怎么定位到这里”，fix_solution.md 写清“建议怎么修”；若 fault oracle 阻断了 pass，必须列出 oracle id/check/kind 与 trace 证据，但不得声称已经提交 PR。
 5. **置信度**：high 需要 contract/trace/source 三者闭环；medium 可缺源码定位；low 表示需要人工补证。
 
 ## 返回

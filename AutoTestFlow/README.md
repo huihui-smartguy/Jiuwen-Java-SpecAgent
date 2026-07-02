@@ -41,6 +41,8 @@
 | `scenario` | **已实现** | flow（流程驱动）+ framework（框架组合）+ quality（质量保障），完整编排到可执行用例 + 报告 |
 | `dfx` | **规划中（并行轨道）** | 非功能维度；当前为 `design_only` 占位，仅产出设计骨架，与 `scenario` 共享同一编排/契约校准/执行边界纪律 |
 
+Stage1/Stage3 保留 JSON 作为权威产物，同时生成 Markdown companion：`FeatureAnalysis/s1_scenario_examples.md`、`FeatureAnalysis/s3a_scenario_landscape.md`、`TestCases/test_examples.md`。这些文件由 `render_design_markdown.py` 从 JSON 确定性渲染，用于 LLM/人工审阅，不作为新的判据来源。
+
 ---
 
 ## 3. 目录结构
@@ -75,6 +77,7 @@ AutoTestFlow/                       # Skill 本体
 │   ├── professional_acceptance.py  # Professional_experience advisory gates → professional/AI readiness artifacts
 │   ├── merge_enriched.py
 │   ├── merge_test_design.py
+│   ├── render_design_markdown.py   # Stage1/3 JSON → LLM-readable Markdown companions
 │   ├── select_p0.py
 │   ├── evaluate_fault_oracles.py   # stage4 子步：fault_ref 用例 trace/process/negative oracle 门禁
 │   ├── aggregate_results.py
@@ -305,7 +308,7 @@ python AutoTestFlow/scripts/professional_acceptance.py \
 
 - **stage6 fault analysis**（只读，每目标一个子 Agent）：产 `evidence.json` + `root_cause.md` + `fix_solution.md` + `issue.md` + `confidence.json`；patchable 目标额外产 `patch.diff` + `regression_test.diff`。
 - **强制人工确认门**：`--remediate=on` 时，任何外发动作前必须经 `AskUserQuestion` 确认（展示目标 domain / 类型 / 文件 / ±行 / 置信 / issue 标题）；可选"提交 evidence issue / 仅 dry-run / 取消"。
-- **stage7 应用-构建-复验-issue**（纯脚本）：clone@ref → git apply → 构建 → 重启 SUT → 重跑失败用例 → 生成含修复方案和实证复验的 issue body → 开 upstream issue。
+- **stage7 应用-构建-复验-issue**（纯脚本）：clone@ref → git apply → 构建 → 重启 SUT → 重跑失败用例 → 先生成合并后的 `Remediation/issue_bodies/{case}.md`（problem/root cause/定位过程/修复构造/实证复验），dry-run 也生成；过门且允许后才开 upstream issue。
 
 ### 8.3 安全红线
 

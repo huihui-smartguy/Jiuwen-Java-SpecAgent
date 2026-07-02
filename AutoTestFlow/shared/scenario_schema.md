@@ -15,8 +15,12 @@ S1和S3a采用**拆分文件模式**：索引文件 + 逐场景文件。S2产出
 ├── s3a_enriched/                    # S3a-code逐场景文件
 │   ├── FS-001.json
 │   └── ...
-└── s3a_framework.json               # S3a-fw输出（单文件，通常较小）
+├── s3a_framework.json               # S3a-fw输出（单文件，通常较小）
+├── s1_scenario_examples.md          # S1 JSON 的 LLM/人工可读投影（非权威源）
+└── s3a_scenario_landscape.md        # S3a JSON 的 LLM/人工可读投影（非权威源）
 ```
+
+`TestCases/test_examples.md` 是 `TestCases/test_design.json` 的确定性 Markdown 投影。所有 Markdown companion 均由 `scripts/render_design_markdown.py` 从 JSON 渲染，保留 JSON provenance、`test_suggestion_refs`、`oracle_refs`、`fault_ref`、`fault_oracles`、`acceptance_refs` 等追踪字段；JSON 仍是唯一机器协议与权威数据源。
 
 ## s1_index.json 结构（S1输出）
 
