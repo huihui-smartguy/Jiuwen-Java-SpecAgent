@@ -163,7 +163,7 @@ If it is not accessible locally, the source code is: https://github.com/Bensinan
 """
 
 
-PAIRED_LIST_NL_SUT = """The modules tested here are xx and yy, with corresponding test environments at http://xx:xx and http://yy:yy, and their corresponding source code addresses at xx and yy, respectively.
+PAIRED_LIST_NL_SUT = """The modules tested here are catalog_api and checkout_api, with corresponding test environments at http://127.0.0.1:8081 and http://127.0.0.1:8082, and their corresponding source code paths at services/catalog and services/checkout, respectively.
 """
 
 
@@ -389,13 +389,16 @@ port = 8190
                 output_dir=str(root / "analysis"),
             )
 
-            self.assertEqual([t["id"] for t in normalized["targets"]], ["xx", "yy"])
-            self.assertEqual([t["name"] for t in normalized["targets"]], ["xx", "yy"])
+            self.assertEqual([t["id"] for t in normalized["targets"]], ["catalog_api", "checkout_api"])
+            self.assertEqual([t["name"] for t in normalized["targets"]], ["catalog_api", "checkout_api"])
             self.assertEqual([t["runtime"]["base_url"] for t in normalized["targets"]], [
-                "http://xx:xx",
-                "http://yy:yy",
+                "http://127.0.0.1:8081",
+                "http://127.0.0.1:8082",
             ])
-            self.assertEqual([t["source"]["path"] for t in normalized["targets"]], ["xx", "yy"])
+            self.assertEqual(
+                [t["source"]["path"] for t in normalized["targets"]],
+                ["services/catalog", "services/checkout"],
+            )
             self.assertEqual([t["runtime"]["mode"] for t in normalized["targets"]], ["predeployed", "predeployed"])
             self.assertTrue(all(t["source"]["available"] for t in normalized["targets"]))
             self.assertIn(

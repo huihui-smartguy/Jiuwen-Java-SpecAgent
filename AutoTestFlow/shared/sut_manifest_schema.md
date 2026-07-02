@@ -55,17 +55,18 @@ when the number and order of module names, environment URLs, and optional source
 paths match:
 
 ```markdown
-The modules tested here are xx and yy, with corresponding test environments at
-http://xx:xx and http://yy:yy, and their corresponding source code addresses at
-xx and yy, respectively.
+The modules tested here are catalog_api and checkout_api, with corresponding
+test environments at http://127.0.0.1:8081 and http://127.0.0.1:8082, and their
+corresponding source code paths at services/catalog and services/checkout,
+respectively.
 ```
 
 This is normalized as two targets:
 
 | target | base_url | source.path |
 |---|---|---|
-| `xx` | `http://xx:xx` | `xx` |
-| `yy` | `http://yy:yy` | `yy` |
+| `catalog_api` | `http://127.0.0.1:8081` | `services/catalog` |
+| `checkout_api` | `http://127.0.0.1:8082` | `services/checkout` |
 
 Because the parser infers target ordering and roles from prose, the parse review
 records `paired_list_targets_inferred_requires_review` and
