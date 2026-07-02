@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "name": "TestKnowledgeBase Runtime Registry",
-  "version": "1.2.0",
+  "version": "2.0.0",
   "status": "runtime_source_of_truth",
   "description": "Machine-readable package registry consumed by AutoTestFlow. New fault packages should be added here instead of hard-coding package paths or category behavior in AutoTestFlow.",
   "default_runtime": {
