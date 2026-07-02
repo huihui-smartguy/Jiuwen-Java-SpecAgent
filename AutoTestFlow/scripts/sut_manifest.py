@@ -42,6 +42,13 @@ URL_RE = re.compile(r"https?://[^\s,;)\]>]+")
 IP_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 PORT_RE = re.compile(r"\bport\s*[:=]\s*(\d{2,5})\b", re.IGNORECASE)
 KEY_VALUE_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([^\s,;]+)")
+TARGET_STRUCTURAL_KEYS = {
+    "name", "ip", "host", "hostname", "address", "port",
+    "source", "source_path", "source_url", "code", "code_path", "code_url", "project_path", "repo_path",
+    "role", "domain", "knowledge_domain", "build", "start", "stop",
+}
+CONFIG_SECTION_NAMES = {"llm", "model", "models", "ai", "openai"}
+SOURCE_SECTION_NAMES = {"source", "source_path", "source-path", "source path", "code_path", "code-path", "code path"}
 
 
 class ManifestError(ValueError):
@@ -315,6 +322,27 @@ def _strip_inline_value(value):
     return value.rstrip(".,;")
 
 
+def _looks_redacted(value):
+    value = str(value or "").strip()
+    if not value:
+        return False
+    compact = re.sub(r"\s+", "", value)
+    return bool(
+        "***" in compact
+        or re.fullmatch(r"[*xX_/-]{4,}", compact)
+        or compact in {"<provided>", "<provided_at_runtime>", "<redacted>", "<secret>"}
+    )
+
+
+def _path_exists(path, base_dir):
+    if not path or _looks_redacted(path) or URL_RE.match(str(path)):
+        return False
+    expanded = os.path.expanduser(str(path).strip())
+    if not os.path.isabs(expanded):
+        expanded = os.path.join(base_dir, expanded)
+    return os.path.exists(os.path.normpath(expanded))
+
+
 def _value_after_marker(line, markers):
     for marker in markers:
         match = re.search(r"\b%s\b\s*[:=]\s*(.+)$" % re.escape(marker), line, re.IGNORECASE)
@@ -328,15 +356,27 @@ def _split_csv_words(text):
     return [_strip_inline_value(part) for part in text.split(",") if _strip_inline_value(part)]
 
 
+def _split_natural_list(text):
+    text = re.sub(r"\brespectively\b", "", str(text or ""), flags=re.IGNORECASE)
+    text = text.replace("分别", "")
+    text = text.strip(" \t\r\n.,;，。")
+    urls = [_strip_inline_value(url) for url in URL_RE.findall(text)]
+    if urls:
+        return urls
+    text = re.sub(r"\s+(?:and|or)\s+", ",", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s*(?:、|，|,|;|；|以及|和|与)\s*", ",", text)
+    return [_strip_inline_value(part) for part in text.split(",") if _strip_inline_value(part)]
+
+
 def _redact_env_value(name, value):
     if value is None:
         return None, False
-    if SECRET_NAME_RE.search(name or ""):
+    if SECRET_NAME_RE.search(name or "") or _looks_redacted(value):
         return REDACTED_VALUE, True
     return _strip_inline_value(value), False
 
 
-def _parse_environment(line, env):
+def _parse_environment(line, env, exclude_structural=False):
     lower = line.lower()
     env_file = _value_after_marker(line, ["env file", "environment file", ".env file", "env"])
     if env_file and (".env" in env_file or "/" in env_file):
@@ -346,9 +386,11 @@ def _parse_environment(line, env):
 
     pairs = KEY_VALUE_RE.findall(line)
     if pairs:
-        env.setdefault("variables", [])
-        existing = {item.get("name") for item in env["variables"]}
         for name, value in pairs:
+            if exclude_structural and name.lower() in TARGET_STRUCTURAL_KEYS:
+                continue
+            env.setdefault("variables", [])
+            existing = {item.get("name") for item in env["variables"]}
             redacted_value, redacted = _redact_env_value(name, value)
             if name not in existing:
                 env["variables"].append({"name": name, "value": redacted_value, "redacted": redacted})
@@ -380,11 +422,12 @@ def _split_description_sections(text):
     for raw in text.splitlines():
         line = raw.rstrip()
         stripped = line.strip()
-        bracket = re.match(r"^\[([^\]]+)\]\s*$", stripped)
+        bracket = re.match(r"^\[([^\]]+)\]\s*(.*)$", stripped)
         heading = re.match(r"^#{1,4}\s+(.+?)\s*$", stripped)
         heading_name = None
         if bracket:
             heading_name = bracket.group(1)
+            inline = bracket.group(2).strip()
         elif heading:
             candidate = heading.group(1).strip()
             lower = candidate.lower()
@@ -395,6 +438,8 @@ def _split_description_sections(text):
         if heading_name:
             current = {"name": heading_name.strip(), "lines": []}
             sections.append(current)
+            if bracket and inline:
+                current["lines"].append(inline)
             continue
         if current is None:
             current = {"name": "default", "lines": []}
@@ -417,6 +462,95 @@ def _section_has_target_signal(section):
         or re.search(r"\b(accessible directly|direct access|requires?|source path|code path|environment variable)\b", text, re.IGNORECASE)
         or re.search(r"直接访问|需要|环境变量|源码|代码", text)
     )
+
+
+def _normalized_section_name(name):
+    return re.sub(r"[\s.-]+", "_", str(name or "").strip().lower())
+
+
+def _is_generic_environment_name(name):
+    norm = _normalized_section_name(name)
+    return bool(re.match(r"^(environment|env|target|service|sut)\d*$", norm))
+
+
+def _section_kind(section):
+    name = section.get("name", "")
+    norm = _normalized_section_name(name)
+    if norm in CONFIG_SECTION_NAMES:
+        return "config"
+    if norm in SOURCE_SECTION_NAMES:
+        return "source"
+    if _section_has_target_signal(section):
+        return "target"
+    return "notes"
+
+
+def _target_role_from_name(name, idx, explicit_role=False, total_targets=1):
+    if explicit_role:
+        return None
+    if total_targets <= 1:
+        return "primary"
+    lower = str(name or "").lower()
+    if idx == 1:
+        return "primary"
+    if any(k in lower for k in ("front", "frontend", "tool", "ui", "页面", "前端")):
+        return "supporting"
+    if any(k in lower for k in ("mock", "stub", "fake", "dependency", "依赖")):
+        return "dependency"
+    return "dependency"
+
+
+def _first_pattern_group(text, patterns):
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            return _strip_inline_value(match.group(1))
+    return None
+
+
+def _extract_paired_target_sections(text):
+    compact = " ".join(str(text or "").split())
+    module_text = _first_pattern_group(compact, [
+        r"(?:the\s+)?(?:modules?|services?|components?|suts?|targets?)\s+"
+        r"(?:tested\s+(?:here\s+)?|under\s+test\s+)?(?:are|include|includes)\s+"
+        r"(.+?)(?=,\s*(?:with|and)\b|，|。|$)",
+        r"(?:被测模块|测试模块|被测服务|测试服务|被测对象)\s*(?:为|是|包括|包含)\s*"
+        r"(.+?)(?=，|。|$)",
+    ])
+    source_text = _first_pattern_group(compact, [
+        r"(?:source\s+code\s+(?:addresses?|paths?|urls?)|source\s+(?:addresses?|paths?|urls?)|"
+        r"code\s+(?:addresses?|paths?|urls?))\s*(?:are|at|is|=|:)?\s+"
+        r"(.+?)(?=,\s*respectively\b|\s+respectively\b|\.|。|$)",
+        r"(?:源码|代码)(?:地址|路径)\s*(?:为|是|在|:|：)?\s*"
+        r"(.+?)(?=，?分别|，|。|$)",
+    ])
+    environment_text = _first_pattern_group(compact, [
+        r"(?:corresponding\s+)?(?:test\s+environments?|environment\s+urls?|environments?|service\s+urls?)"
+        r"\s*(?:are|at|is|=|:)?\s+"
+        r"(.+?)(?=,\s*(?:and\s+)?(?:their\s+)?(?:corresponding\s+)?(?:source|code)\b|"
+        r"\s+and\s+(?:their\s+)?(?:corresponding\s+)?(?:source|code)\b|。|$)",
+        r"(?:测试环境|环境地址|服务地址)\s*(?:为|是|在|:|：)?\s*"
+        r"(.+?)(?=，?(?:其|对应)?(?:源码|代码)|。|$)",
+    ])
+    names = _split_natural_list(module_text) if module_text else []
+    urls = [_strip_inline_value(url) for url in URL_RE.findall(environment_text or compact)]
+    sources = _split_natural_list(source_text) if source_text else []
+    if len(names) < 2 or len(urls) != len(names):
+        return [], []
+    if sources and len(sources) != len(names):
+        return [], ["paired_source_count_mismatch_requires_review"]
+
+    sections = []
+    for idx, name in enumerate(names):
+        lines = [
+            "name = %s" % name,
+            "URL: %s" % urls[idx],
+            "Accessible directly",
+        ]
+        if sources:
+            lines.append("source_path = %s" % sources[idx])
+        sections.append({"name": name, "lines": lines})
+    return sections, ["paired_list_targets_inferred_requires_review"]
 
 
 def _base_url_from_parts(url, host, port):
@@ -456,10 +590,80 @@ def _line_value(line, markers):
     return None
 
 
-def _parse_section(section, idx):
-    name = section["name"].strip() or "target-%s" % idx
+def _source_value_from_line(line):
+    value = _line_value(line, [
+        "source path", "source url", "code path", "code url", "source_path", "source_url",
+        "code_path", "code_url", "project path", "repo path",
+    ])
+    if value:
+        return value
+    match = re.search(
+        r"(?:source\s+code\s+(?:path|url|address)|source\s+(?:path|url|address)|code\s+(?:path|url|address)|源码(?:路径|地址)|代码(?:路径|地址))\s*(?:is|=|:|为|是)\s*(.+)$",
+        line,
+        re.IGNORECASE,
+    )
+    if match:
+        return _strip_inline_value(match.group(1))
+    return None
+
+
+def _parse_global_source(section, manifest_path=None):
+    base_dir = os.path.dirname(os.path.abspath(manifest_path or os.getcwd()))
+    path = None
+    remote_url = None
+    reasons = []
+    for raw in section.get("lines", []):
+        line = raw.strip()
+        if not line:
+            continue
+        value = _source_value_from_line(line)
+        url_match = URL_RE.search(line)
+        if value and URL_RE.match(value):
+            remote_url = value
+        elif value and not path:
+            path = value
+        if url_match and ("source" in line.lower() or "源码" in line or "代码" in line):
+            remote_url = _strip_inline_value(url_match.group(0))
+    redacted = _looks_redacted(path)
+    available = bool(path and not redacted and _path_exists(path, base_dir))
+    if redacted:
+        reasons.append("masked_source_path_requires_review")
+    elif path and not available:
+        reasons.append("source_path_inaccessible_requires_review")
+    source = {
+        "path": path,
+        "available": available,
+        "redacted": redacted,
+    }
+    if remote_url:
+        source["remote_url"] = remote_url
+    return source, reasons
+
+
+def _parse_config_section(section):
+    env = {}
+    for line in [line.strip(" -\t") for line in section.get("lines", []) if line.strip()]:
+        _parse_environment(line, env)
+    return env
+
+
+def _source_from_value(value):
+    if not value:
+        return {"available": False}
+    source_value = _strip_inline_value(value)
+    if URL_RE.match(source_value):
+        return {"path": None, "available": False, "remote_url": source_value}
+    redacted = _looks_redacted(source_value)
+    source = {"path": source_value, "available": not redacted}
+    if redacted:
+        source["redacted"] = True
+    return source
+
+
+def _parse_section(section, idx, total_targets=1):
+    section_name = section["name"].strip() or "target-%s" % idx
+    name = section_name
     text = "\n".join(section["lines"])
-    target_id = _slugify(name, "target-%s" % idx)
     lines = [line.strip(" -\t") for line in section["lines"] if line.strip()]
 
     url = None
@@ -467,6 +671,7 @@ def _parse_section(section, idx):
     port = None
     source_path = None
     role = None
+    explicit_role = False
     knowledge_domain = None
     remediation_config = None
     commands = {}
@@ -478,6 +683,9 @@ def _parse_section(section, idx):
 
     for line in lines:
         lower = line.lower()
+        name_value = _line_value(line, ["name", "service name", "sut name", "target name"])
+        if name_value:
+            name = name_value
         if not url:
             match = URL_RE.search(line)
             if match:
@@ -497,12 +705,13 @@ def _parse_section(section, idx):
             elif PORT_RE.search(line):
                 port = PORT_RE.search(line).group(1)
 
-        source_value = _line_value(line, ["source path", "code path", "source", "code", "project path", "repo path"])
+        source_value = _source_value_from_line(line)
         if source_value and not source_path:
             source_path = source_value
         role_value = _line_value(line, ["role"])
         if role_value and not role:
             role = _slugify(role_value, role_value)
+            explicit_role = True
         domain_value = _line_value(line, ["knowledge domain", "domain"])
         if domain_value and not knowledge_domain:
             knowledge_domain = _slugify(domain_value, domain_value)
@@ -515,7 +724,7 @@ def _parse_section(section, idx):
             if command_value:
                 commands[command_name] = command_value
 
-        _parse_environment(line, env)
+        _parse_environment(line, env, exclude_structural=True)
 
         if re.search(r"\baccessible directly\b|\bdirect access\b|\balready (running|available|deployed)\b|直接访问|已部署|已启动", line, re.IGNORECASE):
             mode_hint = mode_hint or "predeployed"
@@ -529,9 +738,10 @@ def _parse_section(section, idx):
             dependency_names.extend(_split_csv_words(conjunction_match.group(1)))
 
     base_url = _base_url_from_parts(url, host, port)
-    mode = mode_hint or ("managed" if commands or source_path else "predeployed")
+    source_is_remote = bool(source_path and URL_RE.match(str(source_path)))
+    mode = mode_hint or ("managed" if commands or (source_path and not source_is_remote) else "predeployed")
     readiness_path = _probe_path_from_text(text, url)
-    source = {"path": source_path, "available": True} if source_path else {"available": False}
+    source = _source_from_value(source_path)
     runtime = {
         "mode": mode,
         "base_url": base_url or "",
@@ -553,6 +763,12 @@ def _parse_section(section, idx):
             risky.append("inferred_build_or_start_commands")
     if not source_path and mode == "predeployed":
         reasons.append("source_unavailable_code_scan_skipped")
+    inferred_role = _target_role_from_name(name, idx, explicit_role=explicit_role, total_targets=total_targets)
+    if inferred_role and total_targets > 1:
+        role = inferred_role
+        reasons.append("role_inference_requires_review")
+    target_id_source = name if (_is_generic_environment_name(section_name) or name != section_name) else section_name
+    target_id = _slugify(target_id_source, "target-%s" % idx)
 
     target = {
         "id": target_id,
@@ -582,14 +798,53 @@ def _parse_section(section, idx):
 
 def parse_natural_language_description(text, manifest_path=None, output_dir=None):
     sections = _split_description_sections(text)
-    if len(sections) > 1:
-        sections = [section for section in sections if _section_has_target_signal(section)]
-    sections = sections or [{"name": "default", "lines": text.splitlines()}]
-    parsed_targets = [_parse_section(section, idx + 1) for idx, section in enumerate(sections)]
-    target_ids = {item["target"]["id"] for item in parsed_targets}
+    target_sections = []
+    config_defaults = {}
+    global_source = None
     review_reasons = []
+    for section in sections:
+        kind = _section_kind(section)
+        if kind == "target":
+            target_sections.append(section)
+        elif kind == "source":
+            global_source, source_reasons = _parse_global_source(section, manifest_path=manifest_path)
+            review_reasons.extend(source_reasons)
+        elif kind == "config":
+            env = _parse_config_section(section)
+            if env:
+                config_defaults.setdefault("environment", {"variables": []})
+                existing = {item.get("name") for item in config_defaults["environment"]["variables"]}
+                for item in env.get("variables", []):
+                    if item.get("name") and item.get("name") not in existing:
+                        config_defaults["environment"]["variables"].append(item)
+                        existing.add(item.get("name"))
+                if env.get("files"):
+                    config_defaults["environment"].setdefault("files", [])
+                    config_defaults["environment"]["files"].extend(env["files"])
+    if not target_sections or (len(target_sections) == 1 and target_sections[0].get("name") == "default"):
+        paired_sections, paired_reasons = _extract_paired_target_sections(text)
+        if paired_sections:
+            target_sections = paired_sections
+            review_reasons.extend(paired_reasons)
+    target_sections = target_sections or [{"name": "default", "lines": text.splitlines()}]
+    parsed_targets = [
+        _parse_section(section, idx + 1, total_targets=len(target_sections))
+        for idx, section in enumerate(target_sections)
+    ]
+    target_ids = {item["target"]["id"] for item in parsed_targets}
     risky_inferences = []
     confidence_values = []
+
+    if global_source and parsed_targets:
+        primary = parsed_targets[0]
+        source = primary["target"].setdefault("source", {})
+        if not source.get("path"):
+            source.update({k: v for k, v in global_source.items() if v is not None})
+            if global_source.get("path") or global_source.get("remote_url"):
+                primary["review_reasons"].append("global_source_applied_to_primary")
+        for reason in review_reasons:
+            if reason not in primary["review_reasons"]:
+                primary["review_reasons"].append(reason)
 
     for item in parsed_targets:
         target = item["target"]
@@ -615,7 +870,7 @@ def parse_natural_language_description(text, manifest_path=None, output_dir=None
         "suite": {
             "id": suite_id,
             "output_dir": output_dir or DEFAULT_OUTPUT_DIR,
-            "defaults": {},
+            "defaults": config_defaults,
         },
         "targets": [item["target"] for item in parsed_targets],
         "_input_format": "natural_language",
@@ -760,10 +1015,16 @@ def validate_and_normalize(data, manifest_path=None, output_dir=None):
         source = target.get("source") if isinstance(target.get("source"), dict) else {}
         source_path = source.get("path")
         source_available = source.get("available")
-        if source_available is None:
-            source_available = bool(source_path)
+        source_redacted = bool(source.get("redacted"))
+        source_remote_url = source.get("remote_url")
         if source_path:
             source_path = str(source_path).strip()
+            if _looks_redacted(source_path):
+                source_redacted = True
+        if source_redacted:
+            source_available = False
+        elif source_available is None:
+            source_available = bool(source_path)
         if not source_path and not (mode == "predeployed" and source_available is False):
             raise ManifestError(
                 "%s.source.path is required for managed targets; direct predeployed targets may set source.available=false"
@@ -780,10 +1041,14 @@ def validate_and_normalize(data, manifest_path=None, output_dir=None):
             raise ManifestError("%s.depends_on must be a list" % context)
         item.setdefault("source", {})
         item["source"]["available"] = bool(source_available)
+        if source_remote_url:
+            item["source"]["remote_url"] = source_remote_url
+        if source_redacted:
+            item["source"]["redacted"] = True
         if source_path:
             item["source"]["path"] = source_path
-            item["source"]["abs_path"] = _normalize_path(source_path, manifest_dir)
-            item["source"].setdefault("skip_code_scan", False)
+            item["source"]["abs_path"] = None if source_redacted else _normalize_path(source_path, manifest_dir)
+            item["source"]["skip_code_scan"] = bool(source_redacted or not source_available)
         else:
             item["source"]["path"] = None
             item["source"]["abs_path"] = None

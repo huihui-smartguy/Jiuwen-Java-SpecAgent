@@ -49,13 +49,15 @@ confidence 为 low 或 user_test_entry 为 null → 不激活。
 
 ### 第一步：读取索引
 
-Read `{output_dir}/FeatureAnalysis/s3a_enriched_index.json` — 获取 scenario_index（场景ID→priority + 文件路径映射）
+Read `{output_dir}/FeatureAnalysis/s3a_enriched_index.json` — 获取 scenario_index（场景ID→priority + 文件路径映射）与 `test_suggestions[]`（显式测试建议台账，如存在）
 
 ### 第二步：按场景ID逐个读取单场景文件
 
 对每个scene_id：
 - flow场景（FS-001~等）：Read `{output_dir}/FeatureAnalysis/s3a_enriched/{scene_id}.json`
 - framework场景（FS-FW-xxx）：从 `{output_dir}/FeatureAnalysis/s3a_framework.json` 中提取对应场景
+
+读取场景后，记录场景顶层与各分支上的 `test_suggestion_refs`；生成用例时必须继承对应引用，保证需求文档中的显式测试建议能追踪到最终用例。
 
 ### 第二点五步：读取 Professional_experience 指导（条件激活）
 
@@ -110,6 +112,11 @@ Read `{output_dir}/FeatureAnalysis/s3a_enriched_index.json` — 获取 scenario_
 
 **截断优先级**（仅P1/P2，P0不截断）：exception 优先保留隐含异常；quality 优先保留关联CD；constraint 优先保留违反导致异常的；cross 优先保留跨FP数据依赖。被截断分支记录到 truncated_branches。
 
+**测试建议引用传递**：
+- 正常E2E：继承场景顶层 `test_suggestion_refs`。
+- 变体/边界/异常/质量/约束/交叉E2E：合并场景顶层与来源分支的 `test_suggestion_refs`，去重保序。
+- 被截断分支若含 `test_suggestion_refs`，必须在 `truncated_branches` 中保留这些引用，供 merge 阶段判断是否仍有覆盖缺口。
+
 ### 第3.5步（条件激活）：TestKnowledgeBase 驱动的用例补充
 
 > 仅当 `{output_dir}/KnowledgeBase/fault_matches.json` 存在时执行（由阶段2.6 `match_faults.py` 产出的兼容文件；主文件为 `KnowledgeBase/knowledge_matches.json`）；不存在则跳过，本步对产物零影响（与未接入 TestKnowledgeBase 时一致）。
@@ -140,6 +147,7 @@ Read `{output_dir}/KnowledgeBase/fault_matches.json`。对本批每个 `source_s
   "case_kind": "正常E2E | 变体E2E | 异常E2E | 边界E2E | 质量E2E | 约束E2E | 交叉E2E",
   "priority": "P0 | P1 | P2",
   "source_scene": "FS-001",
+  "test_suggestion_refs": ["TS-001"],
   "preconditions": ["前置条件1", "前置条件2"],
   "steps": "1. 步骤1描述\n2. 步骤2描述\n...",
   "expected": "【输出】验证点1 | 【过程】验证点2",
@@ -169,6 +177,7 @@ Read `{output_dir}/KnowledgeBase/fault_matches.json`。对本批每个 `source_s
 - **`test_type`（必填，测试维度）**：默认 `"scenario"`（场景维度，已实现，进入 stage4 执行）；`"dfx"` 为**规划占位**（Design for X：可靠性/性能/安全等非功能维度，仅登记、不生成可执行代码、由编排器跳过 stage4）。继承自来源场景的 test_type，场景未标注时默认 `scenario`。详见 shared/scenario_schema.md。
 - `dimension`：可选，仅当 `test_type="dfx"` 时填写（reliability / performance / security / …），scenario 时为 null。
 - **`case_kind`（必填）**：用例的 E2E 类别（正常/变体/异常/边界/质量/约束/交叉），用于设计覆盖统计与 P0 多样性选取。
+- **`test_suggestion_refs`（可选）**：该用例覆盖的显式测试建议ID列表，来自 Stage 1/3a 场景或分支；下游 merge 用于生成测试建议覆盖报告。
 - **`oracle_refs`（必填）**：用例每个判据对应的 contract.md specId + 断言层级 + 字段路径 + 权威性（spec-required / config-dependent / needs-runtime-verify）。**每条用例的 oracle 必须引用 contract.md 的某个 specId**。供 stage4 直接据此从 contract.md 取断言、决定强校验还是放宽。
 - **`fault_oracles`（fault_ref 用例必填）**：从匹配项原样复制的过程/否定/结果 oracle 列表。`fault_ref` 用例必须至少包含 1 条 `required=true` 且 `kind=process|negative` 的机器可检查项；否则不得进入 stage4 执行。
 - `acceptance_refs`：可选，来自 `QualityGates/professional_case_guidance.json`，用于说明该用例支撑的 Professional_experience 验收标准；不得作为强断言来源。

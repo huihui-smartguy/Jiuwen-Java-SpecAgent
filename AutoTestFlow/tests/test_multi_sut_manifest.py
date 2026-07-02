@@ -119,6 +119,54 @@ Start: java -jar target/checkout.jar
 """
 
 
+EDPA_MULTI_SUT_NL = """# Multi-SUT Test Environment
+
+[environment1]
+
+name = EDPA
+
+ip = 1.92.123.95
+
+port = 8190
+
+[environment2]
+
+name = versatile_mock
+
+ip = 1.92.123.95
+
+port = 30001
+
+[environment3]
+
+name = front_tool
+
+ip = 1.92.123.95
+
+port = 3010
+
+Services on all three ports are running.
+
+[LLM]
+
+base_url = *********
+
+api_key = **********
+
+model = *********
+
+If the test environment (SUT)/service involved in the feature requires LLM, please replace the environment variables with the above configuration.
+
+[source_path] The source code path is **************
+
+If it is not accessible locally, the source code is: https://github.com/Bensinanren/spring-ai-ascend/tree/edpa_java
+"""
+
+
+PAIRED_LIST_NL_SUT = """The modules tested here are xx and yy, with corresponding test environments at http://xx:xx and http://yy:yy, and their corresponding source code addresses at xx and yy, respectively.
+"""
+
+
 class MultiSutManifestTests(unittest.TestCase):
     def test_valid_two_target_manifest_normalizes_paths_and_artifacts(self):
         with tempfile.TemporaryDirectory() as td:
@@ -254,6 +302,107 @@ class MultiSutManifestTests(unittest.TestCase):
 
             self.assertEqual([t["id"] for t in normalized["targets"]], ["catalog", "checkout"])
             self.assertEqual(normalized["targets"][1]["depends_on"], ["catalog"])
+
+    def test_natural_language_edpa_multi_sut_keeps_global_config_out_of_targets(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            manifest_path = root / "autotestflow.suts.md"
+            write(manifest_path, EDPA_MULTI_SUT_NL)
+
+            data = sut_manifest.load_manifest(str(manifest_path))
+            normalized = sut_manifest.validate_and_normalize(
+                data,
+                manifest_path=str(manifest_path),
+                output_dir=str(root / "analysis"),
+            )
+
+            self.assertEqual([t["id"] for t in normalized["targets"]], ["edpa", "versatile_mock", "front_tool"])
+            self.assertEqual([t["name"] for t in normalized["targets"]], ["EDPA", "versatile_mock", "front_tool"])
+            self.assertEqual([t["runtime"]["base_url"] for t in normalized["targets"]], [
+                "http://1.92.123.95:8190",
+                "http://1.92.123.95:30001",
+                "http://1.92.123.95:3010",
+            ])
+            self.assertNotIn("llm", {t["id"] for t in normalized["targets"]})
+
+            primary = normalized["targets"][0]
+            self.assertFalse(primary["source"]["available"])
+            self.assertEqual(primary["source"]["path"], "**************")
+            self.assertTrue(primary["source"]["redacted"])
+            self.assertTrue(primary["source"]["skip_code_scan"])
+            self.assertIsNone(primary["source"]["abs_path"])
+            self.assertEqual(
+                primary["source"]["remote_url"],
+                "https://github.com/Bensinanren/spring-ai-ascend/tree/edpa_java",
+            )
+            self.assertIsNone(normalized["targets"][1]["source"]["path"])
+            self.assertIsNone(normalized["targets"][2]["source"]["path"])
+
+            defaults_env = normalized["suite"]["defaults"]["environment"]["variables"]
+            by_name = {item["name"]: item for item in defaults_env}
+            self.assertTrue(by_name["api_key"]["redacted"])
+            self.assertEqual(by_name["api_key"]["value"], sut_manifest.REDACTED_VALUE)
+            self.assertTrue(normalized["sut_description_parse"]["review_required"])
+            self.assertIn("global_source_applied_to_primary", normalized["sut_description_parse"]["reasons"])
+            self.assertIn("masked_source_path_requires_review", normalized["sut_description_parse"]["reasons"])
+            self.assertIn("role_inference_requires_review", normalized["sut_description_parse"]["reasons"])
+
+    def test_natural_language_global_source_availability_requires_real_local_path(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "src").mkdir()
+            manifest_path = root / "autotestflow.suts.md"
+            text = """# SUT
+
+[environment1]
+name = EDPA
+ip = 127.0.0.1
+port = 8190
+
+[source_path] The source code path is src
+"""
+            write(manifest_path, text)
+
+            data = sut_manifest.load_manifest(str(manifest_path))
+            normalized = sut_manifest.validate_and_normalize(
+                data,
+                manifest_path=str(manifest_path),
+                output_dir=str(root / "analysis"),
+            )
+
+            source = normalized["targets"][0]["source"]
+            self.assertTrue(source["available"])
+            self.assertEqual(source["path"], "src")
+            self.assertFalse(source["skip_code_scan"])
+            self.assertEqual(source["abs_path"], str(root / "src"))
+
+    def test_natural_language_compact_paired_list_maps_targets_urls_and_sources(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            manifest_path = root / "autotestflow.suts.md"
+            write(manifest_path, PAIRED_LIST_NL_SUT)
+
+            data = sut_manifest.load_manifest(str(manifest_path))
+            normalized = sut_manifest.validate_and_normalize(
+                data,
+                manifest_path=str(manifest_path),
+                output_dir=str(root / "analysis"),
+            )
+
+            self.assertEqual([t["id"] for t in normalized["targets"]], ["xx", "yy"])
+            self.assertEqual([t["name"] for t in normalized["targets"]], ["xx", "yy"])
+            self.assertEqual([t["runtime"]["base_url"] for t in normalized["targets"]], [
+                "http://xx:xx",
+                "http://yy:yy",
+            ])
+            self.assertEqual([t["source"]["path"] for t in normalized["targets"]], ["xx", "yy"])
+            self.assertEqual([t["runtime"]["mode"] for t in normalized["targets"]], ["predeployed", "predeployed"])
+            self.assertTrue(all(t["source"]["available"] for t in normalized["targets"]))
+            self.assertIn(
+                "paired_list_targets_inferred_requires_review",
+                normalized["sut_description_parse"]["reasons"],
+            )
+            self.assertIn("role_inference_requires_review", normalized["sut_description_parse"]["reasons"])
 
     def test_natural_language_missing_base_url_is_review_required_and_rejected_by_validator(self):
         text = """[Worker]\nSource path: services/worker\nRequires creation before tests\nBuild: echo build\n"""

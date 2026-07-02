@@ -12,10 +12,12 @@ match_faults.py - 阶段2.6：TestKnowledgeBase 知识/故障匹配
 
 用法：
     python match_faults.py --output-dir <dir> [--knowledge-root TestKnowledgeBase]
-                           [--knowledge-domain all|rest_api|web|agent|dfx]
+                           [--knowledge-domain rest_api|web|agent|dfx]
                            [--fault-lib <explicit-legacy-path>] [--fault-overlay <path>]
                            [--faults auto|on|off] [--max-exception 3] [--max-quality 2]
 """
+
+from __future__ import annotations
 
 import argparse
 import json
@@ -186,7 +188,10 @@ _STREAM_KW = ("sse", "stream", "streaming", "流式", "流", "订阅", "subscrib
 _READONLY_KW = ("查询", "get", "list", "获取", "读取", "发现", "card")
 _REST_KW = ("api", "http", "json-rpc", "rpc", "request", "response", "接口", "请求", "响应")
 _AGENT_KW = ("agent", "a2a", "llm", "prompt", "tool", "task", "message", "智能体", "工具", "对话")
-_WEB_KW = ("web", "frontend", "browser", "page", "form", "input", "click", "页面", "前端", "表单", "输入框")
+_WEB_KW = (
+    "web", "frontend", "front_tool", "front-tool", "browser", "page", "form", "input", "click",
+    "页面", "前端", "表单", "输入框",
+)
 
 
 def _looks_streaming(text: str) -> bool:
@@ -202,15 +207,77 @@ def _is_reference_field(name: str) -> bool:
     return bool(_REF_FIELD_RE.search(name))
 
 
-def _infer_scene_domains(haystack: str, code_facts: dict) -> list:
-    text = (haystack or "").lower()
+def _domains_from_text(text: str) -> set:
+    text = (text or "").lower()
     domains = set()
-    if code_facts.get("entry_catalog") or any(k in text for k in _REST_KW):
+    if any(k in text for k in _REST_KW):
         domains.add("rest_api")
     if any(k in text for k in _AGENT_KW):
         domains.add("agent")
     if any(k in text for k in _WEB_KW):
         domains.add("web")
+    return domains
+
+
+def _manifest_candidates(output_dir: str) -> list[str]:
+    out = os.path.abspath(output_dir)
+    candidates = [
+        os.path.join(out, "RunMetadata", "sut_manifest.normalized.json"),
+        os.path.join(os.path.dirname(os.path.dirname(out)), "RunMetadata", "sut_manifest.normalized.json"),
+    ]
+    parts = out.split(os.sep)
+    if "targets" in parts:
+        idx = len(parts) - 1 - parts[::-1].index("targets")
+        root = os.sep.join(parts[:idx]) or os.sep
+        candidates.append(os.path.join(root, "RunMetadata", "sut_manifest.normalized.json"))
+    seen = []
+    for path in candidates:
+        if path not in seen:
+            seen.append(path)
+    return seen
+
+
+def _load_target_metadata(output_dir: str) -> dict:
+    for manifest_path in _manifest_candidates(output_dir):
+        if not os.path.exists(manifest_path):
+            continue
+        try:
+            manifest = load_json(manifest_path)
+        except Exception:
+            continue
+        targets = manifest.get("targets", [])
+        output_abs = os.path.abspath(output_dir)
+        for target in targets:
+            if os.path.abspath(str(target.get("target_output_dir", ""))) == output_abs:
+                return target
+        if "targets" in output_abs.split(os.sep):
+            target_id = os.path.basename(output_abs)
+            for target in targets:
+                if target.get("id") == target_id:
+                    return target
+    return {}
+
+
+def _infer_scene_domains(haystack: str, code_facts: dict, target_meta: dict | None = None) -> list:
+    text = (haystack or "").lower()
+    domains = _domains_from_text(text)
+    target_meta = target_meta or {}
+    target_text = " ".join([
+        str(target_meta.get("id", "")),
+        str(target_meta.get("name", "")),
+        str(target_meta.get("role", "")),
+        str(target_meta.get("knowledge_domain", "")),
+        str((target_meta.get("source") or {}).get("path", "")),
+        str((code_facts.get("meta") or {}).get("primary_profile", "")),
+        str((code_facts.get("meta") or {}).get("language", "")),
+        json.dumps(code_facts.get("frameworks", []), ensure_ascii=False),
+    ]).lower()
+    domains.update(_domains_from_text(target_text))
+    knowledge_domain = str(target_meta.get("knowledge_domain", "")).strip()
+    if knowledge_domain in _DOMAIN_VALUES:
+        domains.add(knowledge_domain)
+    if code_facts.get("entry_catalog"):
+        domains.add("rest_api")
     if not domains and code_facts.get("meta"):
         domains.add("rest_api")
     return sorted(domains or {"rest_api"})
@@ -224,6 +291,7 @@ def build_scenes(output_dir: str, code_facts: dict) -> list:
         return scenes
 
     s1 = load_json(idx_path)
+    target_meta = _load_target_metadata(output_dir)
 
     # 端点级关联字段（来自 code_facts.entry_catalog 的参数名）
     endpoint_ref_fields = []
@@ -270,7 +338,7 @@ def build_scenes(output_dir: str, code_facts: dict) -> list:
         scene["reference_fields"] = sorted(set(scene["reference_fields"]))
         hay = scene["name"] + " " + blob
         scene["is_streaming"] = _looks_streaming(hay)
-        scene["domains"] = _infer_scene_domains(hay, code_facts)
+        scene["domains"] = _infer_scene_domains(hay, code_facts, target_meta)
         scene["text"] = hay
         # 纯查询场景（只读）：名字含查询/get/list 且不含写语义关键字
         nm = scene["name"].lower()
@@ -617,6 +685,49 @@ def priority_of(fault: dict) -> str:
 _DOMAIN_VALUES = {"rest_api", "web", "agent", "dfx"}
 
 
+def _new_domain_stat():
+    return {
+        "considered": 0,
+        "matched": 0,
+        "filtered": 0,
+        "truncated": 0,
+        "considered_by_branch": defaultdict(int),
+        "matched_by_branch": defaultdict(int),
+        "filtered_by_branch": defaultdict(int),
+        "truncated_by_branch": defaultdict(int),
+    }
+
+
+def _bump_domain_stat(stats: dict, domain: str, field: str, branch: str | None = None, amount: int = 1):
+    domain = domain or "rest_api"
+    item = stats.setdefault(domain, _new_domain_stat())
+    item[field] += amount
+    if branch:
+        item[f"{field}_by_branch"][branch] += amount
+
+
+def _reset_matched_domain_stats(stats: dict):
+    for item in stats.values():
+        item["matched"] = 0
+        item["matched_by_branch"].clear()
+
+
+def _serialize_domain_breakdown(stats: dict) -> dict:
+    out = {}
+    for domain, item in sorted(stats.items()):
+        out[domain] = {
+            "considered": item["considered"],
+            "matched": item["matched"],
+            "filtered": item["filtered"],
+            "truncated": item["truncated"],
+            "considered_by_branch": dict(sorted(item["considered_by_branch"].items())),
+            "matched_by_branch": dict(sorted(item["matched_by_branch"].items())),
+            "filtered_by_branch": dict(sorted(item["filtered_by_branch"].items())),
+            "truncated_by_branch": dict(sorted(item["truncated_by_branch"].items())),
+        }
+    return out
+
+
 def _as_list(value) -> list:
     if value is None:
         return []
@@ -784,7 +895,15 @@ def match(
     history = [f for f in faults if f.get("_is_history")]
     matches = []
     stats = defaultdict(int)
+    domain_breakdown = {}
     sev_rank = {"高": 0, "中": 1, "低": 2}
+    for fault in faults:
+        _bump_domain_stat(
+            domain_breakdown,
+            fault.get("_domain", "rest_api"),
+            "considered",
+            branch_class_of(fault),
+        )
 
     def _make_match(fault, scene, reasons):
         oracle_refs, recon = build_oracle_refs(fault, contract)
@@ -823,19 +942,25 @@ def match(
         # 关联字段命中、流式场景的 SSE 故障：最相关，优先保留不被配额截断
         return 2 if ("reference_field" in joined or "streaming_scene" in joined) else 1
 
-    # 1) 非历史故障：逐场景匹配，按分支类别配额（关联字段匹配优先保留）
+    # 1) 非历史故障：逐场景匹配，按知识域+分支类别配额（关联字段匹配优先保留）
     cap = {"exception": max_exception, "quality": max_quality, "boundary": max_exception}
     for scene in scenes:
         buckets = defaultdict(list)
         for fault in non_history:
+            domain = fault.get("_domain", "rest_api")
+            bclass = branch_class_of(fault)
             applies, reasons = scene_applies(fault, scene)
             if not applies:
+                _bump_domain_stat(domain_breakdown, domain, "filtered", bclass)
                 continue
-            buckets[branch_class_of(fault)].append(_make_match(fault, scene, reasons))
-        for bclass, items in buckets.items():
+            buckets[(domain, bclass)].append(_make_match(fault, scene, reasons))
+        for (domain, bclass), items in buckets.items():
             items.sort(key=lambda m: (-_relevance(m), sev_rank.get(m["severity"], 1), m["fault_id"]))
             limit = cap.get(bclass, max_quality)
-            stats["truncated"] += max(0, len(items) - limit)
+            truncated = max(0, len(items) - limit)
+            stats["truncated"] += truncated
+            if truncated:
+                _bump_domain_stat(domain_breakdown, domain, "truncated", bclass, truncated)
             matches.extend(items[:limit])
 
     # 2) 历史缺陷：每条指派到一个最相关场景（避免跨场景泛滥），强制 P0
@@ -853,10 +978,6 @@ def match(
             continue
         matches.append(_make_match(fault, target, [f"history:{fault.get('test_case_id','')}"]))
 
-    # 统计
-    for m in matches:
-        if m["reconciliation"] == "downgraded":
-            stats["downgraded"] += 1
     seen = set()
     deduped = []
     for m in matches:
@@ -866,6 +987,14 @@ def match(
         seen.add(key)
         deduped.append(m)
     matches = deduped
+
+    # 统计：matched/downgraded 基于去重后的最终结果，避免跨 bucket 重复计数。
+    _reset_matched_domain_stats(domain_breakdown)
+    stats["downgraded"] = 0
+    for m in matches:
+        _bump_domain_stat(domain_breakdown, m.get("domain", "rest_api"), "matched", m.get("branch_class"))
+        if m["reconciliation"] == "downgraded":
+            stats["downgraded"] += 1
 
     plan = {
         "meta": {
@@ -885,6 +1014,7 @@ def match(
                 "downgraded": stats["downgraded"],
                 "truncated": stats["truncated"],
                 "enrichment_needed": sum(1 for m in matches if m.get("enrich", {}).get("needs_bind")),
+                "domain_breakdown": _serialize_domain_breakdown(domain_breakdown),
             },
         },
         "knowledge_matches": matches,
@@ -916,8 +1046,8 @@ def main():
     parser = argparse.ArgumentParser(description="阶段2.6 TestKnowledgeBase 知识/故障匹配（contract 优先调和）")
     parser.add_argument("--output-dir", required=True, help="输出目录（含 Contract/ 与 FeatureAnalysis/）")
     parser.add_argument("--knowledge-root", default=None, help="TestKnowledgeBase 根目录（默认自动探测仓内 TestKnowledgeBase）")
-    parser.add_argument("--knowledge-domain", default="all",
-                        help="知识域过滤：all/rest_api/web/agent/dfx，或逗号分隔 package_id")
+    parser.add_argument("--knowledge-domain", default=None,
+                        help="知识域过滤：rest_api/web/agent/dfx，或逗号分隔 package_id；省略则加载全部")
     parser.add_argument("--fault-lib", default=None,
                         help="显式故障库路径（兼容旧 demo；默认不再自动回退 Specification_Repository）")
     parser.add_argument("--fault-overlay", default=None, help="项目级 overlay 路径（可选）")
