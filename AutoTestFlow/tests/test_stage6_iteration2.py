@@ -108,6 +108,19 @@ class Stage6Iteration2Tests(unittest.TestCase):
             with self.assertRaises(remediation_config.ConfigError):
                 remediation_config.load_config(str(path))
 
+    def test_quickstart_config_validates_through_cli(self):
+        quickstart = REPO / "AutoTestFlow/examples/quickstart/remediation.config.json"
+        self.assertEqual(remediation_config.main(["--check", str(quickstart)]), 0)
+
+        with tempfile.TemporaryDirectory() as td:
+            invalid = Path(td) / "remediation.config.json"
+            write_json(invalid, {
+                "sut": {"base_url": "http://localhost"},
+                "repo": {"upstream_url": "fake_repo", "ref": "main", "clone_path": "repo"},
+                "switches": {"require_evidence_before_issue": False},
+            })
+            self.assertEqual(remediation_config.main(["--check", str(invalid)]), 2)
+
     def test_submitter_has_no_pr_or_push_command_path(self):
         text = (REPO / "AutoTestFlow/scripts/submit_remediation.py").read_text(encoding="utf-8")
         self.assertNotIn('"gh", "pr"', text)

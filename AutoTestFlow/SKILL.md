@@ -15,6 +15,22 @@ AutoTestFlow 是需求驱动的测试智能体；当前以**场景化测试**(fl
 
 ## 默认全链路命令
 
+首次运行或用户缺少默认输入文件时，先引导用户准备 Quickstart starter：
+
+```bash
+cp AutoTestFlow/examples/quickstart/autotestflow.suts.md .
+cp AutoTestFlow/examples/quickstart/remediation.config.json .
+```
+
+然后让用户按真实项目修改 `requirements.md`、`autotestflow.suts.md` 与 `remediation.config.json`，并建议先做只读校验：
+
+```bash
+python AutoTestFlow/scripts/sut_manifest.py --sut-manifest autotestflow.suts.md
+python AutoTestFlow/reference/remediation_config.py --check remediation.config.json
+```
+
+缺少 `autotestflow.suts.md` 时，指向 `AutoTestFlow/examples/quickstart/autotestflow.suts.md` 和 `AutoTestFlow/shared/sut_manifest_schema.md`；缺少 `remediation.config.json` 时，指向 `AutoTestFlow/examples/quickstart/remediation.config.json`、`AutoTestFlow/examples/remediation.config.example.json` 和 `AutoTestFlow/shared/remediation_config_schema.md`。缺少或非法 remediation 配置时仍跳过 stage6/7 并说明原因，不强行修复。
+
 ```bash
 /auto-test-flow requirements.md --sut-manifest autotestflow.suts.md --remediation-config remediation.config.json --faults on --fault-enrich on --remediate on
 ```
