@@ -7,8 +7,8 @@
 推荐新增可选产物：
 
 ```text
-.state/professional_acceptance.json
-.state/ai_eval_readiness.json
+QualityGates/professional_acceptance.json
+QualityGates/ai_eval_readiness.json
 ```
 
 这些文件由 AutoTestFlow 的 `professional_acceptance.py` 生成，作为 advisory artifact 注入主链路，不破坏 contract-first。
@@ -17,13 +17,13 @@
 
 | AutoTestFlow 阶段 | 可使用的经验项 | 建议产物 |
 |---|---|---|
-| stage1 需求分析 | 可测性、用户链路、失败模式、非功能目标、AI 成功标准 | `.state/professional_acceptance.seed.json` |
-| stage2 代码扫描 | 可观测性、错误处理、配置、依赖、鉴权、并发线索 | `.state/professional_acceptance.code_gaps.json` |
+| stage1 需求分析 | 可测性、用户链路、失败模式、非功能目标、AI 成功标准 | `QualityGates/professional_acceptance.seed.json` |
+| stage2 代码扫描 | 可观测性、错误处理、配置、依赖、鉴权、并发线索 | `QualityGates/professional_acceptance.code_gaps.json` |
 | stage2.5 契约校准 | traceId、错误质量、SSE 终态、tool call、latency 观察项 | `contract.md` 观察项，不升级强断言 |
-| stage2.6 故障匹配 | 用专业经验控制故障配额和优先级 | `.state/fault_matches.json` 的 priority note |
-| stage3b 用例设计 | 测试金字塔、AI eval、红队、DFX、canary/readiness | `.state/professional_case_guidance.json` + `test_design.json` 的 `acceptance_refs` |
-| stage4 执行 | trace、grader、成本、延迟、tool call、环境证据 | `.state/results/*.json` 的 evidence 字段 |
-| stage5 报告 | release readiness、AI readiness、coverage matrix | `.state/professional_acceptance.json` + `.state/ai_eval_readiness.json` + `report.md` 的专业验收矩阵 |
+| stage2.6 故障匹配 | 用专业经验控制故障配额和优先级 | `KnowledgeBase/fault_matches.json` 的 priority note |
+| stage3b 用例设计 | 测试金字塔、AI eval、红队、DFX、canary/readiness | `QualityGates/professional_case_guidance.json` + `TestCases/test_design.json` 的 `acceptance_refs` |
+| stage4 执行 | trace、grader、成本、延迟、tool call、环境证据 | `TestRun/results/*.json` 的 evidence 字段 |
+| stage5 报告 | release readiness、AI readiness、coverage matrix | `QualityGates/professional_acceptance.json` + `QualityGates/ai_eval_readiness.json` + `Reports/report.md` 的专业验收矩阵 |
 
 ## 3. 推荐 schema
 

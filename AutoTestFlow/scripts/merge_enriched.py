@@ -186,9 +186,15 @@ def main():
     save_json(output_path, enriched_index)
 
     print(f"输出: {output_path}")
-    markdown_path = render_design_markdown.render_s3a(output_dir)
-    if markdown_path:
-        print(f"输出: {markdown_path}")
+    try:
+        markdown_path = render_design_markdown.render_s3a(output_dir)
+    except Exception as exc:
+        print(f"[ERROR] s3a_scenario_landscape.md rendering exception: {exc}")
+        return 1
+    if not markdown_path:
+        print("[ERROR] s3a_scenario_landscape.md rendering failed")
+        return 1
+    print(f"输出: {markdown_path}")
 
     # 5. 统计摘要
     total_scenes = len(enriched_index.get("scenario_index", []))

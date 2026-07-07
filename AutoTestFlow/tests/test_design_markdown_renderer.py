@@ -26,6 +26,10 @@ render_design_markdown = load_module(
     "AutoTestFlow/scripts/render_design_markdown.py",
     "render_design_markdown_for_tests",
 )
+merge_test_design = load_module(
+    "AutoTestFlow/scripts/merge_test_design.py",
+    "merge_test_design_for_tests",
+)
 
 
 def write_json(path, data):
@@ -34,6 +38,29 @@ def write_json(path, data):
 
 
 class DesignMarkdownRendererTests(unittest.TestCase):
+    def test_merge_test_design_rescues_feature_analysis_case_files(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td)
+            write_json(out / "FeatureAnalysis" / "test_cases" / "TC_001.json", {
+                "case_id": "TC_001",
+                "name": "Misplaced case is merged",
+                "test_type": "scenario",
+                "case_kind": "正常E2E",
+                "priority": "P0",
+                "source_scene": "FS-001",
+                "steps": "1. Call API",
+                "expected": "Response follows contract.",
+                "oracle_refs": [{"spec_id": "SPEC-RESP-WRAP", "assert_level": "L2"}],
+            })
+
+            rc = merge_test_design.main(["--output-dir", str(out)])
+
+            self.assertEqual(rc, 0)
+            design = json.loads((out / "TestCases" / "test_design.json").read_text(encoding="utf-8"))
+            self.assertEqual(design[0]["case_id"], "TC_001")
+            self.assertTrue((out / "TestCases" / "test_examples.md").exists())
+            self.assertTrue((out / "TestCases" / "scene_tc_mapping.json").exists())
+
     def test_renders_stage1_stage3_and_test_examples_with_traceability(self):
         with tempfile.TemporaryDirectory() as td:
             out = Path(td)

@@ -1,8 +1,8 @@
 # Stage2 通用代码扫描指南
 
 > 本文件指导 stage2 子 Agent 如何扫描不同技术栈的被测系统（SUT），采集测试相关源码事实。
-> stage2 的目标不是证明运行时行为，而是生成 `code_analysis.md`、`.state/s2_code_facts.json`
-> 与 `.state/framework_scenes.json`，为 stage2.5 的真实契约校准和 stage3a 的场景补充提供静态线索。
+> stage2 的目标不是证明运行时行为，而是生成 `code_analysis.md`、`FeatureAnalysis/s2_code_facts.json`
+> 与 `FeatureAnalysis/framework_scenes.json`，为 stage2.5 的真实契约校准和 stage3a 的场景补充提供静态线索。
 >
 > **最终判据仍以 `contract.md` 为准**：源码扫描结果是探测假设和证据索引；运行时形态与源码推断冲突时，stage2.5 probe 胜出。
 
@@ -10,7 +10,7 @@
 
 ## 0. Adapter Layer
 
-stage2 先读取 `.state/code_scan_plan.json`。如果该文件不存在，先运行：
+stage2 先读取 `FeatureAnalysis/code_scan_plan.json`。如果该文件不存在，先运行：
 
 ```bash
 python3 {skill_dir}/scripts/prepare_code_scan.py --code-path {code_path} --output-dir {output_dir}
@@ -53,7 +53,7 @@ profile 定义位于 `shared/code_scan_profiles.json`。新增语言时优先扩
     "language": "python",
     "frameworks": ["fastapi"],
     "profile_confidence": 0.9,
-    "scan_plan": ".state/code_scan_plan.json"
+    "scan_plan": "FeatureAnalysis/code_scan_plan.json"
   },
   "entry_catalog": [
     {
@@ -154,7 +154,7 @@ profile 定义位于 `shared/code_scan_profiles.json`。新增语言时优先扩
 
 ## 5. 框架场景派生
 
-stage2 应从源码结构派生三类框架场景，写入 `.state/framework_scenes.json`：
+stage2 应从源码结构派生三类框架场景，写入 `FeatureAnalysis/framework_scenes.json`：
 
 | 场景型 | 规则 |
 |--------|------|
@@ -170,7 +170,7 @@ stage2 应从源码结构派生三类框架场景，写入 `.state/framework_sce
 
 | 检查项 | 要求 |
 |--------|------|
-| profile | `s2_code_facts.meta.primary_profile` 与 `.state/code_scan_plan.json.primary_profile` 一致 |
+| profile | `s2_code_facts.meta.primary_profile` 与 `FeatureAnalysis/code_scan_plan.json.primary_profile` 一致 |
 | 入口 | 用户可触达入口进入 `entry_catalog`，内部 helper/private API 不作为入口 |
 | 异常 | `exception_catalog` 只保留用户可感知错误，尽量填 `reachable_from` 与 `error_code` |
 | 约束 | 参数、类型、枚举、参数交互约束进入 `constraint_catalog` |

@@ -359,7 +359,7 @@ flow_scenarios 中每个元素与单场景文件结构相同，额外字段：
     "language": "java | python | cpp | unknown",
     "frameworks": ["..."],
     "profile_confidence": 0.0,
-    "scan_plan": ".state/code_scan_plan.json"
+    "scan_plan": "FeatureAnalysis/code_scan_plan.json"
   },
   "entry_catalog": [...],
   "exception_catalog": [...],
@@ -440,7 +440,7 @@ flow_scenarios 中每个元素与单场景文件结构相同，额外字段：
 
 ## framework_scenes.json 结构（阶段2派生产物）
 
-阶段2 在静态扫描源码结构后**自动派生**框架 E2E 场景，写入 `.state/framework_scenes.json`。
+阶段2 在静态扫描源码结构后**自动派生**框架 E2E 场景，写入 `FeatureAnalysis/framework_scenes.json`。
 本文件是 **stage3a-fw 子Agent 消费的内部产物**，替代了迭代6 由外部 helper skill 预生成的 `e2e_framework_scenes.md`——不再需要外部文件，也不需要手工预生成步骤。
 派生方法学见 `shared/code_scan_guide.md`；Java/Spring 细节见 `shared/java_scan_guide.md` profile 附录。
 

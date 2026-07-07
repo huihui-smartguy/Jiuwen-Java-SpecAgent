@@ -144,7 +144,7 @@ targets:
 |---|---|
 | `targets[].depends_on` | Target ids that should be prepared before this target. Dependency metadata controls startup/readiness ordering and report grouping; it does not create cross-target assertions. |
 | `targets[].source.available` | `false` means AutoTestFlow should skip source scan/code-only gap generation for this target and rely on live contract probing when reachable. |
-| `targets[].source.remote_url` | Optional fallback repository URL extracted from natural-language descriptions. It is recorded for review and reporting; this iteration does not auto-clone it. |
+| `targets[].source.remote_url` | Optional repository URL extracted from natural-language descriptions. Supported GitHub URLs are cloned into `<output_dir>/.state/source/` before Stage 2; successful resolution sets `source.available=true` and `source.abs_path` to the clone. |
 | `targets[].source.redacted` | `true` when the supplied source path is masked (for example `********`). Redacted paths never make `source.available=true`. |
 | `targets[].runtime.commands` | Optional `build`, `start`, and `stop` shell commands for managed targets. Commands are never run unless orchestration has explicit human confirmation and passes `--allow-commands`. |
 | `targets[].environment` | Redacted environment variable names, values, and env files inferred from the SUT description. |

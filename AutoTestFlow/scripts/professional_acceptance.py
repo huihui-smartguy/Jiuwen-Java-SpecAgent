@@ -136,9 +136,9 @@ def load_test_design(output_dir):
 
 def collect_evidence(output_dir):
     test_design = load_test_design(output_dir)
-    result_files = layout.existing_glob(output_dir, "TestRun/results/*.json", ".state/results/*.json")
+    result_files = layout.existing_result_files(output_dir)
     results = [safe_load_json(p, {}) for p in result_files]
-    trace_files = layout.existing_glob(output_dir, "TestRun/trace/*.jsonl", ".state/trace/*.jsonl")
+    trace_files = layout.existing_trace_files(output_dir)
     stage_summary_path = layout.existing_target_artifact(output_dir, "stage_summary")
     code_facts_path = layout.existing_target_artifact(output_dir, "s2_code_facts")
     fault_matches_path = layout.existing_target_artifact(output_dir, "fault_matches")

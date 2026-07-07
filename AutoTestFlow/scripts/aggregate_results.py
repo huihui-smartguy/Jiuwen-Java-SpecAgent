@@ -62,7 +62,7 @@ def merge_fault_oracle_coverage(coverage: dict, summary: dict):
 def aggregate(output_dir: str):
     # 读取所有结果文件
     details = {}
-    for fp in layout.existing_glob(output_dir, "TestRun/results/*.json", ".state/results/*.json"):
+    for fp in layout.existing_result_files(output_dir):
         r = load_json(fp)
         case_id = os.path.basename(fp).replace(".json", "")
         status = classify_status(r.get("status", "unknown"))

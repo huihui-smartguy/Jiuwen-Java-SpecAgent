@@ -138,7 +138,7 @@ rg -n "<关注配置键>" $SUT/src/main/resources/application*.{yml,yaml,propert
 
 ## 7. java.spring profile 的框架 E2E 场景派生
 
-> 当 `primary_profile=java.spring` 时，stage2 在采集六类事实之外，**额外从 Java/Spring 源码结构静态派生框架 E2E 场景**，写入 `.state/framework_scenes.json`
+> 当 `primary_profile=java.spring` 时，stage2 在采集六类事实之外，**额外从 Java/Spring 源码结构静态派生框架 E2E 场景**，写入 `FeatureAnalysis/framework_scenes.json`
 > （schema 见 `shared/scenario_schema.md` 的 framework_scenes）。这是 stage3a-fw 子Agent 消费的内部产物，
 > 替代迭代6 由外部 helper skill 预生成的 `e2e_framework_scenes.md`——**无需外部文件、无需手工预生成步骤**。
 
@@ -198,7 +198,7 @@ rg -n "import [\w.]+\.(service|repository|client|component)\." --type java   # �
 
 ## 8. 扫描产出与交接
 
-- 产出：`code_analysis.md`（格式见 `shared/code_analysis_template.md`）+ `.state/s2_code_facts.json` + `.state/framework_scenes.json`（框架 E2E 场景派生物）。
+- 产出：`code_analysis.md`（格式见 `shared/code_analysis_template.md`）+ `FeatureAnalysis/s2_code_facts.json` + `FeatureAnalysis/framework_scenes.json`（框架 E2E 场景派生物）。
 - 交接给 stage2.5：作为 `probe_contract.py` 的探活假设输入。
-- 交接给 stage3a-fw：`.state/framework_scenes.json` 作为框架场景补充的输入（替代外部预生成文件）。
+- 交接给 stage3a-fw：`FeatureAnalysis/framework_scenes.json` 作为框架场景补充的输入（替代外部预生成文件）。
 - **最终判据以 `contract.md`（probe 校准产物）为准**；本扫描仅提供“该探什么、预期形态是什么”的静态线索。
