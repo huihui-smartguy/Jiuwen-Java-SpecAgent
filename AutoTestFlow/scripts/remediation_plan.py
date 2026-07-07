@@ -158,7 +158,7 @@ def _load_profiles():
 
 def _load_results(output_dir):
     out = {}
-    for fp in layout.existing_glob(output_dir, "TestRun/results/*.json", ".state/results/*.json"):
+    for fp in layout.existing_result_files(output_dir):
         r = load_json(fp)
         out[_case_id_from(fp, r)] = r
     return out

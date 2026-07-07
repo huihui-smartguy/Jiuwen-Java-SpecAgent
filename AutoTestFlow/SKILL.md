@@ -67,6 +67,9 @@ AutoTestFlow 按"测试维度"组织测试生成，各维度是并行轨道，�
     → RunMetadata/sut_description.review.md
     → RunMetadata/sut_manifest.normalized.json
     → targets/<target_id>/{source/runtime/probes/output paths}
+    → 若 source.remote_url 为 GitHub URL 且本地 source.path 不可用：先 clone 到 <output_dir>/.state/source/
+      成功则 source.available=true / source.abs_path=<clone_dir> / source.skip_code_scan=false；
+      失败则保留 source.available=false 并在 review 中记录 source_remote_clone_failed
 
   对每个 target 独立执行：
   ┌─阶段1(S1-Agent)───┐
@@ -290,7 +293,8 @@ AskUserQuestion(questions=[{
     子Agent内部读取 shared/scenario_schema.md；若传入 {fault_lib} 则做可选历史 P0 富化（best-effort，见模板"第七步（续）"）
 
   → 编排器前景执行 stage2 profile 预扫描（不启动 Agent）
-    python {skill_dir}/scripts/prepare_code_scan.py --code-path {code_path} --output-dir {output_dir}
+    先读取 normalized manifest 中该 target 的 source.abs_path；远程 URL 已在 Stage 0 尝试解析为本地 clone。
+    python3 {skill_dir}/scripts/prepare_code_scan.py --code-path {source.abs_path} --output-dir {output_dir}
     输出: FeatureAnalysis/code_scan_plan.json（primary_profile/language/frameworks/confidence/scan_hints）
     若 manifest target 标记 `source.available=false` / `source.skip_code_scan=true`：
       跳过 stage2 源码扫描，写 target-local stage_summary/code_scan_plan 的 no_source 占位，
@@ -431,8 +435,9 @@ AskUserQuestion(questions=[{
   → 等待全部完成，验证文件存在
 
 步骤3: Python合并脚本（前景，<1秒）
-  → 执行: python scripts/merge_enriched.py
-  → 输出: FeatureAnalysis/s3a_enriched_index.json
+  → 执行: python3 {skill_dir}/scripts/merge_enriched.py --output-dir {target_output_dir}
+  → 输出: FeatureAnalysis/s3a_enriched_index.json + FeatureAnalysis/s3a_scenario_landscape.md
+  → 验证: 两个文件均存在；任一缺失均为 Stage 3a merge 不完整，不得进入 3b
 
 自动进入阶段3b
 ```
@@ -456,9 +461,10 @@ AskUserQuestion(questions=[{
     ⚠️ 禁止读取大JSON文件，只Read索引、单场景文件、contract.md
 
 步骤3: Python merge脚本（前景执行）
-  → 执行: python scripts/merge_test_design.py
-  → 输出: TestCases/test_design.json + TestCases/scene_tc_mapping.json + TestCases/e2e_scenes.json（可选）
-  → 验证: 三个文件均存在
+  → 执行: python3 {skill_dir}/scripts/merge_test_design.py --output-dir {target_output_dir}
+  → 输出: TestCases/test_design.json + TestCases/test_examples.md + TestCases/scene_tc_mapping.json + TestCases/e2e_scenes.json（可选）
+  → 验证: test_design.json / test_examples.md / scene_tc_mapping.json 必须存在；任一缺失均为 Stage 3b merge 不完整，不得进入 Stage 4
+  → 若历史/误放文件位于 FeatureAnalysis/test_cases/*.json，merge 脚本必须纳入并重新写入 canonical TestCases/*
 
 步骤4: 【人工裁决门 ✅】用例设计裁决（强制，可保守降级）
   → AskUserQuestion：确认 test_design.json 的用例完备性/步骤准确性/断言点合理
@@ -565,13 +571,21 @@ AskUserQuestion(questions=[{
 
 ### 阶段5：测试报告生成（子Agent执行）
 
-> 人工裁决：❌（最终输出）
+> 人工裁决：❌ | 自动转移：报告后检查 `--remediate`，决定是否进入 Stage 6/7
 
 - 模板：`templates/stage5_report.md`
 - 参数：`{skill_dir}` `{output_dir}`
 - 输入：`case_results.json` + `contract.md` + `trace/*.jsonl`
 - 验证：`report.md` 存在
 - 报告须含：执行总结 | 执行边界分类分布 | Fault Oracle Coverage | 确认 SUT 缺陷清单（仅 sdk_defect）| SUT 不满足项清单（sut_unsatisfied，标原因）| 需求-实现形态差异（contract 偏差观察）| **交互轨迹区**（关键用例的 `>>>`/`<<<`/`[event]` 摘录 + trace 文件指引）
+
+Stage5 收尾（编排器前景执行，不可跳过）：
+  → python3 {skill_dir}/scripts/output_layout.py --migrate --output-dir {target_output_dir}
+  → python3 {skill_dir}/scripts/record_faults.py --output-dir {target_output_dir}（若 KnowledgeBase 已接入）
+  → python3 {skill_dir}/scripts/professional_acceptance.py --output-dir {target_output_dir} --mode report（若 Professional_experience 可用；不可用则记录 skip reason）
+  → 验证: TestRun/case_results.json + Reports/report.md 存在；QualityGates/professional_acceptance.json / ai_eval_readiness.json 存在或有明确跳过原因
+  → 若 --remediate=off：流水线在 Stage5 结束，并说明 Stage6/7 已禁用
+  → 若 --remediate=on 或 dry-run：解析并校验 remediation.config.json；有效则自动进入 Stage6，缺失/非法则在 Reports/report.md 追加 Stage6/7 skip reason
 
 ### 阶段6：fault analysis（默认门控；每个分析目标一个子Agent）
 

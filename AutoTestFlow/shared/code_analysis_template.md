@@ -27,7 +27,7 @@
 - 扫描模式: 静态源码事实扫描（profile adapter + grep/read 证据）
 - 主语言/框架: {language} / {frameworks}
 - 对外协议/传输: {HTTP / RPC / gRPC / SSE / WebSocket / needs-runtime-verify}
-- code_scan_plan: `{output_dir}/.state/code_scan_plan.json`
+- code_scan_plan: `{output_dir}/FeatureAnalysis/code_scan_plan.json`
 
 ---
 

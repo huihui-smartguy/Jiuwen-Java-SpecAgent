@@ -118,7 +118,7 @@ def _next_hist_seq(known_ids: set) -> int:
 def collect_sdk_defects(output_dir: str):
     """读取 TestRun/results/*.json，返回 class==sdk_defect 的 (case_id, result) 列表。"""
     out = []
-    for fp in layout.existing_glob(output_dir, "TestRun/results/*.json", ".state/results/*.json"):
+    for fp in layout.existing_result_files(output_dir):
         r = load_json(fp)
         case_id = r.get("case_id") or os.path.basename(fp).replace(".json", "")
         cls = r.get("class") or r.get("status")

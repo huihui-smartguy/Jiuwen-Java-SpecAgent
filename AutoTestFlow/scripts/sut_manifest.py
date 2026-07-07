@@ -18,6 +18,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 from copy import deepcopy
 from urllib.parse import urlparse
@@ -946,6 +947,89 @@ def _normalize_path(path, base_dir):
     return os.path.normpath(os.path.abspath(os.path.join(base_dir, expanded)))
 
 
+def _safe_cache_segment(value):
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", str(value or "").strip()).strip("_") or "default"
+
+
+def _github_source_parts(remote_url):
+    parsed = urlparse(remote_url or "")
+    if parsed.scheme not in ("http", "https") or parsed.netloc.lower() not in ("github.com", "www.github.com"):
+        return None
+    parts = [part for part in parsed.path.strip("/").split("/") if part]
+    if len(parts) < 2:
+        return None
+    owner = parts[0]
+    repo = parts[1][:-4] if parts[1].endswith(".git") else parts[1]
+    ref = "HEAD"
+    if len(parts) >= 4 and parts[2] == "tree":
+        ref = "/".join(parts[3:]) or ref
+    return {
+        "owner": owner,
+        "repo": repo,
+        "ref": ref,
+        "clone_url": "https://github.com/%s/%s.git" % (owner, repo),
+    }
+
+
+def _resolve_remote_source(remote_url, root_output_dir, timeout=120):
+    """Resolve a supported remote source URL to a local source tree.
+
+    Returns (local_path, resolution_metadata). The function is best-effort and
+    never raises for clone failures so Stage 0 can degrade into review mode.
+    """
+    parts = _github_source_parts(remote_url)
+    base_meta = {
+        "method": "git_clone",
+        "remote_url": remote_url,
+    }
+    if not parts:
+        return None, dict(base_meta, status="unsupported", reason="unsupported_remote_url")
+
+    ref_segment = _safe_cache_segment(parts["ref"])
+    clone_dir = os.path.join(
+        root_output_dir,
+        ".state",
+        "source",
+        "%s__%s__%s" % (
+            _safe_cache_segment(parts["owner"]),
+            _safe_cache_segment(parts["repo"]),
+            ref_segment,
+        ),
+    )
+    meta = dict(
+        base_meta,
+        status="pending",
+        owner=parts["owner"],
+        repo=parts["repo"],
+        ref=parts["ref"],
+        clone_dir=clone_dir,
+        origin=parts["clone_url"],
+    )
+
+    if os.path.isdir(os.path.join(clone_dir, ".git")):
+        return clone_dir, dict(meta, status="resolved", reused=True)
+    if os.path.exists(clone_dir) and os.listdir(clone_dir):
+        return None, dict(meta, status="failed", reason="source_cache_path_exists_without_git")
+
+    os.makedirs(os.path.dirname(clone_dir), exist_ok=True)
+    if os.path.isdir(clone_dir) and not os.listdir(clone_dir):
+        os.rmdir(clone_dir)
+
+    cmd = ["git", "clone", "--depth", "1", "--quiet"]
+    if parts["ref"] != "HEAD":
+        cmd.extend(["--branch", parts["ref"]])
+    cmd.extend([parts["clone_url"], clone_dir])
+    try:
+        subprocess.run(cmd, check=True, timeout=timeout, capture_output=True, text=True)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as exc:
+        reason = exc.__class__.__name__
+        stderr = getattr(exc, "stderr", "") or ""
+        if stderr:
+            reason = "%s: %s" % (reason, stderr.strip().splitlines()[-1][:180])
+        return None, dict(meta, status="failed", reason=reason)
+    return clone_dir, dict(meta, status="resolved", reused=False)
+
+
 def _target_paths(root_output_dir, target_id):
     target_output_dir = os.path.join(root_output_dir, "targets", target_id)
     artifact_dirs = layout.target_artifact_dirs(target_output_dir)
@@ -991,6 +1075,7 @@ def validate_and_normalize(data, manifest_path=None, output_dir=None):
     seen = set()
     normalized_targets = []
     target_ids = []
+    normalization_review_reasons = []
     for idx, target in enumerate(targets):
         context = "targets[%s]" % idx
         if not isinstance(target, dict):
@@ -1017,14 +1102,32 @@ def validate_and_normalize(data, manifest_path=None, output_dir=None):
         source_available = source.get("available")
         source_redacted = bool(source.get("redacted"))
         source_remote_url = source.get("remote_url")
+        original_source_redacted = source_redacted
         if source_path:
             source_path = str(source_path).strip()
+            if URL_RE.match(source_path):
+                source_remote_url = source_remote_url or source_path
+                source_path = None
             if _looks_redacted(source_path):
                 source_redacted = True
+                original_source_redacted = True
+        source_resolution = None
+        local_source_available = bool(source_path and not source_redacted and _path_exists(source_path, manifest_dir))
+        if source_remote_url and (not source_path or source_redacted or not local_source_available):
+            resolved_path, source_resolution = _resolve_remote_source(str(source_remote_url), root_output_dir)
+            if resolved_path:
+                source_path = resolved_path
+                source_available = True
+                source_redacted = False
+                local_source_available = True
+                source_resolution["original_path_redacted"] = original_source_redacted
+                normalization_review_reasons.append("source_remote_url_resolved")
+            else:
+                normalization_review_reasons.append("source_remote_clone_failed")
         if source_redacted:
             source_available = False
         elif source_available is None:
-            source_available = bool(source_path)
+            source_available = local_source_available if source_remote_url else bool(source_path)
         if not source_path and not (mode == "predeployed" and source_available is False):
             raise ManifestError(
                 "%s.source.path is required for managed targets; direct predeployed targets may set source.available=false"
@@ -1043,8 +1146,12 @@ def validate_and_normalize(data, manifest_path=None, output_dir=None):
         item["source"]["available"] = bool(source_available)
         if source_remote_url:
             item["source"]["remote_url"] = source_remote_url
+        if source_resolution:
+            item["source"]["resolution"] = source_resolution
         if source_redacted:
             item["source"]["redacted"] = True
+        else:
+            item["source"].pop("redacted", None)
         if source_path:
             item["source"]["path"] = source_path
             item["source"]["abs_path"] = None if source_redacted else _normalize_path(source_path, manifest_dir)
@@ -1092,6 +1199,14 @@ def validate_and_normalize(data, manifest_path=None, output_dir=None):
         normalized["input_format"] = data["_input_format"]
     if isinstance(data.get("_sut_description_parse"), dict):
         parse_doc = deepcopy(data["_sut_description_parse"])
+        if normalization_review_reasons:
+            review = parse_doc.setdefault("review", {})
+            reasons = set(review.get("reasons", []))
+            reasons.update(normalization_review_reasons)
+            review["reasons"] = sorted(reasons)
+            unresolved = [r for r in normalization_review_reasons if r.endswith("_failed")]
+            if unresolved:
+                review["required"] = True
         parse_doc["candidate_manifest"] = {
             "schema_version": SCHEMA_VERSION,
             "suite": normalized["suite"],

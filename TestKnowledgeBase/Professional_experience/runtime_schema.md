@@ -11,11 +11,11 @@ Schema: `professional_acceptance.v1`
 
 | Phase | 产物 | 消费阶段 | 作用 |
 |---|---|---|---|
-| A | `.state/professional_acceptance.json` | stage5 | 专业验收、发布门禁、残余风险矩阵 |
-| B | `.state/professional_case_guidance.json` | stage3b | 测试组合建议、`acceptance_refs`、证据要求 |
-| C | `.state/professional_acceptance.seed.json` | stage1 | 需求可测性和测试计划种子 |
-| C | `.state/professional_acceptance.code_gaps.json` | stage2 | 可观测性、配置、依赖、日志和 trace 缺口 |
-| D | `.state/ai_eval_readiness.json` | stage5 / AI Agent 场景 | eval dataset、grader、redteam、tool-call trace、监控和漂移就绪度 |
+| A | `QualityGates/professional_acceptance.json` | stage5 | 专业验收、发布门禁、残余风险矩阵 |
+| B | `QualityGates/professional_case_guidance.json` | stage3b | 测试组合建议、`acceptance_refs`、证据要求 |
+| C | `QualityGates/professional_acceptance.seed.json` | stage1 | 需求可测性和测试计划种子 |
+| C | `QualityGates/professional_acceptance.code_gaps.json` | stage2 | 可观测性、配置、依赖、日志和 trace 缺口 |
+| D | `QualityGates/ai_eval_readiness.json` | stage5 / AI Agent 场景 | eval dataset、grader、redteam、tool-call trace、监控和漂移就绪度 |
 
 每条 `acceptance_criteria` 可以包含以下 runtime 字段：
 
@@ -43,11 +43,11 @@ It enters AutoTestFlow through these artifacts:
 
 | Phase | Artifact | Consumed By | Purpose |
 |---|---|---|---|
-| A | `.state/professional_acceptance.json` | stage5 | Professional acceptance, release gates, residual-risk matrix |
-| B | `.state/professional_case_guidance.json` | stage3b | Suite guidance, `acceptance_refs`, evidence requirements |
-| C | `.state/professional_acceptance.seed.json` | stage1 | Requirement testability and test-plan seed |
-| C | `.state/professional_acceptance.code_gaps.json` | stage2 | Observability, configuration, dependency, log, and trace gaps |
-| D | `.state/ai_eval_readiness.json` | stage5 / AI Agent scenarios | Eval dataset, grader, redteam, tool-call trace, monitoring, and drift readiness |
+| A | `QualityGates/professional_acceptance.json` | stage5 | Professional acceptance, release gates, residual-risk matrix |
+| B | `QualityGates/professional_case_guidance.json` | stage3b | Suite guidance, `acceptance_refs`, evidence requirements |
+| C | `QualityGates/professional_acceptance.seed.json` | stage1 | Requirement testability and test-plan seed |
+| C | `QualityGates/professional_acceptance.code_gaps.json` | stage2 | Observability, configuration, dependency, log, and trace gaps |
+| D | `QualityGates/ai_eval_readiness.json` | stage5 / AI Agent scenarios | Eval dataset, grader, redteam, tool-call trace, monitoring, and drift readiness |
 
 Each `acceptance_criteria` item may contain the following runtime fields:
 

@@ -38,7 +38,13 @@ def save_json(path: str, data, indent=2):
 
 def glob_batch_files(output_dir: str) -> list[str]:
     """扫描test_design_batch_*.json文件。"""
-    return layout.existing_glob(output_dir, "TestCases/test_design_batch_*.json", "test_design_batch_*.json")
+    return layout.existing_glob(
+        output_dir,
+        "TestCases/test_design_batch_*.json",
+        "test_design_batch_*.json",
+        "FeatureAnalysis/test_design_batch_*.json",
+        "FeatureAnalysis/test_cases/*.json",
+    )
 
 
 def load_all_test_cases(batch_files: list[str]) -> list[dict]:
@@ -49,6 +55,9 @@ def load_all_test_cases(batch_files: list[str]) -> list[dict]:
         if isinstance(data, list):
             cases.extend(data)
         elif isinstance(data, dict):
+            if data.get("case_id") or data.get("id"):
+                cases.append(data)
+                continue
             # 兼容多种字段名：cases / test_cases
             for key in ["cases", "test_cases"]:
                 if key in data and isinstance(data[key], list):
@@ -203,6 +212,9 @@ def main(argv=None):
 
     all_cases = load_all_test_cases(batch_files)
     print(f"总用例数: {len(all_cases)}")
+    if not all_cases:
+        print("[ERROR] 未发现任何测试用例，Stage 3b merge 不完整")
+        return 1
 
     # 2. 加载enriched索引和framework数据（用于覆盖验证）
     enriched_index = {}
@@ -237,9 +249,15 @@ def main(argv=None):
     test_design_path = layout.target_artifact(output_dir, "test_design", create_parent=True)
     save_json(test_design_path, all_cases)
     print(f"输出: {test_design_path}")
-    markdown_path = render_design_markdown.render_tests(output_dir)
-    if markdown_path:
-        print(f"输出: {markdown_path}")
+    try:
+        markdown_path = render_design_markdown.render_tests(output_dir)
+    except Exception as exc:
+        print(f"[ERROR] test_examples.md rendering exception: {exc}")
+        return 1
+    if not markdown_path:
+        print("[ERROR] test_examples.md rendering failed")
+        return 1
+    print(f"输出: {markdown_path}")
 
     # 5. 生成scene_tc_mapping.json
     mapping = build_scene_tc_mapping(all_cases)

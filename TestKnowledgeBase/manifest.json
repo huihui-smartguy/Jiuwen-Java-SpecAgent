@@ -15,11 +15,11 @@
       "path": "TestKnowledgeBase/Professional_experience",
       "purpose": "advisory release gates, AI evaluation readiness, professional testing acceptance criteria, and runtime professional acceptance artifacts",
       "runtime_artifacts": [
-        ".state/professional_acceptance.seed.json",
-        ".state/professional_acceptance.code_gaps.json",
-        ".state/professional_case_guidance.json",
-        ".state/professional_acceptance.json",
-        ".state/ai_eval_readiness.json"
+        "QualityGates/professional_acceptance.seed.json",
+        "QualityGates/professional_acceptance.code_gaps.json",
+        "QualityGates/professional_case_guidance.json",
+        "QualityGates/professional_acceptance.json",
+        "QualityGates/ai_eval_readiness.json"
       ]
     }
   },

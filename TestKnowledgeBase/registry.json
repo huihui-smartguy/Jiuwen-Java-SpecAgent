@@ -12,13 +12,13 @@
       "fault.dfx_reliability"
     ],
     "contract_policy": "Knowledge decides what to test and how to prioritize; contract.md remains the only source for strong executable oracle assertions.",
-    "compatibility_output": ".state/fault_matches.json",
-    "primary_output": ".state/knowledge_matches.json"
+    "compatibility_output": "KnowledgeBase/fault_matches.json",
+    "primary_output": "KnowledgeBase/knowledge_matches.json"
   },
   "recording": {
     "default_overlay": "Fault/project_faults.json",
-    "candidate_output": ".state/new_knowledge_candidates.json",
-    "legacy_candidate_output": ".state/new_faults_detected.json",
+    "candidate_output": "KnowledgeBase/new_knowledge_candidates.json",
+    "legacy_candidate_output": "KnowledgeBase/new_faults_detected.json",
     "eligible_result_classes": [
       "sdk_defect"
     ],
@@ -329,25 +329,25 @@
         {
           "phase": "A",
           "stage": "stage5",
-          "artifact": ".state/professional_acceptance.json",
+          "artifact": "QualityGates/professional_acceptance.json",
           "purpose": "Generate professional acceptance, AI readiness, release readiness, and residual-risk report inputs."
         },
         {
           "phase": "B",
           "stage": "stage3b",
-          "artifact": ".state/professional_case_guidance.json",
+          "artifact": "QualityGates/professional_case_guidance.json",
           "purpose": "Guide test case generation with acceptance_refs, evidence_required, AI eval, redteam, DFX, and readiness requirements."
         },
         {
           "phase": "C",
           "stage": "stage1/stage2",
-          "artifact": ".state/professional_acceptance.seed.json and .state/professional_acceptance.code_gaps.json",
+          "artifact": "QualityGates/professional_acceptance.seed.json and QualityGates/professional_acceptance.code_gaps.json",
           "purpose": "Expose requirement and code testability gaps before case generation."
         },
         {
           "phase": "D",
           "stage": "AI/Agent readiness",
-          "artifact": ".state/ai_eval_readiness.json",
+          "artifact": "QualityGates/ai_eval_readiness.json",
           "purpose": "Track eval dataset, grader, redteam, tool-call trace, monitoring, and drift readiness."
         }
       ],

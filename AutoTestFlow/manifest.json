@@ -4,13 +4,13 @@
   "release_track": "develop/iteration-2",
   "default_knowledge_root": "TestKnowledgeBase",
   "default_runtime_registry": "TestKnowledgeBase/registry.json",
-  "compatibility_fault_output": ".state/fault_matches.json",
-  "primary_knowledge_output": ".state/knowledge_matches.json",
+  "compatibility_fault_output": "KnowledgeBase/fault_matches.json",
+  "primary_knowledge_output": "KnowledgeBase/knowledge_matches.json",
   "code_scan_adapters": {
     "prepare_script": "AutoTestFlow/scripts/prepare_code_scan.py",
     "profiles": "AutoTestFlow/shared/code_scan_profiles.json",
     "guide": "AutoTestFlow/shared/code_scan_guide.md",
-    "plan_artifact": ".state/code_scan_plan.json",
+    "plan_artifact": "FeatureAnalysis/code_scan_plan.json",
     "supported_profiles": [
       "java.spring",
       "python.web_api",
@@ -21,11 +21,11 @@
   "professional_acceptance": {
     "script": "AutoTestFlow/scripts/professional_acceptance.py",
     "artifacts": [
-      ".state/professional_acceptance.seed.json",
-      ".state/professional_acceptance.code_gaps.json",
-      ".state/professional_case_guidance.json",
-      ".state/professional_acceptance.json",
-      ".state/ai_eval_readiness.json"
+      "QualityGates/professional_acceptance.seed.json",
+      "QualityGates/professional_acceptance.code_gaps.json",
+      "QualityGates/professional_case_guidance.json",
+      "QualityGates/professional_acceptance.json",
+      "QualityGates/ai_eval_readiness.json"
     ],
     "policy": "advisory_only; Professional_experience may guide planning, case design, evidence, readiness, and reports, but strong assertions still require contract.md."
   },

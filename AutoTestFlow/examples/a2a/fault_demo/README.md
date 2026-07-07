@@ -7,14 +7,14 @@
 ## 目录内容（输入 fixture）
 
 ```
-contract.md                      # 权威性分级表（SPEC-RESP-WRAP/ID-TYPE/ENUM/SSE/ERR-* 为 spec-required；CARD-URL 为 config-dependent）
-test_design.json                 # 2 条用例（TC_041 普通；TC_042 带 fault_ref=F-REQ-011）
-.state/s1_index.json             # 2 个场景：FS-001 SendMessage(写,含 metadata.agentId)、FS-002 SSE 流式
-.state/s1_scenarios/FS-001.json
-.state/s1_scenarios/FS-002.json
-.state/s2_code_facts.json        # entry_catalog 含 params.metadata.agentId（驱动关联字段匹配）
-.state/results/TC_041.json       # 一条 sdk_defect（无 fault_ref → 闭环新建 F-HIST）
-.state/results/TC_042.json       # 一条 sdk_defect（fault_ref=F-REQ-011 → 闭环去重跳过）
+Contract/contract.md                 # 权威性分级表（SPEC-RESP-WRAP/ID-TYPE/ENUM/SSE/ERR-* 为 spec-required；CARD-URL 为 config-dependent）
+TestCases/test_design.json           # 2 条用例（TC_041 普通；TC_042 带 fault_ref=F-REQ-011）
+FeatureAnalysis/s1_index.json        # 2 个场景：FS-001 SendMessage(写,含 metadata.agentId)、FS-002 SSE 流式
+FeatureAnalysis/s1_scenarios/FS-001.json
+FeatureAnalysis/s1_scenarios/FS-002.json
+FeatureAnalysis/s2_code_facts.json   # entry_catalog 含 params.metadata.agentId（驱动关联字段匹配）
+TestRun/results/TC_041.json          # 一条 sdk_defect（无 fault_ref → 闭环新建 F-HIST）
+TestRun/results/TC_042.json          # 一条 sdk_defect（fault_ref=F-REQ-011 → 闭环去重跳过）
 ```
 
 ## 复现命令
@@ -44,11 +44,11 @@ python AutoTestFlow/scripts/match_faults.py \
 
 ## 预期产物（已附 golden）
 
-- `.state/fault_matches.json` —— 兼容匹配计划；旧库回归为 21 条匹配：F-REQ-011（关联字段，FS-001/002）、F-PROTO-002（→SPEC-ERR-32700）、
+- `KnowledgeBase/fault_matches.json` —— 兼容匹配计划；旧库回归为 21 条匹配：F-REQ-011（关联字段，FS-001/002）、F-PROTO-002（→SPEC-ERR-32700）、
   F-SSE-001/002（仅流式 FS-002）、F-HIST-001~005（历史→P0；F-HIST-005 卡片→`downgraded` 但仍含 spec-required L2 锚点）。
-- `.state/fault_contract_alignment.md` —— 故障-契约对齐报告。
-- `case_results.json` —— `sdk_defect: 2`。
-- `.state/new_knowledge_candidates.json` / `.state/new_faults_detected.json` + `project_faults.json` —— 新建 `F-HIST-006`（来自 TC_041）；
+- `KnowledgeBase/fault_contract_alignment.md` —— 故障-契约对齐报告。
+- `TestRun/case_results.json` —— `sdk_defect: 2`。
+- `KnowledgeBase/new_knowledge_candidates.json` / `KnowledgeBase/new_faults_detected.json` + `KnowledgeBase/project_faults.json` —— 新建 `F-HIST-006`（来自 TC_041）；
   TC_042 因 `fault_ref=F-REQ-011` 已知而**去重跳过**。
 
 > 这些 golden 文件随仓库提交，便于 review 与回归对比；重跑命令应得到一致结果。

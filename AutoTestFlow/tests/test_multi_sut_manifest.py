@@ -319,11 +319,12 @@ class MultiSutManifestTests(unittest.TestCase):
             write(manifest_path, EDPA_MULTI_SUT_NL)
 
             data = sut_manifest.load_manifest(str(manifest_path))
-            normalized = sut_manifest.validate_and_normalize(
-                data,
-                manifest_path=str(manifest_path),
-                output_dir=str(root / "analysis"),
-            )
+            with mock.patch.object(sut_manifest.subprocess, "run", side_effect=FileNotFoundError("git")):
+                normalized = sut_manifest.validate_and_normalize(
+                    data,
+                    manifest_path=str(manifest_path),
+                    output_dir=str(root / "analysis"),
+                )
 
             self.assertEqual([t["id"] for t in normalized["targets"]], ["edpa", "versatile_mock", "front_tool"])
             self.assertEqual([t["name"] for t in normalized["targets"]], ["EDPA", "versatile_mock", "front_tool"])
@@ -354,7 +355,128 @@ class MultiSutManifestTests(unittest.TestCase):
             self.assertTrue(normalized["sut_description_parse"]["review_required"])
             self.assertIn("global_source_applied_to_primary", normalized["sut_description_parse"]["reasons"])
             self.assertIn("masked_source_path_requires_review", normalized["sut_description_parse"]["reasons"])
+            self.assertIn("source_remote_clone_failed", normalized["sut_description_parse"]["reasons"])
             self.assertIn("role_inference_requires_review", normalized["sut_description_parse"]["reasons"])
+
+    def test_natural_language_remote_github_source_clones_and_enables_scan(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            manifest_path = root / "autotestflow.suts.md"
+            write(manifest_path, """# SUT
+
+[Demo API]
+URL: http://localhost:8080/health
+Source URL: https://github.com/acme/demo-service/tree/dev
+""")
+
+            def fake_run(cmd, **kwargs):
+                clone_dir = Path(cmd[-1])
+                (clone_dir / ".git").mkdir(parents=True)
+                return sut_manifest.subprocess.CompletedProcess(cmd, 0)
+
+            data = sut_manifest.load_manifest(str(manifest_path))
+            with mock.patch.object(sut_manifest.subprocess, "run", side_effect=fake_run) as run:
+                normalized = sut_manifest.validate_and_normalize(
+                    data,
+                    manifest_path=str(manifest_path),
+                    output_dir=str(root / "analysis"),
+                )
+
+            source = normalized["targets"][0]["source"]
+            self.assertTrue(source["available"])
+            self.assertFalse(source["skip_code_scan"])
+            self.assertTrue(source["abs_path"].endswith("analysis/.state/source/acme__demo-service__dev"))
+            self.assertEqual(source["remote_url"], "https://github.com/acme/demo-service/tree/dev")
+            self.assertEqual(source["resolution"]["status"], "resolved")
+            self.assertEqual(source["resolution"]["ref"], "dev")
+            self.assertIn("--branch", run.call_args.args[0])
+            self.assertIn("source_remote_url_resolved", normalized["sut_description_parse"]["reasons"])
+
+    def test_remote_github_source_reuses_existing_clone(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            out = root / "analysis"
+            clone = out / ".state" / "source" / "acme__demo-service__dev"
+            (clone / ".git").mkdir(parents=True)
+            manifest = {
+                "schema_version": sut_manifest.SCHEMA_VERSION,
+                "suite": {"id": "demo", "output_dir": str(out)},
+                "targets": [{
+                    "id": "api",
+                    "source": {"remote_url": "https://github.com/acme/demo-service/tree/dev", "available": False},
+                    "runtime": {
+                        "mode": "predeployed",
+                        "base_url": "http://localhost:8080",
+                        "readiness_probe": {"method": "GET", "path": "/health"},
+                    },
+                }],
+            }
+
+            with mock.patch.object(sut_manifest.subprocess, "run") as run:
+                normalized = sut_manifest.validate_and_normalize(manifest, manifest_path=str(root / "sut.md"))
+
+            source = normalized["targets"][0]["source"]
+            self.assertTrue(source["available"])
+            self.assertFalse(source["skip_code_scan"])
+            self.assertTrue(source["resolution"]["reused"])
+            run.assert_not_called()
+
+    def test_remote_github_clone_failure_keeps_source_unavailable(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            manifest_path = root / "autotestflow.suts.md"
+            write(manifest_path, """# SUT
+
+[Demo API]
+URL: http://localhost:8080/health
+Source URL: https://github.com/acme/demo-service/tree/dev
+""")
+
+            data = sut_manifest.load_manifest(str(manifest_path))
+            with mock.patch.object(sut_manifest.subprocess, "run", side_effect=FileNotFoundError("git")):
+                normalized = sut_manifest.validate_and_normalize(
+                    data,
+                    manifest_path=str(manifest_path),
+                    output_dir=str(root / "analysis"),
+                )
+
+            source = normalized["targets"][0]["source"]
+            self.assertFalse(source["available"])
+            self.assertTrue(source["skip_code_scan"])
+            self.assertEqual(source["resolution"]["status"], "failed")
+            self.assertIn("source_remote_clone_failed", normalized["sut_description_parse"]["reasons"])
+
+    def test_redacted_local_source_uses_public_remote_when_clone_succeeds(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            manifest_path = root / "autotestflow.suts.md"
+            write(manifest_path, """# SUT
+
+[source_path] The source code path is **************
+If it is not accessible locally, the source code is: https://github.com/acme/demo-service/tree/dev
+
+[Demo API]
+URL: http://localhost:8080/health
+""")
+
+            def fake_run(cmd, **kwargs):
+                clone_dir = Path(cmd[-1])
+                (clone_dir / ".git").mkdir(parents=True)
+                return sut_manifest.subprocess.CompletedProcess(cmd, 0)
+
+            data = sut_manifest.load_manifest(str(manifest_path))
+            with mock.patch.object(sut_manifest.subprocess, "run", side_effect=fake_run):
+                normalized = sut_manifest.validate_and_normalize(
+                    data,
+                    manifest_path=str(manifest_path),
+                    output_dir=str(root / "analysis"),
+                )
+
+            source = normalized["targets"][0]["source"]
+            self.assertTrue(source["available"])
+            self.assertFalse(source.get("redacted", False))
+            self.assertFalse(source["skip_code_scan"])
+            self.assertTrue(source["resolution"]["original_path_redacted"])
 
     def test_natural_language_global_source_availability_requires_real_local_path(self):
         with tempfile.TemporaryDirectory() as td:

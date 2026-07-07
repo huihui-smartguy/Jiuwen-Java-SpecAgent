@@ -24,10 +24,10 @@
 
 | Phase | AutoTestFlow 接入点 | 产物 | 说明 |
 |---|---|---|---|
-| A | stage5 报告前 | `.state/professional_acceptance.json` | 输出专业验收、发布门禁、残余风险矩阵。 |
-| B | stage3b 用例设计前 | `.state/professional_case_guidance.json` | 指导 `acceptance_refs`、证据要求、AI eval、DFX、redteam 和 readiness。 |
-| C | stage1/stage2 后 | `.state/professional_acceptance.seed.json` / `.state/professional_acceptance.code_gaps.json` | 暴露需求和代码层面的可测性缺口。 |
-| D | AI/Agent readiness | `.state/ai_eval_readiness.json` | 检查 eval dataset、grader、redteam、tool-call trace、监控和漂移。 |
+| A | stage5 报告前 | `QualityGates/professional_acceptance.json` | 输出专业验收、发布门禁、残余风险矩阵。 |
+| B | stage3b 用例设计前 | `QualityGates/professional_case_guidance.json` | 指导 `acceptance_refs`、证据要求、AI eval、DFX、redteam 和 readiness。 |
+| C | stage1/stage2 后 | `QualityGates/professional_acceptance.seed.json` / `QualityGates/professional_acceptance.code_gaps.json` | 暴露需求和代码层面的可测性缺口。 |
+| D | AI/Agent readiness | `QualityGates/ai_eval_readiness.json` | 检查 eval dataset、grader、redteam、tool-call trace、监控和漂移。 |
 
 所有产物都是 advisory gate，不能越过 `contract.md` 生成强断言。
 

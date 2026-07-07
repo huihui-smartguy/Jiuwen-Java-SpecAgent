@@ -28,6 +28,9 @@ replay_pid*
 **/.state/remediation/repo/
 **/.state/remediation/trace/
 
+# AutoTestFlow remote source cache created from SUT manifest GitHub URLs
+**/.state/source/
+
 # Python
 __pycache__/
 *.pyc
