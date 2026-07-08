@@ -107,8 +107,21 @@ AutoTestFlow/                       # Skill 本体
 │   ├── evaluate_fault_oracles.py   # stage4 子步：fault_ref 用例 trace/process/negative oracle 门禁
 │   ├── aggregate_results.py
 │   └── record_faults.py            # stage5 子步：sdk_defect 闭环自积累（默认 overlay/dry-run）
+├── workers/                        # 阶段 Worker 组织目录（仅职责拆分，不改变运行协议）
+│   ├── Stage0-SutManifest/
+│   ├── Stage1-RequirementAnalysis/
+│   ├── Stage2-CodeAnalysisContract/ # 原 stage2 + stage2.5：代码分析后立即生成 contract.md
+│   ├── Stage26-KnowledgeMatch/
+│   ├── Stage3a-ScenarioEnrichment/
+│   ├── Stage3b-TestDesign/
+│   ├── Stage4-TestGenerationRun/
+│   ├── Stage5-Report/
+│   ├── Stage6-FaultAnalysis/
+│   └── Stage7-ReverifyIssue/
 └── templates/                      # 各阶段子 Agent Prompt
 ```
+
+`workers/` 只记录阶段 Worker 的工程边界和维护责任：每个 Worker 仍复用原模板与脚本，产出原路径下的结构化文件。唯一公开入口仍是 `/auto-test-flow`，不会新增 StageTask、stage DAG、runtime helper 或新的执行协议。
 
 ---
 
@@ -207,8 +220,10 @@ AutoTestFlow 会在 stage0 生成 `RunMetadata/sut_description.parse.json`、`Ru
    │  └─ stage5   target 报告 + record_faults.py 闭环
    ├─ stage6   fault analysis / 修复方案 / evidence issue 草稿（默认门控，需配置）
    ├─ stage7   本地应用 + 构建 + 复验 + evidence issue（仅人工确认 + allow_open_issue 后外发）
-   └─ root report 聚合全部 target 的覆盖、风险、env_issue 与缺陷摘要
+  └─ root report 聚合全部 target 的覆盖、风险、env_issue 与缺陷摘要
 ```
+
+短期阶段 Worker 拆分只改变维护组织方式，不改变上述执行顺序。`Stage2-CodeAnalysisContract` 是合并后的工程所有权边界，内部仍按原顺序执行 stage2 通用代码扫描，再执行 stage2.5 契约校准并生成 target-local `Contract/contract.md`。
 
 `校准 → 设计 → 生成 → 就绪门 → 执行+轨迹 → 报告`：判据先校准、再设计断言；执行前先探活；
 失败严格按执行边界分类——脚本问题自我修复，SUT 当前确实不满足则 skip 标原因，绝不洗绿。带 `fault_ref` 的故障库用例是缺陷探针，最终 E2E 响应成功后仍必须通过 required `fault_oracles`（过程/否定/结果 oracle），否则归为 `sdk_defect` / `sut_unsatisfied` / `requires_human_review`，不得写 pass。

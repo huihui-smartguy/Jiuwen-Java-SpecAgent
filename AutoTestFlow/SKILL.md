@@ -237,6 +237,25 @@ AskUserQuestion(questions=[{
 | 文件即协议 | 所有数据通过文件传递，Agent间无上下文依赖；contract.md 是 stage2.5→stage3b/4 的协议载体 |
 | 阶段验证后更新 | 验证产出文件存在后，编排器 Write progress.json 更新阶段状态（子Agent不写） |
 
+### 阶段 Worker 组织（等价拆分）
+
+`AutoTestFlow/workers/` 是短期重构后的内部阶段所有权目录。它只描述每个阶段的原职责、原输入、原输出、原模板/脚本依赖和原人工门，不改变 `/auto-test-flow` 的公开调用、执行顺序、参数、门控或结构化输出。
+
+| Worker | 覆盖原阶段 | 等价职责 |
+|--------|------------|----------|
+| `Stage0-SutManifest` | 0 | SUT 描述解析、manifest 校验与归一化 |
+| `Stage1-RequirementAnalysis` | 1 | 需求侧 FP/FS 分析与 Markdown companion 渲染 |
+| `Stage2-CodeAnalysisContract` | 2 + 2.5 | 代码扫描后立即执行契约校准，生成 `Contract/contract.md` |
+| `Stage26-KnowledgeMatch` | 2.6 + 2.6b + 2.P | TestKnowledgeBase 匹配、按需增强、Professional_experience advisory |
+| `Stage3a-ScenarioEnrichment` | 3a | GAP 与框架场景富化、合并索引 |
+| `Stage3b-TestDesign` | 3b | 小文件批量测试设计与合并 |
+| `Stage4-TestGenerationRun` | 4 | P0、批量生成、执行、trace、聚合 |
+| `Stage5-Report` | 5 | target/root 报告、知识候选与最终质量门 |
+| `Stage6-FaultAnalysis` | 6 | fault analysis、证据、修复方案与 remediation plan |
+| `Stage7-ReverifyIssue` | 7 | apply、rebuild、reverify、受控 evidence issue |
+
+禁止在该短期拆分中新增 StageTask、stage DAG、Supervisor runtime helper 或任何新的执行协议。Worker 初版必须复用 `templates/` 与 `scripts/` 中的现有资产，并保持原产物路径不变。
+
 ### 通用子Agent启动模式
 
 对每个阶段，编排器执行：读取模板 → 替换参数 → spawn Agent → 验证输出 → 进入下一阶段。
