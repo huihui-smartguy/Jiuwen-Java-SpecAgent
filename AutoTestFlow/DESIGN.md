@@ -2,7 +2,7 @@
 
 本文档阐述 AutoTestFlow 的设计原则。AutoTestFlow 是需求驱动的测试智能体，面向对外协议可观测的源码型被测系统(SUT)，当前以场景化测试实现，DFX 测试并行规划。以下七条原则是其各阶段编排与纪律的根基。
 
-> **无需 step1 预生成依赖**：脚手架内置于 `reference/`、判据形态由 stage2.5 契约自动校准、框架场景由 stage2 从代码结构自动派生（纯需求模式由 stage3aR 从需求侧派生），无外部预生成文件与手工前置步骤。
+> **无需 step1 预生成依赖**：脚手架内置于 `workers/Stage4-TestGenerationRun/reference/`、判据形态由 stage2.5 契约自动校准、框架场景由 stage2 从代码结构自动派生（纯需求模式由 stage3aR 从需求侧派生），无外部预生成文件与手工前置步骤。
 
 ---
 
@@ -78,7 +78,7 @@
 domain-aware fault analysis：产出根因、证据、修复方案与 issue 草稿。只有 `contract.md` 背书的 spec-required
 真实违例才进入 patch 子集：修被测**业务代码** + 加开发仓**回归自测** → Stage7 本地重建复验 → 在 upstream
 提交 evidence issue。自动 PR 提交已移除。该能力放大了 §2「不得自我认证」的风险，故以三条纪律约束
-（详见 `shared/remediation_rules.md`）：
+（详见 `workers/Stage6-FaultAnalysis/shared/remediation_rules.md`）：
 
 - **修向契约，不洗绿**：只修 SUT 业务代码使其符合 `contract.md` 的 spec-required 形态；绝不弱化/删除 AutoTestFlow 测试或既有自测断言、不改 `contract.md`；回归自测只新增。
 - **机器复验，非自证**：绿/红由确定性脚本**重跑未改动的失败用例 + 重建后的 SUT** 判定，LLM 不宣布"修好了"；issue 必须带实证复验状态（`require_evidence_before_issue` 不可关闭，兼容旧 `require_green_before_pr`）。
@@ -88,10 +88,10 @@ evidence issue 必须给出两段证据——(a) **规格库/契约知识**（�
 
 ## 8. Beta 预研：门控、隔离、不得逾越内核
 
-为预研可能接入的新特性（如知识源新形态），设 **Beta 暂存区**（代码物理隔离于 `beta/` 子树，由 `--beta-*` 开关显式开启，默认关闭）。Beta 的硬约束：
+为预研可能接入的新特性（如知识源新形态），设 **Beta 暂存区**（代码物理隔离于 Worker-local 目录，由 `--beta-*` 开关显式开启，默认关闭）。Beta 的硬约束：
 
 - **默认关闭即字节级一致**：开关 `off`（默认）时不调用任何 Beta 代码、不产任何 Beta 文件，流水线与稳定版**字节级一致**（复用 §7 `--remediate` 的优雅降级范式）。
 - **不得违反 §1–§7**：Beta 只能在既有不变量之上做**增强**，绝不绕过——尤其 §2「`contract.md` 唯一 Oracle / 生成器不得自我认证」与 §7「不洗绿」。
-- **隔离可退役**：稳定目录（`scripts/`、`templates/` 等）零改动；`SKILL.md` 仅以 additive 方式接入。预研结论为不采用时删除 `beta/` 子项与开关即可，不影响稳定流水线。
+- **隔离可退役**：稳定 Worker 资产零改动；`SKILL.md` 仅以 additive 方式接入。预研结论为不采用时删除 Worker-local beta 子项与开关即可，不影响稳定流水线。
 
-首个 Beta（v1.0）为「故障库接入 LLM Wiki」（Phase A）：由结构化故障库**单向派生**仓内 NL 文章，作 stage2.6b/stage6 的 **advisory 建议层**——**不作 oracle、不进 `match_faults.py`、断言仍由 `contract.md` 封顶**。详见 `beta/README.md` 与 `ChangeLogs/v3.0-Beta预研_故障库接入LLM_Wiki.md`。
+首个 Beta（v1.0）为「故障库接入 LLM Wiki」（Phase A）：由结构化故障库**单向派生**仓内 NL 文章，作 stage2.6b/stage6 的 **advisory 建议层**——**不作 oracle、不进 `match_faults.py`、断言仍由 `contract.md` 封顶**。详见 `workers/Stage26-KnowledgeMatch/beta/README.md` 与 `ChangeLogs/v3.0-Beta预研_故障库接入LLM_Wiki.md`。

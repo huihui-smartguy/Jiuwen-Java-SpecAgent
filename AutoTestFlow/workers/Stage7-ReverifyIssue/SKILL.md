@@ -1,45 +1,49 @@
 ---
 name: autotestflow-stage7-reverify-issue
-description: Internal AutoTestFlow Worker for original Stage 7 apply, rebuild, reverify, and gated evidence issue generation.
+description: Internal AutoTestFlow Worker for Stage 7 apply, rebuild, reverify, and gated evidence issue generation.
 ---
 
 # Stage7-ReverifyIssue
 
 ## Boundary
 
-This Worker owns original Stage 7 actions after Stage 6 approval: apply allowed
-patches, rebuild, reverify, produce issue bodies, and submit evidence issues
-only when existing human and config gates allow it.
+Owns original Stage 7 after Stage6 approval. It may apply approved patches, rebuild, reverify, generate issue bodies, and submit evidence issues only when gates allow.
 
-## Original Inputs
+## Owned Assets
 
-- `Remediation/plan.json`.
-- `Remediation/manifest.json`.
-- `Remediation/defects/<case_id>/*`.
-- Valid remediation configuration.
-- Target runtime/build configuration.
-- `AutoTestFlow/scripts/apply_and_reverify.py`.
-- `AutoTestFlow/scripts/submit_remediation.py`.
+- `scripts/apply_and_reverify.py`
+- `scripts/submit_remediation.py`
+- `examples/a2a/remediation_demo/`
+- `../_common/reference/remediation_config.py`
+- `../_common/scripts/output_layout.py`
 
-## Original Mechanics
+## Inputs
 
-- Apply only approved local remediation artifacts.
-- Rebuild and reverify through the existing script.
-- Generate issue bodies from evidence artifacts.
-- Submit external evidence issues only when both the human gate and
-  `switches.allow_open_issue=true` allow submission.
-- Preserve dry-run behavior: analyze and reverify without external submission.
+- `Remediation/plan.json`
+- `Remediation/manifest.json`
+- `Remediation/defects/<case_id>/*`
+- Valid remediation configuration
+- Target repo/build/runtime configuration
 
-## Original Outputs
+## Procedure
 
-- `Remediation/reverify.json`.
-- `Remediation/issue_bodies/*.md`.
-- `Remediation/submitted.json`.
+1. Confirm Stage6 human gate and remediation config permissions.
+2. Run `scripts/apply_and_reverify.py --output-dir <target_output_dir>`.
+3. Apply only approved patch artifacts within configured path allowlists.
+4. Rebuild, restart/readiness-check, rerun affected tests, and write reverify evidence.
+5. Generate evidence issue bodies under `Remediation/issue_bodies/`.
+6. Run `scripts/submit_remediation.py` in `dry-run` or gated `on` mode.
+7. Submit external issues only when `--remediate=on`, `--gate-confirmed`, and `switches.allow_open_issue=true`.
+
+## Outputs
+
+- `Remediation/reverify.json`
+- `Remediation/issue_bodies/*.md`
+- `Remediation/submitted.json`
 
 ## Gates
 
-- No irreversible action may occur without the original Stage 6 human approval
-  and configuration permission.
+No irreversible action may occur without the original human confirmation and config permission.
 
 ## Non-Goals
 

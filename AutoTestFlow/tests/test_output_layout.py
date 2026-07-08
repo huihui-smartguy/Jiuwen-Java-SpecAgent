@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parents[2]
-SCRIPTS_DIR = REPO / "AutoTestFlow" / "scripts"
+SCRIPTS_DIR = REPO / "AutoTestFlow" / "workers" / "_common" / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 

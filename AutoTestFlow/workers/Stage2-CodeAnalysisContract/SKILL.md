@@ -1,55 +1,61 @@
 ---
 name: autotestflow-stage2-code-analysis-contract
-description: Internal AutoTestFlow Worker that groups original Stage 2 code analysis and Stage 2.5 contract calibration with parity behavior.
+description: Internal AutoTestFlow Worker that owns original Stage 2 code analysis and Stage 2.5 contract calibration.
 ---
 
 # Stage2-CodeAnalysisContract
 
 ## Boundary
 
-This Worker groups the original Stage 2 and Stage 2.5 responsibilities. It
-does not collapse their internal order: code scan planning and code facts are
-produced first, then contract calibration generates `Contract/contract.md`.
+Owns original Stage 2 plus Stage 2.5. The merge is an ownership merge only:
+code analysis still happens first, then contract calibration immediately
+generates `Contract/contract.md`.
 
-## Original Inputs
+## Owned Assets
 
-- Target-local source information from `RunMetadata/sut_manifest.normalized.json`.
-- `AutoTestFlow/templates/stage2_code_scan.md`.
-- `AutoTestFlow/templates/stage2_5_contract_calibrate.md`.
-- `AutoTestFlow/shared/code_scan_profiles.json`.
-- `AutoTestFlow/shared/code_scan_guide.md`.
-- `AutoTestFlow/shared/java_scan_guide.md`.
-- `AutoTestFlow/shared/code_analysis_template.md`.
-- Target runtime/base URL and optional probe plan.
+- `scripts/prepare_code_scan.py`
+- `scripts/probe_contract.py`
+- `templates/stage2_code_scan.md`
+- `templates/stage2_5_contract_calibrate.md`
+- `shared/code_scan_profiles.json`
+- `shared/code_scan_guide.md`
+- `shared/java_scan_guide.md`
+- `shared/code_analysis_template.md`
+- `../_common/shared/scenario_schema.md`
 
-## Original Mechanics
+## Inputs
 
-- Run `AutoTestFlow/scripts/prepare_code_scan.py` to create the profile scan
-  plan.
-- Execute the original Stage 2 code scan prompt against bounded source facts.
-- Preserve no-source behavior: write no-source placeholders and continue to
-  contract calibration where the target is reachable.
-- Run `AutoTestFlow/scripts/probe_contract.py` for live/static contract samples.
-- Execute `templates/stage2_5_contract_calibrate.md` to produce the target-local
-  strong oracle.
-- Treat `Contract/contract.md` as the only strong executable oracle.
+- Target source/runtime info from `RunMetadata/sut_manifest.normalized.json`
+- Target source tree when available
+- Target base URL and optional probe plan
+- Stage 1 artifacts when contract calibration needs scenario context
 
-## Original Outputs
+## Procedure
 
-- `FeatureAnalysis/code_scan_plan.json`.
-- `FeatureAnalysis/s2_code_facts.json`.
-- `FeatureAnalysis/stage_summary.json`.
-- `FeatureAnalysis/framework_scenes.json`.
-- `Contract/contract_samples.json`.
-- `Contract/contract.md`.
+1. Read normalized manifest target source/runtime metadata.
+2. If source is unavailable or explicitly skipped, write the original no-source placeholders and continue to contract calibration when the target is reachable.
+3. Run `scripts/prepare_code_scan.py --code-path <source> --output-dir <target_output_dir>`.
+4. Use `templates/stage2_code_scan.md` to extract bounded static code facts, entry catalogs, module roles, code-only gaps, and framework scenes.
+5. Validate `FeatureAnalysis/code_scan_plan.json`, `FeatureAnalysis/s2_code_facts.json`, `FeatureAnalysis/stage_summary.json`, and `FeatureAnalysis/framework_scenes.json`.
+6. Run `scripts/probe_contract.py` to produce `Contract/contract_samples.json`.
+7. Use `templates/stage2_5_contract_calibrate.md` to produce `Contract/contract.md`.
+8. Mark unreachable targets as `needs-runtime-verify` through the original contract fallback; Stage4 readiness later determines `env_issue`.
+
+## Outputs
+
+- `FeatureAnalysis/code_scan_plan.json`
+- `FeatureAnalysis/s2_code_facts.json`
+- `FeatureAnalysis/stage_summary.json`
+- `FeatureAnalysis/framework_scenes.json`
+- `Contract/contract_samples.json`
+- `Contract/contract.md`
 
 ## Gates
 
-- No human gate is added here.
-- Target reachability still controls later Stage 4 readiness behavior.
+No new human gate is added. `Contract/contract.md` must exist before Stage26, Stage3b, or Stage4 can create executable assertions.
 
 ## Non-Goals
 
-- Do not invent additional contract formats.
-- Do not change the Stage 2 or Stage 2.5 artifact names.
+- Do not invent a second contract format.
+- Do not let source inference override live contract evidence.
 - Do not pass large source files through Supervisor context.

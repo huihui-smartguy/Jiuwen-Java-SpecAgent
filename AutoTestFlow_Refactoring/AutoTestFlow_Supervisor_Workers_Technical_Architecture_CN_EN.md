@@ -12,7 +12,7 @@
 /auto-test-flow requirements.md --sut-manifest autotestflow.suts.md --remediation-config remediation.config.json --faults on --fault-enrich on --remediate on
 ```
 
-短期重构只做阶段职责拆分：`AutoTestFlow/SKILL.md` 保持 Supervisor 编排入口，`AutoTestFlow/workers/*/SKILL.md` 记录每个阶段 Worker 的原职责、原输入、原输出、原模板/脚本依赖和原人工门，便于不同工程师按阶段维护。不得新增 StageTask、stage DAG、runtime helper 或新执行协议。
+短期重构只做阶段职责与资产归属拆分：`AutoTestFlow/SKILL.md` 保持 Supervisor 编排入口，`AutoTestFlow/workers/*/SKILL.md` 记录每个阶段 Worker 的原职责、原输入、原输出、原模板/脚本依赖和原人工门，便于不同工程师按阶段维护。模板、脚本、shared、reference、examples、beta 资产迁移到所属 Worker 或 `AutoTestFlow/workers/_common/`，Worker-local 路径成为唯一执行路径。不得新增 StageTask、stage DAG、runtime helper 或新执行协议。
 
 按用户要求，原 stage2 与 stage2.5 合并为一个工程 Worker：`Stage2-CodeAnalysisContract`。内部顺序严格保持原功能：先执行代码分析，产出 `FeatureAnalysis/*` 源码事实；随后立即执行契约校准，产出 target-local `Contract/contract.md`，作为后续 stage3b/stage4 的唯一强 Oracle。
 
@@ -27,11 +27,14 @@ public entrypoint remains:
 /auto-test-flow requirements.md --sut-manifest autotestflow.suts.md --remediation-config remediation.config.json --faults on --fault-enrich on --remediate on
 ```
 
-The short-term refactor is an ownership split only. `AutoTestFlow/SKILL.md`
-remains the Supervisor orchestration entrypoint, while
+The short-term refactor splits both stage responsibility and asset ownership.
+`AutoTestFlow/SKILL.md` remains the Supervisor orchestration entrypoint, while
 `AutoTestFlow/workers/*/SKILL.md` documents each stage Worker's original
-responsibility, inputs, outputs, template/script dependencies, and gates. No
-StageTask, stage DAG, runtime helper, or new execution protocol is introduced.
+responsibility, inputs, outputs, template/script dependencies, and gates.
+Templates, scripts, shared files, references, examples, and beta assets are
+migrated into the owning Worker or `AutoTestFlow/workers/_common/`; Worker-local
+paths become the only execution paths. No StageTask, stage DAG, runtime helper,
+or new execution protocol is introduced.
 
 Per the requirement, original stage2 and stage2.5 are merged into one engineering
 Worker: `Stage2-CodeAnalysisContract`. Its internal order remains strictly
@@ -44,7 +47,7 @@ facts, then immediately run contract calibration and produce target-local
 | Principle / 原则 | 中文说明 | English |
 |---|---|---|
 | Single public invocation / 单一公开入口 | 用户仍只调用 `/auto-test-flow ...`。Worker 不提供新的用户命令。 | Users still invoke only `/auto-test-flow ...`; Workers expose no new user command. |
-| Strict parity / 严格等价 | 短期只拆维护边界，不改功能、阶段、路径、门控、分类语义。 | Short-term work splits ownership only; no behavior, stage, path, gate, or classification changes. |
+| Strict parity / 严格等价 | 短期只拆维护边界与资产归属，不改公开命令、功能语义、阶段顺序、输出路径、门控、分类语义。 | Short-term work splits ownership and asset location only; no public invocation, behavioral semantics, stage order, output path, gate, or classification changes. |
 | File-first discipline / 文件即协议 | 阶段之间仍通过现有文件传递数据，Supervisor 不读取大业务文件。 | Stages keep exchanging data through existing files; Supervisor avoids large business artifacts. |
 | Worker opacity / Worker 黑盒化 | Worker 产出规范文件，不把长推理 transcript 回灌给 Supervisor。 | Workers produce canonical files instead of long reasoning transcripts. |
 | Contract authority / 契约权威 | `Contract/contract.md` 仍是可执行断言唯一强 Oracle。 | `Contract/contract.md` remains the only strong executable Oracle. |
@@ -69,7 +72,7 @@ Supervisor 不做：
 - 不新增 StageTask 文件；
 - 不新增 stage DAG；
 - 不新增 `supervisor_runtime.py`；
-- 不替换现有模板/脚本；
+- 不新增替代模板/脚本能力；仅调度迁移到 Worker-local 位置的原有资产；
 - 不读取大业务文件或将大 JSON/source 放入上下文；
 - 不改变原输出目录结构。
 
@@ -91,7 +94,8 @@ The Supervisor does not:
 - Add StageTask files.
 - Add a stage DAG.
 - Add `supervisor_runtime.py`.
-- Replace existing templates/scripts.
+- Add alternate template/script capabilities; it only dispatches the original
+  assets after they are migrated into Worker-local locations.
 - Read large business files or pass large JSON/source into context.
 - Change the original output directory structure.
 
@@ -108,10 +112,11 @@ Worker 是阶段级维护单元，而不是新的运行时协议。每个 Worker
 - 原人工门；
 - 禁止事项。
 
-短期 Worker 目录如下：
+短期 Worker 目录如下。`_common/` 仅用于仍被多个阶段共享的确定性工具、schema 与参考校验器，避免把共享逻辑复制到多个 Worker 后产生漂移：
 
 ```text
 AutoTestFlow/workers/
+├── _common/
 ├── Stage0-SutManifest/
 ├── Stage1-RequirementAnalysis/
 ├── Stage2-CodeAnalysisContract/
@@ -123,6 +128,16 @@ AutoTestFlow/workers/
 ├── Stage6-FaultAnalysis/
 └── Stage7-ReverifyIssue/
 ```
+
+Worker-local 资产规则：
+
+- 阶段模板放在所属 Worker 的 `templates/`；
+- 阶段脚本放在所属 Worker 的 `scripts/`；
+- 阶段专属 schema/规则放在所属 Worker 的 `shared/`；
+- 阶段专属示例或 demo 放在所属 Worker 的 `examples/`；
+- 黑盒测试参考脚手架放在 `Stage4-TestGenerationRun/reference/`；
+- 原 beta wiki 预研资产归入 `Stage26-KnowledgeMatch/`；
+- 根目录 `templates/`、`scripts/`、`shared/`、`reference/`、`examples/`、`beta/` 不再作为执行路径保留。
 
 **English**
 
@@ -136,10 +151,13 @@ Worker `SKILL.md` documents only:
 - Original human gates.
 - Non-goals and prohibited changes.
 
-The short-term Worker directory is:
+The short-term Worker directory is shown below. `_common/` is reserved only for
+deterministic utilities, schemas, and reference validators that remain shared by
+multiple stages, preventing duplicated shared logic from drifting:
 
 ```text
 AutoTestFlow/workers/
+├── _common/
 ├── Stage0-SutManifest/
 ├── Stage1-RequirementAnalysis/
 ├── Stage2-CodeAnalysisContract/
@@ -151,6 +169,18 @@ AutoTestFlow/workers/
 ├── Stage6-FaultAnalysis/
 └── Stage7-ReverifyIssue/
 ```
+
+Worker-local asset rules:
+
+- Stage templates live in the owning Worker's `templates/`.
+- Stage scripts live in the owning Worker's `scripts/`.
+- Stage-specific schemas and rules live in the owning Worker's `shared/`.
+- Stage-specific examples and demos live in the owning Worker's `examples/`.
+- The black-box test harness reference lives in
+  `Stage4-TestGenerationRun/reference/`.
+- The original beta wiki research assets belong to `Stage26-KnowledgeMatch/`.
+- Root-level `templates/`, `scripts/`, `shared/`, `reference/`, `examples/`,
+  and `beta/` are no longer retained as execution paths.
 
 ## 5. Stage Mechanics / 各阶段原始工作原理
 
@@ -203,30 +233,42 @@ semantics. Its internal order must remain fixed:
 
 **中文**
 
-短期目标是快速把阶段拆成可分工维护的 Worker，同时严格保持原 AutoTestFlow 功能等价：
+短期目标是快速把阶段拆成可分工维护的 Worker，并把执行资产迁移到 Worker-local 位置，同时严格保持原 AutoTestFlow 功能等价：
 
-1. 新增 `AutoTestFlow/workers/*/SKILL.md`，每个 Worker 只记录原阶段边界和依赖。
-2. 保留 `AutoTestFlow/templates/` 作为初版 Worker 的唯一 prompt 来源。
-3. 保留 `AutoTestFlow/scripts/` 作为确定性工具边界。
-4. 更新 `AutoTestFlow/SKILL.md` 和 `README.md`，只说明 Worker 组织，不改调度协议。
-5. 合并 stage2/stage2.5 的工程所有权为 `Stage2-CodeAnalysisContract`，但内部仍按原顺序执行。
-6. 使用原单一命令验证 output layout、人工门和 demo 兼容性。
+1. 精简 `AutoTestFlow/SKILL.md` 为 Supervisor-only 入口，只保留公开调用、调度顺序、门控和结构化输出契约。
+2. 扩充 `AutoTestFlow/workers/*/SKILL.md`，承接原 `SKILL.md` 中对应阶段的详细步骤、输入、输出、模板/脚本依赖和禁止事项。
+3. 将阶段模板迁移到所属 Worker 的 `templates/`，将阶段脚本迁移到所属 Worker 的 `scripts/`。
+4. 将仍跨阶段共享的确定性工具、schema 和参考校验器迁移到 `AutoTestFlow/workers/_common/`。
+5. 将 `reference/` 黑盒脚手架迁移到 Stage4，将 examples/demo 迁移到拥有该流程的 Worker，将 beta wiki 资产迁移到 Stage26。
+6. 更新 Worker 文档、模板、脚本、测试和 manifest 中的执行路径，使其只引用 `AutoTestFlow/workers/...`。
+7. 删除根目录 `templates/`、`scripts/`、`shared/`、`reference/`、`examples/`、`beta/`。
+8. 合并 stage2/stage2.5 的工程所有权为 `Stage2-CodeAnalysisContract`，但内部仍按原顺序执行。
+9. 使用原单一命令语义验证 output layout、人工门和 demo 兼容性。
 
 **English**
 
-The short-term goal is to split stage ownership quickly while preserving strict
-AutoTestFlow parity:
+The short-term goal is to split stage ownership, migrate execution assets into
+Worker-local locations, and preserve strict AutoTestFlow parity:
 
-1. Add `AutoTestFlow/workers/*/SKILL.md`, each documenting only original stage
-   boundaries and dependencies.
-2. Keep `AutoTestFlow/templates/` as the first-version Worker prompt source.
-3. Keep `AutoTestFlow/scripts/` as the deterministic tool boundary.
-4. Update `AutoTestFlow/SKILL.md` and `README.md` only to describe Worker
-   organization, not to change orchestration protocol.
-5. Merge stage2/stage2.5 engineering ownership into
+1. Slim `AutoTestFlow/SKILL.md` into a Supervisor-only entrypoint that preserves
+   public invocation, routing order, gates, and structured output contracts.
+2. Expand `AutoTestFlow/workers/*/SKILL.md` with the corresponding original
+   stage procedure, inputs, outputs, template/script dependencies, and
+   prohibited changes.
+3. Move stage templates into the owning Worker's `templates/` and stage scripts
+   into the owning Worker's `scripts/`.
+4. Move still-shared deterministic tools, schemas, and reference validators into
+   `AutoTestFlow/workers/_common/`.
+5. Move the black-box harness reference into Stage4, examples/demos into the
+   Worker that owns their workflow, and beta wiki assets into Stage26.
+6. Update Worker docs, templates, scripts, tests, and manifest execution paths
+   so they reference only `AutoTestFlow/workers/...`.
+7. Delete root-level `templates/`, `scripts/`, `shared/`, `reference/`,
+   `examples/`, and `beta/`.
+8. Merge stage2/stage2.5 engineering ownership into
    `Stage2-CodeAnalysisContract`, while preserving internal order.
-6. Validate output layout, human gates, and demo compatibility through the
-   original single command.
+9. Validate output layout, human gates, and demo compatibility through the
+   original single-command semantics.
 
 ## 8. Long-Term Iteration Roadmap / 长期迭代路线
 

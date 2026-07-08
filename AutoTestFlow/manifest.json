@@ -7,9 +7,9 @@
   "compatibility_fault_output": "KnowledgeBase/fault_matches.json",
   "primary_knowledge_output": "KnowledgeBase/knowledge_matches.json",
   "code_scan_adapters": {
-    "prepare_script": "AutoTestFlow/scripts/prepare_code_scan.py",
-    "profiles": "AutoTestFlow/shared/code_scan_profiles.json",
-    "guide": "AutoTestFlow/shared/code_scan_guide.md",
+    "prepare_script": "AutoTestFlow/workers/Stage2-CodeAnalysisContract/scripts/prepare_code_scan.py",
+    "profiles": "AutoTestFlow/workers/Stage2-CodeAnalysisContract/shared/code_scan_profiles.json",
+    "guide": "AutoTestFlow/workers/Stage2-CodeAnalysisContract/shared/code_scan_guide.md",
     "plan_artifact": "FeatureAnalysis/code_scan_plan.json",
     "supported_profiles": [
       "java.spring",
@@ -19,7 +19,7 @@
     ]
   },
   "professional_acceptance": {
-    "script": "AutoTestFlow/scripts/professional_acceptance.py",
+    "script": "AutoTestFlow/workers/_common/scripts/professional_acceptance.py",
     "artifacts": [
       "QualityGates/professional_acceptance.seed.json",
       "QualityGates/professional_acceptance.code_gaps.json",
@@ -34,8 +34,8 @@
   "contract_policy": "contract.md remains the only strong oracle for executable assertions.",
   "validation": {
     "code_scan_adapter_tests": "python -m unittest AutoTestFlow.tests.test_stage2_code_scan_adapters",
-    "knowledge_base": "python AutoTestFlow/scripts/validate_knowledge_base.py",
-    "knowledge_match_smoke": "python AutoTestFlow/scripts/match_faults.py --output-dir <output_dir> --knowledge-root TestKnowledgeBase",
-    "professional_acceptance_smoke": "python AutoTestFlow/scripts/professional_acceptance.py --output-dir <output_dir> --knowledge-root TestKnowledgeBase"
+    "knowledge_base": "python AutoTestFlow/workers/Stage26-KnowledgeMatch/scripts/validate_knowledge_base.py",
+    "knowledge_match_smoke": "python AutoTestFlow/workers/Stage26-KnowledgeMatch/scripts/match_faults.py --output-dir <output_dir> --knowledge-root TestKnowledgeBase",
+    "professional_acceptance_smoke": "python AutoTestFlow/workers/_common/scripts/professional_acceptance.py --output-dir <output_dir> --knowledge-root TestKnowledgeBase"
   }
 }

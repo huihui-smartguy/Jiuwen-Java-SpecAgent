@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parents[2]
-SCRIPTS_DIR = REPO / "AutoTestFlow" / "scripts"
+SCRIPTS_DIR = REPO / "AutoTestFlow" / "workers" / "_common" / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
@@ -23,7 +23,7 @@ def load_module(rel_path, name):
 
 
 merge_test_design = load_module(
-    "AutoTestFlow/scripts/merge_test_design.py",
+    "AutoTestFlow/workers/Stage3b-TestDesign/scripts/merge_test_design.py",
     "merge_test_design_for_requirement_suggestion_tests",
 )
 

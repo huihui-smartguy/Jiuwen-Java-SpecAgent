@@ -20,9 +20,9 @@ def load_module(rel_path, name):
     return module
 
 
-sut_manifest = load_module("AutoTestFlow/scripts/sut_manifest.py", "sut_manifest")
-probe_contract = load_module("AutoTestFlow/scripts/probe_contract.py", "probe_contract")
-sut_runtime = load_module("AutoTestFlow/scripts/sut_runtime.py", "sut_runtime")
+sut_manifest = load_module("AutoTestFlow/workers/Stage0-SutManifest/scripts/sut_manifest.py", "sut_manifest")
+probe_contract = load_module("AutoTestFlow/workers/Stage2-CodeAnalysisContract/scripts/probe_contract.py", "probe_contract")
+sut_runtime = load_module("AutoTestFlow/workers/Stage4-TestGenerationRun/scripts/sut_runtime.py", "sut_runtime")
 
 
 def write(path, text):
@@ -236,13 +236,13 @@ class MultiSutManifestTests(unittest.TestCase):
             self.assertTrue(normalized["compatibility"]["from_sut_base_url"])
 
     def test_example_manifest_validates(self):
-        example = REPO / "AutoTestFlow/examples/multi_sut/sut-manifest.md"
+        example = REPO / "AutoTestFlow/workers/Stage0-SutManifest/examples/multi_sut/sut-manifest.md"
         data = sut_manifest.load_manifest(str(example))
         normalized = sut_manifest.validate_and_normalize(data, manifest_path=str(example))
         self.assertEqual([t["id"] for t in normalized["targets"]], ["catalog", "checkout"])
 
     def test_quickstart_manifest_validates_with_default_filename(self):
-        example = REPO / "AutoTestFlow/examples/quickstart/autotestflow.suts.md"
+        example = REPO / "AutoTestFlow/workers/Stage0-SutManifest/examples/quickstart/autotestflow.suts.md"
         data = sut_manifest.load_manifest(str(example))
         normalized = sut_manifest.validate_and_normalize(data, manifest_path=str(example))
         self.assertEqual(normalized["input_format"], "natural_language")
@@ -693,18 +693,18 @@ class DocumentationGuardTests(unittest.TestCase):
         self.assertIn("`--sut-manifest`", skill)
         self.assertNotIn("/auto-test-flow 需求.md <sut源码>/<模块> --sut-base-url", readme)
         self.assertIn("Deprecated compatibility", readme)
-        self.assertIn("AutoTestFlow/examples/quickstart/autotestflow.suts.md", default_section)
-        self.assertIn("AutoTestFlow/examples/quickstart/remediation.config.json", default_section)
+        self.assertIn("AutoTestFlow/workers/Stage0-SutManifest/examples/quickstart/autotestflow.suts.md", default_section)
+        self.assertIn("AutoTestFlow/workers/Stage0-SutManifest/examples/quickstart/remediation.config.json", default_section)
         self.assertIn("shared/sut_manifest_schema.md", default_section)
         self.assertIn("shared/remediation_config_schema.md", default_section)
-        self.assertIn("python AutoTestFlow/reference/remediation_config.py --check remediation.config.json", default_section)
+        self.assertIn("python AutoTestFlow/workers/_common/reference/remediation_config.py --check remediation.config.json", default_section)
         self.assertLess(
-            default_section.index("cp AutoTestFlow/examples/quickstart/autotestflow.suts.md ."),
+            default_section.index("cp AutoTestFlow/workers/Stage0-SutManifest/examples/quickstart/autotestflow.suts.md ."),
             default_section.index("/auto-test-flow requirements.md --sut-manifest autotestflow.suts.md"),
         )
-        self.assertIn("AutoTestFlow/examples/quickstart/autotestflow.suts.md", skill)
-        self.assertIn("AutoTestFlow/examples/remediation.config.example.json", skill)
-        self.assertIn("AutoTestFlow/shared/remediation_config_schema.md", skill)
+        self.assertIn("AutoTestFlow/workers/Stage0-SutManifest/examples/quickstart/autotestflow.suts.md", skill)
+        self.assertIn("AutoTestFlow/workers/Stage6-FaultAnalysis/examples/remediation.config.example.json", skill)
+        self.assertIn("AutoTestFlow/workers/Stage6-FaultAnalysis/shared/remediation_config_schema.md", skill)
 
 
 if __name__ == "__main__":

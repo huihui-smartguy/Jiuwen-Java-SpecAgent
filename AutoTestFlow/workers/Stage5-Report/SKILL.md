@@ -1,50 +1,54 @@
 ---
 name: autotestflow-stage5-report
-description: Internal AutoTestFlow Worker for original Stage 5 target and root reporting.
+description: Internal AutoTestFlow Worker for Stage 5 target/root reporting and post-report bookkeeping.
 ---
 
 # Stage5-Report
 
 ## Boundary
 
-This Worker owns original Stage 5 reporting and post-report deterministic
-bookkeeping. It preserves target reports, root aggregation, knowledge candidate
-recording, and final advisory gates.
+Owns original Stage 5 report generation, layout normalization, knowledge candidate recording, and final advisory gates.
 
-## Original Inputs
+## Owned Assets
 
-- `TestRun/case_results.json`.
-- `Contract/contract.md`.
-- `TestRun/trace/*.jsonl`.
-- `KnowledgeBase/fault_matches.json` when present.
-- `QualityGates/*` when present.
-- `AutoTestFlow/templates/stage5_report.md`.
+- `templates/stage5_report.md`
+- `scripts/record_faults.py`
+- `../_common/scripts/output_layout.py`
+- `../_common/scripts/professional_acceptance.py`
+- `../_common/scripts/knowledge_base.py`
 
-## Original Mechanics
+## Inputs
 
-- Generate the target report from existing execution artifacts.
-- Run `AutoTestFlow/scripts/output_layout.py --migrate` where the original flow
-  requires layout normalization.
-- Run `AutoTestFlow/scripts/record_faults.py` when KnowledgeBase is available.
-- Run `AutoTestFlow/scripts/professional_acceptance.py --mode report` when the
-  advisory knowledge source is available.
-- Preserve the original decision after Stage 5: stop when remediation is off,
-  otherwise validate remediation configuration before Stage 6.
+- `TestRun/case_results.json`
+- `Contract/contract.md`
+- `TestRun/trace/*.jsonl`
+- `KnowledgeBase/fault_matches.json` when present
+- `QualityGates/*` when present
 
-## Original Outputs
+## Procedure
 
-- `Reports/report.md`.
-- `KnowledgeBase/new_knowledge_candidates.json`.
-- `KnowledgeBase/new_faults_detected.json`.
-- `KnowledgeBase/project_faults.json`.
-- Final `QualityGates/*` artifacts when available.
-- Root `Reports/report.md` aggregation across targets.
+1. Generate target report with `templates/stage5_report.md`.
+2. Run `../_common/scripts/output_layout.py --migrate` when layout normalization is needed.
+3. Run `scripts/record_faults.py` when KnowledgeBase is enabled.
+4. Run `../_common/scripts/professional_acceptance.py --mode report` when Professional_experience is available.
+5. Validate `TestRun/case_results.json` and `Reports/report.md`.
+6. If `--remediate=off`, stop after Stage5.
+7. If remediation is enabled, validate remediation config before Stage6.
+8. Root Supervisor aggregates target reports into root `Reports/report.md`.
+
+## Outputs
+
+- `Reports/report.md`
+- `KnowledgeBase/new_knowledge_candidates.json`
+- `KnowledgeBase/new_faults_detected.json`
+- `KnowledgeBase/project_faults.json`
+- Final `QualityGates/*`
 
 ## Gates
 
-- No new human gate is added in Stage 5.
+No new human gate is added.
 
 ## Non-Goals
 
 - Do not submit external issues.
-- Do not change report sections or classification semantics.
+- Do not alter execution classifications.

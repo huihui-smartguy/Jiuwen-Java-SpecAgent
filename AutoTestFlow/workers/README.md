@@ -1,7 +1,7 @@
 # AutoTestFlow Stage Workers
 
 This directory is an internal ownership map for the existing AutoTestFlow stages.
-It does not introduce a new public command, StageTask protocol, stage DAG, runtime
+It does not introduce a new public command, new task-file protocol, stage DAG, runtime
 helper, or alternate output layout.
 
 The only public entrypoint remains `AutoTestFlow/SKILL.md` and the same
@@ -9,6 +9,12 @@ The only public entrypoint remains `AutoTestFlow/SKILL.md` and the same
 original stage responsibility, existing inputs, existing outputs, gates, and
 template/script dependencies so different engineers can iterate stage prompts
 without changing the Supervisor contract.
+
+Worker-local assets are canonical. Stage templates, scripts, shared rules,
+reference harness files, examples, and beta research assets live under the
+owning Worker or under `AutoTestFlow/workers/_common/` when they are still
+shared by multiple stages. Root-level asset directories are no longer execution
+paths.
 
 `Stage2-CodeAnalysisContract` intentionally groups the original stage2 code
 analysis and stage2.5 contract calibration: code facts are produced first, then

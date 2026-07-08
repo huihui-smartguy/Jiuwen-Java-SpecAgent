@@ -1,54 +1,65 @@
 ---
 name: autotestflow-stage26-knowledge-match
-description: Internal AutoTestFlow Worker for original Stage 2.6 TestKnowledgeBase matching, optional enrichment, and advisory professional gates.
+description: Internal AutoTestFlow Worker for Stage 2.6 TestKnowledgeBase matching, enrichment, and professional advisory gates.
 ---
 
 # Stage26-KnowledgeMatch
 
 ## Boundary
 
-This Worker owns the original Stage 2.6 knowledge/fault matching flow, optional
-Stage 2.6b enrichment, and the existing Professional_experience advisory sidecar
-when enabled.
+Owns original Stage 2.6, optional Stage 2.6b enrichment, and Professional_experience advisory artifacts. Knowledge can guide coverage but cannot exceed `Contract/contract.md`.
 
-## Original Inputs
+## Owned Assets
 
-- `Contract/contract.md`.
-- `FeatureAnalysis/s1_index.json`.
-- `FeatureAnalysis/s1_scenarios/*.json`.
-- `FeatureAnalysis/s2_code_facts.json`.
-- `TestKnowledgeBase/registry.json` and discovered knowledge packages.
-- Optional fault overlay or explicit legacy fault library.
-- `AutoTestFlow/templates/stage2_6_fault_match.md` when enrichment is enabled.
+- `scripts/match_faults.py`
+- `scripts/validate_knowledge_base.py`
+- `scripts/gen_wiki.py`
+- `scripts/check_wiki.py`
+- `templates/stage2_6_fault_match.md`
+- `templates/stage2_6_fault_match.beta.md`
+- `shared/wiki_rules.md`
+- `shared/wiki_schema.md`
+- `examples/a2a/fault_demo/`
+- `examples/a2a/wiki_demo/`
+- `../_common/scripts/knowledge_base.py`
+- `../_common/scripts/professional_acceptance.py`
 
-## Original Mechanics
+## Inputs
 
-- Run `AutoTestFlow/scripts/match_faults.py`.
-- Apply contract authority capping: knowledge can guide coverage but cannot
-  exceed `contract.md`.
-- When `--fault-enrich on` and enrichment is needed, use the original enrichment
-  template to bind fuzzy validation points, replace placeholders, and record
-  contract conflicts.
-- Run `AutoTestFlow/scripts/professional_acceptance.py` as advisory only when
-  the existing option and knowledge source allow it.
+- `Contract/contract.md`
+- `FeatureAnalysis/s1_index.json`
+- `FeatureAnalysis/s1_scenarios/*.json`
+- `FeatureAnalysis/s2_code_facts.json`
+- TestKnowledgeBase registry/packages
+- Optional overlay, explicit legacy fault library, and beta wiki flag
 
-## Original Outputs
+## Procedure
 
-- `KnowledgeBase/knowledge_matches.json`.
-- `KnowledgeBase/fault_matches.json`.
-- `KnowledgeBase/fault_contract_alignment.md`.
-- `QualityGates/professional_acceptance.seed.json`.
-- `QualityGates/professional_acceptance.code_gaps.json`.
-- `QualityGates/professional_case_guidance.json`.
-- `QualityGates/professional_acceptance.json`.
-- `QualityGates/ai_eval_readiness.json`.
+1. If `--faults=off`, skip without producing matching artifacts.
+2. Run `scripts/match_faults.py` with the selected knowledge root/domain/overlay.
+3. Match packages by registry metadata, domain, category, scenario tags, history, related fields, and streaming signals.
+4. Cap every fault oracle by `Contract/contract.md` authority.
+5. Write `KnowledgeBase/knowledge_matches.json`, `KnowledgeBase/fault_matches.json`, and `KnowledgeBase/fault_contract_alignment.md`.
+6. If enrichment is enabled and needed, run the stable or beta enrichment template to bind fuzzy validation points, replace placeholders, and record contract conflicts.
+7. Run `../_common/scripts/professional_acceptance.py` when Professional_experience is available and advisory gates are enabled.
+
+## Outputs
+
+- `KnowledgeBase/knowledge_matches.json`
+- `KnowledgeBase/fault_matches.json`
+- `KnowledgeBase/fault_contract_alignment.md`
+- `QualityGates/professional_acceptance.seed.json`
+- `QualityGates/professional_acceptance.code_gaps.json`
+- `QualityGates/professional_case_guidance.json`
+- `QualityGates/professional_acceptance.json`
+- `QualityGates/ai_eval_readiness.json`
 
 ## Gates
 
-- No human gate is added.
-- Missing knowledge behavior follows the existing `--faults` mode.
+No human gate is added. Missing knowledge behavior follows the original `--faults` mode.
 
 ## Non-Goals
 
 - Do not hard-code knowledge into prompts.
-- Do not turn Professional_experience advisory output into strong oracle output.
+- Do not turn advisory knowledge into a strong Oracle.
+- Do not let beta wiki content feed deterministic matchers.

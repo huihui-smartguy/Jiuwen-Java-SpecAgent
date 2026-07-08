@@ -1,0 +1,36 @@
+{
+  "_comment": "auto-remediation(v2.1) 配置模板 —— 以 spring-ai-ascend 为例。复制为 <output_dir>/remediation.config.json 或 <work_dir>/.autotestflow/remediation.config.json 后按需修改。Stage7 仅提交 evidence issue，不再推送分支或创建 PR。schema 见 AutoTestFlow/workers/Stage6-FaultAnalysis/shared/remediation_config_schema.md。",
+  "version": "2.1",
+  "sut": {
+    "name": "spring-ai-ascend",
+    "base_url": "http://localhost:8080",
+    "readiness_probe": { "method": "GET", "path": "/.well-known/agent-card.json", "expect_status_lt": 500 }
+  },
+  "repo": {
+    "upstream_url": "https://github.com/chaosxingxc-orion/spring-ai-ascend",
+    "ref": "v0.1.0",
+    "clone_path": ".state/remediation/repo",
+    "local_branch_prefix": "autotestflow/fix",
+    "business_code_roots": ["src/main/java", "src/main/resources"],
+    "selftest_roots": ["src/test/java"],
+    "default_branch": "main"
+  },
+  "build": {
+    "tool": "maven",
+    "build_cmd": "mvn -q -DskipTests package",
+    "selftest_cmd": "mvn -q -Dtest=*RemediationIT test",
+    "workdir": "."
+  },
+  "run": {
+    "restart_cmd": "java -jar target/*.jar --server.port=8080",
+    "stop_cmd": "pkill -f 'target/.*\\.jar' || true",
+    "restart_in_background": true,
+    "readiness_timeout_sec": 60
+  },
+  "issue": { "labels": ["bug", "spec-violation", "auto-remediation"] },
+  "switches": {
+    "allow_open_issue": false,
+    "require_evidence_before_issue": true
+  },
+  "reverify": { "simulate": false, "simulated_after": {} }
+}

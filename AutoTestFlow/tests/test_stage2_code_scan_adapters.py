@@ -18,7 +18,7 @@ def load_module(rel_path, name):
     return module
 
 
-prepare_code_scan = load_module("AutoTestFlow/scripts/prepare_code_scan.py", "prepare_code_scan")
+prepare_code_scan = load_module("AutoTestFlow/workers/Stage2-CodeAnalysisContract/scripts/prepare_code_scan.py", "prepare_code_scan")
 
 
 def write(path, text):
@@ -115,7 +115,7 @@ class Stage2CodeScanAdapterTests(unittest.TestCase):
         self.assertLess(plan["confidence"], 0.6)
 
     def test_profiles_have_required_probe_categories(self):
-        profiles = json.loads((REPO / "AutoTestFlow/shared/code_scan_profiles.json").read_text(encoding="utf-8"))
+        profiles = json.loads((REPO / "AutoTestFlow/workers/Stage2-CodeAnalysisContract/shared/code_scan_profiles.json").read_text(encoding="utf-8"))
         required = set(profiles["required_probe_categories"])
         self.assertEqual(required, {
             "structure",
@@ -139,15 +139,15 @@ class Stage2CodeScanAdapterTests(unittest.TestCase):
 
     def test_stage2_docs_do_not_restore_java_only_assumption(self):
         guarded = [
-            "AutoTestFlow/templates/stage2_code_scan.md",
-            "AutoTestFlow/shared/code_analysis_template.md",
-            "AutoTestFlow/shared/scenario_schema.md",
+            "AutoTestFlow/workers/Stage2-CodeAnalysisContract/templates/stage2_code_scan.md",
+            "AutoTestFlow/workers/Stage2-CodeAnalysisContract/shared/code_analysis_template.md",
+            "AutoTestFlow/workers/_common/shared/scenario_schema.md",
             "AutoTestFlow/SKILL.md",
             "AutoTestFlow/README.md",
             "AutoTestFlow/DESIGN.md",
-            "AutoTestFlow/templates/stage2_5_contract_calibrate.md",
-            "AutoTestFlow/templates/stage1_req_analyze.md",
-            "AutoTestFlow/shared/rules.md",
+            "AutoTestFlow/workers/Stage2-CodeAnalysisContract/templates/stage2_5_contract_calibrate.md",
+            "AutoTestFlow/workers/Stage1-RequirementAnalysis/templates/stage1_req_analyze.md",
+            "AutoTestFlow/workers/_common/shared/rules.md",
         ]
         java_spring = "Java" + "/Spring"
         java_word = "Java"

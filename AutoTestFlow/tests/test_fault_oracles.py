@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parents[2]
-SCRIPTS_DIR = REPO / "AutoTestFlow" / "scripts"
+SCRIPTS_DIR = REPO / "AutoTestFlow" / "workers" / "_common" / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
@@ -22,12 +22,12 @@ def load_module(rel_path, name):
     return module
 
 
-match_faults = load_module("AutoTestFlow/scripts/match_faults.py", "match_faults_for_oracle_tests")
+match_faults = load_module("AutoTestFlow/workers/Stage26-KnowledgeMatch/scripts/match_faults.py", "match_faults_for_oracle_tests")
 evaluate_fault_oracles = load_module(
-    "AutoTestFlow/scripts/evaluate_fault_oracles.py",
+    "AutoTestFlow/workers/Stage4-TestGenerationRun/scripts/evaluate_fault_oracles.py",
     "evaluate_fault_oracles_for_tests",
 )
-aggregate_results = load_module("AutoTestFlow/scripts/aggregate_results.py", "aggregate_results_for_oracle_tests")
+aggregate_results = load_module("AutoTestFlow/workers/Stage4-TestGenerationRun/scripts/aggregate_results.py", "aggregate_results_for_oracle_tests")
 
 
 def write_json(path, data):
