@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>测试智能体总控调度界面 · 低保真示意 v3</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  :root{
+    --bg:#f4f6fa; --panel:#ffffff; --border:#e3e8ef; --text:#1f2937; --muted:#6b7280;
+    --primary:#1677ff; --primary-hover:#4096ff; --primary-soft:#e8f1ff;
+    --amber:#f59e0b; --green:#16a34a; --red:#e5484d; --gray:#9ca3af; --orange:#f97316; --blue-tag:#2563eb;
+    --shadow:0 1px 3px rgba(16,24,40,.06),0 1px 2px rgba(16,24,40,.04);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);font-size:13px;line-height:1.5}
+  a{color:var(--primary);text-decoration:none;cursor:pointer}
+  button{cursor:pointer;font-family:inherit;font-size:13px}
+  .app{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+  .topbar{height:48px;background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:16px;flex-shrink:0}
+  .logo{font-weight:700;font-size:15px;color:var(--primary);white-space:nowrap}
+  .topbar .spacer{flex:1}
+  .topbar .item{display:flex;align-items:center;gap:6px;color:var(--muted)}
+  .badge{background:var(--red);color:#fff;border-radius:10px;padding:0 6px;font-size:11px;line-height:16px}
+  .body{display:flex;flex:1;overflow:hidden}
+  .sidebar{width:208px;background:var(--panel);border-right:1px solid var(--border);padding:8px 0;overflow-y:auto;flex-shrink:0}
+  .nav-group-title{padding:10px 16px 4px;font-size:11px;color:var(--muted);letter-spacing:1px}
+  .nav-item{padding:8px 16px 8px 20px;cursor:pointer;color:var(--text);display:flex;align-items:center;gap:8px;border-left:3px solid transparent}
+  .nav-item:hover{background:var(--primary-soft)}
+  .nav-item.active{background:var(--primary-soft);color:var(--primary);border-left-color:var(--primary);font-weight:600}
+  .nav-dot{width:6px;height:6px;border-radius:50%;background:var(--gray)}
+  .nav-item.active .nav-dot{background:var(--primary)}
+  .content{flex:1;overflow-y:auto;padding:16px 20px 40px}
+  .statusbar{height:28px;background:#fafbfc;border-top:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:16px;font-size:12px;color:var(--muted);flex-shrink:0}
+  .statusbar .live{color:var(--primary)}
+  .page{display:none}.page.active{display:block}
+  .page-title{font-size:18px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:10px}
+  .page-title .sub{font-size:12px;color:var(--muted);font-weight:400}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow);padding:14px}
+  .card h3{font-size:13px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between}
+  .grid{display:grid;gap:12px}
+  .kpi-row{grid-template-columns:repeat(5,1fr)}
+  .cat-row{grid-template-columns:repeat(4,1fr)}
+  .two-col{grid-template-columns:1.4fr 1fr}
+  .two-col-r{grid-template-columns:1fr 1.4fr}
+  .three-col{grid-template-columns:200px 1fr 220px}
+  .kpi{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px;cursor:pointer;transition:.15s}
+  .kpi:hover{border-color:var(--primary);box-shadow:var(--shadow)}
+  .kpi .label{font-size:12px;color:var(--muted)}
+  .kpi .value{font-size:22px;font-weight:700;margin-top:4px}
+  .kpi .value.green{color:var(--green)} .kpi .value.red{color:var(--red)} .kpi .value.amber{color:var(--amber)}
+  .cat{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px;cursor:pointer;transition:.15s}
+  .cat:hover{border-color:var(--primary);box-shadow:var(--shadow)}
+  .cat .ct{font-weight:600;font-size:13px;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+  .cat .cm{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
+  .cat .cv{font-size:16px;font-weight:700}
+  .btn{background:var(--primary);color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:13px}
+  .btn:hover{background:var(--primary-hover)}
+  .btn.ghost{background:var(--panel);color:var(--primary);border:1px solid var(--primary)}
+  .btn.ghost:hover{background:var(--primary-soft)}
+  .btn.sm{padding:4px 10px;font-size:12px}
+  .btn.disabled,.btn[disabled]{background:#e5e7eb;color:#9ca3af;cursor:not-allowed}
+  .btn-row{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border)}
+  th{background:#f8fafc;color:var(--muted);font-weight:600;font-size:11px}
+  tr:hover td{background:#fafbfc}
+  .tag{display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;background:var(--primary-soft);color:var(--primary)}
+  .tag.green{background:#e6f7ed;color:var(--green)} .tag.red{background:#fdecec;color:var(--red)}
+  .tag.amber{background:#fef3e6;color:var(--amber)} .tag.gray{background:#f0f1f3;color:var(--muted)}
+  .tag.orange{background:#fff0e6;color:var(--orange)} .tag.blue{background:#e8f1ff;color:var(--blue-tag)}
+  .stages{display:flex;gap:6px;align-items:center}
+  .stage-dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--gray);background:#fff}
+  .stage-dot.done{background:var(--green);border-color:var(--green)}
+  .stage-dot.running{border-color:var(--primary);background:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
+  .stage-dot.wait{border-color:var(--amber);background:#fff}
+  .stage-dot.fail{border-color:var(--red);background:var(--red)}
+  .stage-label{font-size:10px;color:var(--muted);margin-left:2px}
+  .tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:14px}
+  .tab{padding:8px 16px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;font-size:13px}
+  .tab:hover{color:var(--primary)}
+  .tab.active{color:var(--primary);border-bottom-color:var(--primary);font-weight:600}
+  .tabpanel{display:none}.tabpanel.active{display:block}
+  .v-stages{display:flex;flex-direction:column;gap:6px}
+  .v-stage{border:1px solid var(--border);border-radius:6px;padding:10px;background:#fff;position:relative}
+  .v-stage.active{border-color:var(--primary);background:var(--primary-soft)}
+  .v-stage .t{font-weight:600;font-size:12px;display:flex;align-items:center;gap:6px}
+  .v-stage .m{font-size:11px;color:var(--muted);margin-top:2px}
+  .v-stage .flag{position:absolute;right:10px;top:10px}
+  .tree{font-size:12px}
+  .tree .node{padding:3px 6px;cursor:pointer;border-radius:4px}
+  .tree .node:hover{background:var(--primary-soft)}
+  .tree .node.sel{background:var(--primary-soft);color:var(--primary)}
+  .tree .indent{padding-left:16px;color:var(--muted)}
+  .ph{background:repeating-linear-gradient(45deg,#f5f7fa,#f5f7fa 10px,#eef2f7 10px,#eef2f7 20px);border:1px dashed var(--border);border-radius:6px;color:var(--muted);font-size:12px;display:flex;align-items:center;justify-content:center;text-align:center;padding:10px}
+  .ph.tall{min-height:120px} .ph.mid{min-height:80px} .ph.short{min-height:48px}
+  .hint{font-size:11px;color:var(--muted);background:#fffbe6;border:1px solid #ffe58f;border-radius:6px;padding:6px 10px;display:inline-flex;align-items:center;gap:6px}
+  .readonly-tag{font-size:11px;color:var(--muted);background:#f0f1f3;padding:2px 8px;border-radius:4px}
+  .kv{display:grid;grid-template-columns:110px 1fr;gap:6px 12px;font-size:12px}
+  .kv .k{color:var(--muted)}
+  .field{margin-bottom:10px}
+  .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+  .field input,.field select{width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:#fff}
+  .field input[readonly]{background:#f8fafc;color:var(--muted)}
+  .stepper{display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;margin-bottom:16px}
+  .stepper .step{flex:1;padding:10px 12px;background:#fff;font-size:12px;border-right:1px solid var(--border);cursor:pointer}
+  .stepper .step .n{display:inline-block;width:18px;height:18px;border-radius:50%;background:var(--gray);color:#fff;text-align:center;line-height:18px;font-size:11px;margin-right:6px}
+  .stepper .step.active{background:var(--primary-soft);color:var(--primary);font-weight:600}
+  .stepper .step.active .n{background:var(--primary)}
+  .stepper .step.done .n{background:var(--green)}
+  .pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;background:var(--primary-soft);color:var(--primary)}
+  .switch{width:32px;height:18px;background:#d1d5db;border-radius:9px;position:relative;cursor:pointer;display:inline-block;vertical-align:middle}
+  .switch.on{background:var(--green)}
+  .switch::after{content:"";position:absolute;width:14px;height:14px;background:#fff;border-radius:50%;top:2px;left:2px;transition:.15s}
+  .switch.on::after{left:16px}
+  .small{font-size:11px;color:var(--muted)}
+  .sep{border-top:1px dashed var(--border);margin:10px 0}
+  .stack>*+*{margin-top:10px}
+  .mono{font-family:ui-monospace,Consolas,monospace;font-size:11px;background:#0f172a;color:#e2e8f0;padding:8px 10px;border-radius:6px;white-space:pre;overflow:auto}
+  .radio-row{display:flex;gap:14px;flex-wrap:wrap}
+  .radio-row label{display:flex;align-items:center;gap:4px;font-size:13px}
+  .chk{list-style:none;padding:0}
+  .chk li{padding:5px 0;border-bottom:1px dashed var(--border)}
+  .chk .grp{font-weight:600;color:var(--primary);font-size:12px;margin-top:6px}
+  .perf-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:8px}
+  .perf{border:1px solid var(--border);border-radius:6px;padding:8px 10px}
+  .perf .pl{font-size:11px;color:var(--muted)} .perf .pv{font-size:15px;font-weight:700}
+  .perf .pd.up{color:var(--green)} .perf .pd.down{color:var(--red)}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="logo">◆ 测试智能体总控调度平台</div>
+    <div class="item" style="border:1px solid var(--border);border-radius:6px;padding:4px 10px"><span>环境：</span><b>测试-SUT</b> ▾</div>
+    <div class="spacer"></div>
+    <div class="item">🔍 <span style="border:1px solid var(--border);border-radius:6px;padding:4px 28px 4px 10px;background:#fff">全局搜索脚本/任务/缺陷…</span></div>
+    <div class="item" onclick="showPage('observe')" style="cursor:pointer">🔔 通知 <span class="badge">3</span></div>
+    <div class="item">👤 测试指挥</div>
+  </div>
+
+  <div class="body">
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="nav-group-title">总览</div>
+      <div class="nav-item active" data-page="dashboard"><span class="nav-dot"></span>测试看板</div>
+
+      <div class="nav-group-title">执行</div>
+      <div class="nav-item" data-page="tasks"><span class="nav-dot"></span>执行任务</div>
+      <div class="nav-item" data-page="observe"><span class="nav-dot"></span>执行观测台</div>
+
+      <div class="nav-group-title">分析</div>
+      <div class="nav-item" data-page="results"><span class="nav-dot"></span>结果管理</div>
+
+      <div class="nav-group-title">资产</div>
+      <div class="nav-item" data-page="scripts"><span class="nav-dot"></span>脚本管理</div>
+      <div class="nav-item" data-page="knowledge"><span class="nav-dot"></span>知识中心</div>
+
+      <div class="nav-group-title">系统</div>
+      <div class="nav-item" data-page="settings"><span class="nav-dot"></span>系统设置</div>
+    </aside>
+
+    <!-- CONTENT -->
+    <main class="content" id="content">
+
+      <!-- ===== 测试看板 ===== -->
+      <section class="page active" id="page-dashboard">
+        <div class="page-title">测试看板 <span class="sub">总览 · 运行态第一屏 + 全局质量态势 · 围绕 L0 四类特性</span>
+          <button class="btn" onclick="showPage('tasks')">+ 新建执行任务</button>
+        </div>
+
+        <div class="grid kpi-row">
+          <div class="kpi" onclick="showPage('tasks')"><div class="label">执行中进程</div><div class="value">5</div></div>
+          <div class="kpi" onclick="showPage('observe')"><div class="label">待处理异常</div><div class="value amber">4</div></div>
+          <div class="kpi" onclick="showPage('results')"><div class="label">今日缺陷</div><div class="value red">7</div></div>
+          <div class="kpi"><div class="label">总通过率</div><div class="value green">86.4%</div></div>
+          <div class="kpi"><div class="label">拦截噪声</div><div class="value">12%</div></div>
+        </div>
+
+        <!-- 四类特性概览卡 -->
+        <div class="grid cat-row" style="margin-top:12px">
+          <div class="cat" onclick="showPage('results')">
+            <div class="ct"><span class="tag blue">L0</span>基本功能测试</div>
+            <div class="cm"><span>用例 28</span><span class="cv green">93%</span></div>
+            <div class="cm"><span>缺陷 2</span><span>↑ 环比 +1%</span></div>
+          </div>
+          <div class="cat" onclick="showPage('results')">
+            <div class="ct"><span class="tag blue">L0</span>DFX 测试</div>
+            <div class="cm"><span>维度 可靠/安全/兼容</span><span class="cv">76%</span></div>
+            <div class="cm"><span>缺陷 1</span><span class="tag gray">design_only</span></div>
+          </div>
+          <div class="cat" onclick="showPage('results')">
+            <div class="ct"><span class="tag blue">L0</span>性能测试</div>
+            <div class="cm"><span>TPS 1240</span><span class="cv green">优</span></div>
+            <div class="cm"><span>RT 92ms</span><span style="color:var(--green)">↑ vs 基线 8%</span></div>
+          </div>
+          <div class="cat" onclick="showPage('results')">
+            <div class="ct"><span class="tag blue">L0</span>场景化测试</div>
+            <div class="cm"><span>工作流 6</span><span class="cv amber">80%</span></div>
+            <div class="cm"><span>端到端</span><span>卡点：加载环节</span></div>
+          </div>
+        </div>
+
+        <!-- 性能趋势图 + 五分类 -->
+        <div class="grid two-col" style="margin-top:12px">
+          <div class="card">
+            <h3>性能趋势图（本次 vs 基线） <span class="small">基线 v2.4.0 ▾</span></h3>
+            <svg viewBox="0 0 420 150" style="width:100%;height:150px">
+              <line x1="30" y1="20" x2="30" y2="120" stroke="#cbd5e1"/><line x1="30" y1="120" x2="410" y2="120" stroke="#cbd5e1"/>
+              <line x1="30" y1="40" x2="410" y2="40" stroke="#eef2f7"/><line x1="30" y1="80" x2="410" y2="80" stroke="#eef2f7"/>
+              <!-- baseline gray dashed -->
+              <polyline fill="none" stroke="#9ca3af" stroke-width="2" stroke-dasharray="5 4" points="40,90 110,85 180,88 250,82 320,86 390,84"/>
+              <!-- current blue -->
+              <polyline fill="none" stroke="#1677ff" stroke-width="2.5" points="40,78 110,70 180,74 250,62 320,58 390,55"/>
+              <circle cx="390" cy="55" r="3" fill="#1677ff"/><circle cx="390" cy="84" r="3" fill="#9ca3af"/>
+              <text x="395" y="50" font-size="9" fill="#1677ff">本次</text><text x="395" y="95" font-size="9" fill="#9ca3af">基线</text>
+              <text x="35" y="14" font-size="9" fill="#6b7280">TPS</text>
+              <text x="40" y="135" font-size="9" fill="#6b7280">v2.4.1</text><text x="320" y="135" font-size="9" fill="#6b7280">本次</text>
+            </svg>
+            <div class="perf-grid">
+              <div class="perf"><div class="pl">TPS</div><div class="pv">1240</div><div class="pd up">↑ 8% vs 基线</div></div>
+              <div class="perf"><div class="pl">平均 RT</div><div class="pv">92ms</div><div class="pd up">↓ 12% (优)</div></div>
+              <div class="perf"><div class="pl">P99 RT</div><div class="pv">210ms</div><div class="pd down">↑ 5% (关注)</div></div>
+              <div class="perf"><div class="pl">错误率</div><div class="pv">0.4%</div><div class="pd up">↓ 0.1%</div></div>
+            </div>
+          </div>
+          <div class="card">
+            <h3>五分类责任分流</h3>
+            <div class="ph tall" style="margin-bottom:8px">🍩 通过·自修·暂不满足·缺陷·拦截 环形图</div>
+            <table>
+              <tr><td><span class="tag green">通过</span></td><td>34</td></tr>
+              <tr><td><span class="tag blue">自修</span></td><td>2</td></tr>
+              <tr><td><span class="tag gray">暂不满足</span></td><td>3</td></tr>
+              <tr><td><span class="tag red">缺陷</span></td><td>7</td></tr>
+              <tr><td><span class="tag orange">拦截</span></td><td>2</td></tr>
+            </table>
+          </div>
+        </div>
+
+        <!-- 矩阵 + DFX雷达 -->
+        <div class="grid two-col" style="margin-top:12px">
+          <div class="card"><h3>基本功能质量矩阵（热力图）</h3><div class="ph tall">行=特性 列=版本 色=通过率</div></div>
+          <div class="card"><h3>DFX 维度雷达</h3><div class="ph tall">可靠 / 安全 / 兼容 / 性能 各维度得分</div></div>
+        </div>
+
+        <!-- 场景化漏斗 + 健康度漏斗 -->
+        <div class="grid two-col" style="margin-top:12px">
+          <div class="card"><h3>场景化端到端通过率漏斗</h3><div class="ph mid">保存→查询→释放→加载 各环节通过率，卡点：加载</div></div>
+          <div class="card"><h3>执行健康度漏斗</h3><div class="ph mid">发起→探活→L0→批量→分流→报告</div></div>
+        </div>
+
+        <div class="card" style="margin-top:12px"><h3>缺陷 Top · 拦截噪声 Top · 最近活动流</h3>
+          <div class="small">缺陷 Top：营销 4 · 门户 2 · 存储 1 ｜ 拦截噪声 Top：环境不可达 3 · 脚本范式 2 ｜ 活动：10:42 陈昕尧 发起 EXEC-2041 · 10:35 系统 留痕分流产出 · 10:20 杨辉 确认缺陷 DEF-118</div>
+        </div>
+      </section>
+
+      <!-- ===== 执行任务 ===== -->
+      <section class="page" id="page-tasks">
+        <div class="page-title">执行任务 <span class="sub">进程执行与管理 · 脚本只读使用</span></div>
+        <div class="tabs">
+          <div class="tab active" onclick="switchTab(this,'tab-tasklist')">任务列表</div>
+          <div class="tab" onclick="switchTab(this,'tab-tasknew')">+ 新建任务向导</div>
+        </div>
+
+        <!-- 任务列表 -->
+        <div class="tabpanel active" id="tab-tasklist">
+          <div class="btn-row">
+            <button class="btn" onclick="switchTabById('tab-tasknew')">+ 新建执行任务</button>
+            <input class="field" style="display:inline;width:220px;padding:6px" placeholder="筛选：状态/任务类型/特性/负责人">
+            <span class="small">阶段灯：探活→L0→批量→分流→报告</span>
+          </div>
+          <div class="card" style="padding:0;overflow:hidden">
+            <table>
+              <thead><tr><th>进程ID</th><th>名称</th><th>任务类型</th><th>特性</th><th>状态</th><th>当前阶段</th><th>健康度</th><th>负责人</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td>EXEC-2041</td><td>营销系统·保存接口</td><td><span class="tag blue">高码Java</span></td><td>基本功能</td><td><span class="tag blue">执行中</span></td><td><span class="stages"><span class="stage-dot done"></span><span class="stage-dot done"></span><span class="stage-dot running"></span><span class="stage-dot"></span><span class="stage-dot"></span></span></td><td>良好</td><td>陈昕尧</td><td><a onclick="showPage('observe')">观测</a>·<a>续跑</a>·<a>中止</a></td></tr>
+                <tr><td>EXEC-2039</td><td>门户Web回归</td><td><span class="tag blue">低码</span></td><td>场景化</td><td><span class="tag amber">待处理</span></td><td><span class="stages"><span class="stage-dot done"></span><span class="stage-dot done"></span><span class="stage-dot done"></span><span class="stage-dot wait"></span><span class="stage-dot"></span></span></td><td>关注</td><td>李锋</td><td><a onclick="showPage('observe')">观测</a>·<a>续跑</a></td></tr>
+                <tr><td>EXEC-2037</td><td>DFX性能基线</td><td><span class="tag blue">高码Java</span></td><td>性能</td><td><span class="tag red">失败</span></td><td><span class="stages"><span class="stage-dot fail"></span><span class="stage-dot"></span><span class="stage-dot"></span><span class="stage-dot"></span><span class="stage-dot"></span></span></td><td>—</td><td>何凯</td><td><a onclick="showPage('observe')">观测</a>·<a>重跑</a></td></tr>
+                <tr><td>EXEC-2036</td><td>InMemory生命周期</td><td><span class="tag blue">场景化工作流</span></td><td>基本功能</td><td><span class="tag green">已完成</span></td><td><span class="stages"><span class="stage-dot done"></span><span class="stage-dot done"></span><span class="stage-dot done"></span><span class="stage-dot done"></span><span class="stage-dot done"></span></span></td><td>良好</td><td>杨辉</td><td><a onclick="showPage('results')">报告</a>·<a>复制</a>·<a>归档</a></td></tr>
+                <tr><td>EXEC-2030</td><td>Example样例验证</td><td><span class="tag blue">高码Python</span></td><td>基本功能</td><td><span class="tag gray">已中止</span></td><td><span class="stages"><span class="stage-dot done"></span><span class="stage-dot done"></span><span class="stage-dot"></span><span class="stage-dot"></span><span class="stage-dot"></span></span></td><td>—</td><td>林佳萍</td><td><a>复制</a>·<a>归档</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="hint" style="margin-top:10px">⚠ 复制任务记录"特性勾选+脚本ID+版本号"快照，资产侧后续修改不影响已归档进程可复现性。</div>
+        </div>
+
+        <!-- 新建任务向导（2步） -->
+        <div class="tabpanel" id="tab-tasknew">
+          <div class="stepper">
+            <div class="step active" id="ws1" onclick="wizardStep(1)"><span class="n">1</span>测试对象选择</div>
+            <div class="step" id="ws2" onclick="wizardStep(2)"><span class="n">2</span>测试特性选择</div>
+          </div>
+
+          <div class="card">
+            <!-- step1 -->
+            <div class="wpanel" id="wp1">
+              <h3>步骤1 · 测试对象选择</h3>
+              <div class="grid two-col">
+                <div class="field"><label>被测对象</label><select><option>营销系统 v2.4.1 (测试-SUT)</option><option>门户系统 v3.0</option></select></div>
+                <div class="field"><label>任务类型</label>
+                  <div class="radio-row">
+                    <label><input type="radio" name="tt" checked> 高码 Java</label>
+                    <label><input type="radio" name="tt"> 高码 Python</label>
+                    <label><input type="radio" name="tt"> 低码</label>
+                    <label><input type="radio" name="tt"> 场景化工作流</label>
+                  </div>
+                  <div class="small" style="margin-top:4px">任务类型决定步骤2 的特性清单口径与带出的脚本/工作流类型</div>
+                </div>
+              </div>
+              <div class="btn-row"><button class="btn ghost sm" onclick="showPage('knowledge')">管理环境资产 →</button><button class="btn" onclick="wizardStep(2)">下一步 →</button></div>
+            </div>
+
+            <!-- step2 -->
+            <div class="wpanel" id="wp2" style="display:none">
+              <h3>步骤2 · 测试特性选择 <span class="small">对象：营销系统 v2.4.1 · 任务类型：高码 Java</span></h3>
+              <div class="grid" style="grid-template-columns:1fr 1fr;gap:12px">
+                <div class="card" style="box-shadow:none">
+                  <h3>特性清单（L0 含四类子类） <a class="small">[全选 L0]</a></h3>
+                  <ul class="chk">
+                    <li class="grp">▽ L0 · 基本功能测试</li>
+                    <li><input type="checkbox" checked> 保存接口 <span class="small">(脚本 4)</span></li>
+                    <li><input type="checkbox" checked> 查询接口 <span class="small">(脚本 3)</span></li>
+                    <li class="grp">▽ L0 · DFX 测试</li>
+                    <li><input type="checkbox"> 可靠性 <span class="small">☐ 安全 ☐ 兼容</span></li>
+                    <li class="grp">▽ L0 · 性能测试</li>
+                    <li><input type="checkbox"> 基线性能 <span class="small">(脚本 2)</span></li>
+                    <li class="grp">▽ L0 · 场景化测试</li>
+                    <li><input type="checkbox"> 释放-加载端到端 <span class="small">(工作流 1)</span></li>
+                    <li class="grp">▽ L1 · 主功能</li>
+                    <li><input type="checkbox"> 释放接口 <span class="small">(脚本 2)</span></li>
+                    <li class="grp">▽ L2 · 边界/异常</li>
+                    <li><input type="checkbox"> 并发写 <span class="small">(脚本 2)</span></li>
+                  </ul>
+                </div>
+                <div class="card" style="box-shadow:none">
+                  <h3>自动带出的测试脚本 <span class="readonly-tag">只读</span></h3>
+                  <table>
+                    <thead><tr><th>脚本名</th><th>类型</th><th>断言级</th><th>判据</th><th>版本</th></tr></thead>
+                    <tbody>
+                      <tr><td>tc_save_inmemory</td><td>API</td><td>L0</td><td>C-12</td><td>v3</td></tr>
+                      <tr><td>tc_query_checkpoint</td><td>API</td><td>L1</td><td>C-13</td><td>v2</td></tr>
+                      <tr><td>tc_perf_baseline</td><td>DFx</td><td>L0</td><td>—</td><td>v1</td></tr>
+                    </tbody>
+                  </table>
+                  <div class="hint" style="margin-top:8px">⚠ 编辑脚本请到 <a onclick="showPage('scripts')">脚本管理</a></div>
+                  <div class="small" style="margin-top:6px">用例配额提示（advisory）：异常≤3 / 质量≤2</div>
+                </div>
+              </div>
+              <div class="btn-row"><button class="btn ghost" onclick="wizardStep(1)">上一步</button><button class="btn" onclick="alert('（示意）已生成执行进程 EXEC-2042 + progress 指针');showPage('observe')">▶ 发起执行</button></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== 执行观测台 ===== -->
+      <section class="page" id="page-observe">
+        <div class="page-title">执行观测台 <span class="sub">EXEC-2041 · 营销系统·保存接口 · 高码Java · 健康度：良好</span>
+          <button class="btn ghost sm" onclick="showPage('tasks')">← 返回任务</button>
+          <button class="btn sm">续跑</button><button class="btn ghost sm">中止</button>
+        </div>
+        <div class="grid three-col">
+          <div class="card">
+            <h3>阶段时间轴</h3>
+            <div class="v-stages">
+              <div class="v-stage"><div class="t"><span class="stage-dot done"></span>探活 ✓</div><div class="m">2s · SUT 就绪</div></div>
+              <div class="v-stage"><div class="t"><span class="stage-dot done"></span>L0 金标准 ✓</div><div class="m">12s · 4/4 通过</div></div>
+              <div class="v-stage active"><div class="t"><span class="stage-dot running"></span>批量执行 ●</div><div class="m">已执行 42/68 · pytest+httpx</div><span class="flag"><span class="tag blue">在跑</span></span></div>
+              <div class="v-stage"><div class="t"><span class="stage-dot"></span>留痕分流 ○</div><div class="m">待批量完成</div></div>
+              <div class="v-stage"><div class="t"><span class="stage-dot"></span>报告产出 ○</div><div class="m">—</div></div>
+            </div>
+          </div>
+          <div class="card">
+            <h3>当前阶段：批量执行 <span class="tag blue">在跑</span></h3>
+            <div class="kv">
+              <div class="k">输入产物</div><div>L0_results（4 条金标准通过）</div>
+              <div class="k">输出产物</div><div>case_results / trace 逐帧</div>
+              <div class="k">关键技术</div><div>据 L0 范式批量生成执行 · 黑盒(pytest+httpx)</div>
+              <div class="k">进度</div><div>42 / 68</div>
+            </div>
+            <div class="sep"></div>
+            <h3 style="margin-bottom:6px">实时日志（逐帧 / 可过滤）</h3>
+            <div class="mono">[10:42:03] POST /api/save  200  18ms  assert exists==true  ✓ 通过
+[10:42:04] POST /api/release 200  12ms  ✓ 通过
+[10:42:05] POST /api/load   500  9ms   assert exists==true  ✗ 待分流
+[10:42:06] GET  /api/query  200  22ms  ✓ 通过</div>
+          </div>
+          <div class="card">
+            <h3>产物文件树</h3>
+            <div class="tree">
+              <div class="node sel">📁 progress（指针）</div>
+              <div class="indent">
+                <div class="node">📄 L0_results ✓</div>
+                <div class="node">📄 case_results ●</div>
+                <div class="node">📁 trace 逐帧</div>
+                <div class="node">📄 report ○</div>
+              </div>
+            </div>
+            <div class="sep"></div>
+            <h3>判据快照（契约·只读）</h3>
+            <div class="kv"><div class="k">契约版本</div><div>contract.md v5</div><div class="k">条目</div><div>C-12 save / C-13 query</div></div>
+            <div class="hint" style="margin-top:8px">⚠ 脚本修改请到 <a onclick="showPage('scripts')">脚本管理</a></div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <h3>交互轨迹回放（请求/响应/事件逐帧） <span class="small">全程留痕 · 可复盘可归因</span></h3>
+          <div class="grid" style="grid-template-columns:240px 1fr;gap:0">
+            <div style="border-right:1px solid var(--border)">
+              <div class="tree">
+                <div class="node sel">#42 POST /save ✓</div>
+                <div class="node">#43 POST /release ✓</div>
+                <div class="node">#44 POST /load ✗ <span class="tag red" style="margin-left:4px">缺陷</span></div>
+                <div class="node">#45 GET /query ✓</div>
+              </div>
+            </div>
+            <div style="padding:10px">
+              <div class="kv">
+                <div class="k">请求</div><div>POST /api/load {key:"released-then-load"}</div>
+                <div class="k">响应</div><div>500 {exists:true}</div>
+                <div class="k">断言判定</div><div><span class="tag red">失败</span> 预期 exists==false</div>
+                <div class="k">责任分类</div><div>
+                  <button class="btn sm">确认缺陷</button>
+                  <button class="btn ghost sm">标记自修</button>
+                  <button class="btn ghost sm">标记拦截</button>
+                  <button class="btn ghost sm">暂不满足</button>
+                </div>
+                <div class="k">耗时</div><div>9ms</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== 结果管理 ===== -->
+      <section class="page" id="page-results">
+        <div class="page-title">测试结果管理 <span class="sub">报告输出 + 模板 + 缺陷分析</span></div>
+        <div class="tabs">
+          <div class="tab active" onclick="switchTab(this,'tab-replist')">报告列表</div>
+          <div class="tab" onclick="switchTab(this,'tab-repdetail')">报告详情</div>
+          <div class="tab" onclick="switchTab(this,'tab-repcompare')">报告对比</div>
+          <div class="tab" onclick="switchTab(this,'tab-reptpl')">报告模板管理</div>
+        </div>
+
+        <div class="tabpanel active" id="tab-replist">
+          <div class="btn-row"><button class="btn">生成报告</button><input class="field" style="display:inline;width:240px;padding:6px" placeholder="筛选：进程/特性/任务类型/时间"></div>
+          <div class="card" style="padding:0;overflow:hidden">
+            <table>
+              <thead><tr><th>报告ID</th><th>进程</th><th>特性类</th><th>任务类型</th><th>时间</th><th>通过率</th><th>缺陷</th><th>五分类</th><th>模板</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td>RPT-118</td><td>EXEC-2036</td><td>基本功能</td><td>场景化工作流</td><td>10:20</td><td>92%</td><td>1</td><td><span class="tag green">通过8</span><span class="tag red">缺陷1</span></td><td>缺陷分析</td><td><a onclick="switchTabById('tab-repdetail')">查看</a>·<a>下载</a>·<a onclick="switchTabById('tab-repcompare')">对比</a></td></tr>
+                <tr><td>RPT-117</td><td>EXEC-2031</td><td>性能</td><td>高码Java</td><td>昨日</td><td>88%</td><td>2</td><td><span class="tag green">通过14</span><span class="tag amber">暂不满足2</span></td><td>执行结果简报</td><td><a onclick="switchTabById('tab-repdetail')">查看</a>·<a>下载</a></td></tr>
+                <tr><td>RPT-116</td><td>EXEC-2028</td><td>DFX</td><td>高码Java</td><td>昨日</td><td>95%</td><td>0</td><td><span class="tag green">通过20</span></td><td>质量评审</td><td><a onclick="switchTabById('tab-repdetail')">查看</a>·<a>下载</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="tabpanel" id="tab-repdetail">
+          <div class="hint" style="margin-bottom:10px">报告头：RPT-118 · 进程 EXEC-2036 · 特性 基本功能 · 任务类型 场景化工作流 · 模板 缺陷分析 · 自动生成</div>
+          <div class="tabs" style="margin-top:0">
+            <div class="tab active" onclick="switchTab(this,'rd1')">摘要</div>
+            <div class="tab" onclick="switchTab(this,'rd2')">覆盖</div>
+            <div class="tab" onclick="switchTab(this,'rd3')">缺陷</div>
+            <div class="tab" onclick="switchTab(this,'rd4')">差异</div>
+            <div class="tab" onclick="switchTab(this,'rd5')">交互轨迹</div>
+            <div class="tab" onclick="switchTab(this,'rd6')">原始</div>
+          </div>
+          <div class="tabpanel active" id="rd1"><div class="ph tall">📊 通过率 92% / 五分类环形 / 健康度 良好 / 门控结果</div></div>
+          <div class="tabpanel" id="rd2"><div class="ph tall">功能点→用例映射 + 覆盖关系 + 溯源标记</div></div>
+          <div class="tabpanel" id="rd3">
+            <div class="card">
+              <h3>DEF-118 · released-then-load <span class="tag red">缺陷</span></h3>
+              <div class="kv">
+                <div class="k">现象/预期/实际</div><div>释放后 load 返回 exists=true / 预期 false / 实际 true(500)</div>
+                <div class="k">五分类归责</div><div><span class="tag red">缺陷</span>（强制选分类并填依据，不弱化）</div>
+                <div class="k">双证据</div><div>故障库条目 F-08(advisory) + 实测结果(500)</div>
+                <div class="k">根因分析</div><div>release 未清 checkpoint 缓存</div>
+                <div class="k">复验证据</div><div>门③启用时：前红后绿(确定性复跑,非自证)</div>
+                <div class="k">关联契约</div><div>C-12 save（判据·只读）</div>
+              </div>
+              <div class="btn-row" style="margin-top:10px"><button class="btn sm">确认缺陷</button><button class="btn ghost sm">标记自修</button><button class="btn ghost sm">标记拦截</button><button class="btn ghost sm">提 issue</button><button class="btn ghost sm" onclick="alert('门③默认关闭')">触发自动修复(门③)</button></div>
+            </div>
+          </div>
+          <div class="tabpanel" id="rd4"><div class="ph tall">与上次/基线版本的结果 diff（契约/用例/结果）</div></div>
+          <div class="tabpanel" id="rd5"><div class="card"><a onclick="showPage('observe')">→ 跳转观测台逐帧回放</a></div></div>
+          <div class="tabpanel" id="rd6"><div class="mono">report.md 原文 + case_results 数据 ...</div></div>
+        </div>
+
+        <div class="tabpanel" id="tab-repcompare">
+          <div class="grid two-col">
+            <div class="card"><h3>RPT-118 (EXEC-2036)</h3><div class="kv"><div class="k">通过率</div><div>92%</div><div class="k">缺陷</div><div>1</div><div class="k">五分类</div><div>通过8/缺陷1</div></div></div>
+            <div class="card"><h3>RPT-117 (EXEC-2031)</h3><div class="kv"><div class="k">通过率</div><div>88%</div><div class="k">缺陷</div><div>2</div><div class="k">五分类</div><div>通过14/暂不满足2</div></div></div>
+          </div>
+          <div class="card" style="margin-top:12px"><h3>结果 diff</h3><div class="ph tall">契约/用例/结果 差异对比占位</div></div>
+        </div>
+
+        <div class="tabpanel" id="tab-reptpl">
+          <div class="btn-row"><button class="btn" onclick="switchTabById('tab-tpledit')">+ 新建模板</button></div>
+          <div class="card" style="padding:0;overflow:hidden">
+            <table>
+              <thead><tr><th>模板名</th><th>受众</th><th>场景</th><th>版本</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td>执行结果简报</td><td>研发</td><td>自测</td><td>v2</td><td><a onclick="switchTabById('tab-tpledit')">编辑</a></td></tr>
+                <tr><td>缺陷分析报告</td><td>测试</td><td>交付</td><td>v3</td><td><a onclick="switchTabById('tab-tpledit')">编辑</a></td></tr>
+                <tr><td>质量评审报告</td><td>管理</td><td>评审</td><td>v1</td><td><a onclick="switchTabById('tab-tpledit')">编辑</a></td></tr>
+                <tr><td>DFx 专项报告</td><td>测试</td><td>性能/可靠/安全/兼容</td><td>v1</td><td><a onclick="switchTabById('tab-tpledit')">编辑</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="tabpanel" id="tab-tpledit" style="display:none">
+          <div class="card"><h3>模板编辑器</h3>
+            <div class="grid two-col">
+              <div><div class="field"><label>模板名</label><input value="缺陷分析报告"></div>
+                <div class="field"><label>占位变量</label><input value="{通过率} {缺陷列表} {五分类} {双证据}"></div>
+                <div class="ph mid">字段拖拽区</div>
+              </div>
+              <div class="ph tall">段落编排预览</div>
+            </div>
+            <div class="btn-row"><button class="btn">保存</button><button class="btn ghost" onclick="switchTabById('tab-reptpl')">返回</button></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== 脚本管理 ===== -->
+      <section class="page" id="page-scripts">
+        <div class="page-title">脚本管理 <span class="sub">唯一维护入口 · 四类脚本 + 场景化工作流 · 脚本只读引用</span></div>
+        <div class="tabs">
+          <div class="tab active" onclick="switchTab(this,'tab-sclist')">脚本列表</div>
+          <div class="tab" onclick="switchTab(this,'tab-scdetail')">脚本详情</div>
+        </div>
+
+        <div class="tabpanel active" id="tab-sclist">
+          <div class="grid" style="grid-template-columns:200px 1fr;gap:12px">
+            <div class="card">
+              <h3>分类</h3>
+              <div class="tree">
+                <div class="node sel">全部</div>
+                <div class="indent">
+                  <div class="node">API 脚本</div>
+                  <div class="node">Web 脚本</div>
+                  <div class="node">DFx 脚本</div>
+                  <div class="node">Example 脚本</div>
+                  <div class="node">场景化工作流</div>
+                </div>
+                <div class="sep"></div>
+                <div class="small">按任务类型：<br>高码Java/Python/低码</div>
+              </div>
+            </div>
+            <div class="card" style="padding:0;overflow:hidden">
+              <div class="btn-row" style="padding:10px"><button class="btn">+ 新建</button><button class="btn ghost">导入</button><button class="btn ghost">批量操作</button><input class="field" style="display:inline;width:180px;padding:6px;margin-left:auto" placeholder="筛选：类型/特性/L级"></div>
+              <table>
+                <thead><tr><th>脚本名</th><th>类型</th><th>特性</th><th>L级</th><th>任务类型</th><th>断言级</th><th>判据</th><th>版本</th><th>状态</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr><td><a onclick="switchTabById('tab-scdetail')">tc_save_inmemory</a></td><td>API</td><td>保存接口</td><td><span class="tag blue">L0</span></td><td>高码Java</td><td>L0</td><td>C-12</td><td>v3</td><td><span class="tag green">生效</span></td><td><a onclick="switchTabById('tab-scdetail')">编辑</a></td></tr>
+                  <tr><td>tc_query_checkpoint</td><td>API</td><td>查询接口</td><td><span class="tag blue">L0</span></td><td>高码Java</td><td>L1</td><td>C-13</td><td>v2</td><td><span class="tag green">生效</span></td><td><a onclick="switchTabById('tab-scdetail')">编辑</a></td></tr>
+                  <tr><td>tc_web_portal_login</td><td>Web</td><td>登录</td><td><span class="tag blue">L0</span></td><td>低码</td><td>L0</td><td>C-20</td><td>v1</td><td><span class="tag green">生效</span></td><td><a onclick="switchTabById('tab-scdetail')">编辑</a></td></tr>
+                  <tr><td>tc_perf_baseline</td><td>DFx</td><td>基线性能</td><td><span class="tag blue">L0</span></td><td>高码Java</td><td>L2</td><td>—</td><td>v1</td><td><span class="tag green">生效·基线</span></td><td><a onclick="switchTabById('tab-scdetail')">编辑</a></td></tr>
+                  <tr><td>wf_release_lifecycle</td><td>场景化工作流</td><td>释放-加载</td><td><span class="tag blue">L0</span></td><td>场景化工作流</td><td>—</td><td>C-12/13</td><td>v1</td><td><span class="tag green">生效</span></td><td><a onclick="switchTabById('tab-scdetail')">维护</a></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="tabpanel" id="tab-scdetail" style="display:none">
+          <div class="btn-row"><button class="btn ghost sm" onclick="switchTabById('tab-sclist')">← 返回列表</button><span class="hint">✏ 资产库·可编辑维护</span></div>
+          <div class="card">
+            <h3>tc_save_inmemory <span class="tag green">生效</span> <span class="small">v3 · API · L级 L0 · 高码Java · 断言L0 · 判据 C-12</span></h3>
+            <div class="tabs">
+              <div class="tab active" onclick="switchTab(this,'sd1')">概览</div>
+              <div class="tab" onclick="switchTab(this,'sd2')">断言与判据</div>
+              <div class="tab" onclick="switchTab(this,'sd3')">执行历史</div>
+              <div class="tab" onclick="switchTab(this,'sd4')">版本</div>
+              <div class="tab" onclick="switchTab(this,'sd5')">Mock 配置</div>
+            </div>
+            <div class="tabpanel active" id="sd1">
+              <div class="grid two-col">
+                <div class="field"><label>名称</label><input value="tc_save_inmemory"></div>
+                <div class="field"><label>L级 / 任务类型</label><select><option>L0 / 高码Java</option></select></div>
+                <div class="field"><label>特性</label><input value="保存接口"></div>
+                <div class="field"><label>框架</label><select><option>pytest+httpx</option><option>Playwright</option><option>design_only</option></select></div>
+              </div>
+              <div class="field"><label>代码视图（可编辑）</label><div class="mono">def test_save_then_exists(client):
+    r = client.post("/api/save", json={"key":"k1"})
+    assert r.json()["exists"] == True</div></div>
+            </div>
+            <div class="tabpanel" id="sd2"><div class="card">断言1 → 契约 C-12 (权威判据) ；关联故障条目 F-08 (advisory)</div></div>
+            <div class="tabpanel" id="sd3"><div class="card">历次执行：EXEC-2036 92% · EXEC-2020 95% · <a onclick="showPage('results')">→ 结果管理</a></div></div>
+            <div class="tabpanel" id="sd4"><div class="ph tall">版本树 v1→v2→v3 · diff · 回滚</div></div>
+            <div class="tabpanel" id="sd5"><div class="grid three-col"><div class="ph short">功能 Mock</div><div class="ph short">场景 Mock</div><div class="ph short">异常 Mock（固定种子）</div></div></div>
+            <div class="btn-row"><button class="btn">保存</button><button class="btn ghost">发布新版本</button></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== 知识中心 ===== -->
+      <section class="page" id="page-knowledge">
+        <div class="page-title">知识中心 <span class="sub">知识类资产 · 资产仅作 advisory</span></div>
+        <div class="tabs">
+          <div class="tab active" onclick="switchTab(this,'tab-kb')">知识库</div>
+          <div class="tab" onclick="switchTab(this,'tab-fault')">故障库</div>
+          <div class="tab" onclick="switchTab(this,'tab-env')">环境变量</div>
+          <div class="tab" onclick="switchTab(this,'tab-contract')">契约管理</div>
+        </div>
+
+        <!-- 知识库 -->
+        <div class="tabpanel active" id="tab-kb">
+          <div class="btn-row"><button class="btn">+ 新增</button><span class="small">模板库 / 产品规格·特性文档 / 测试框架规范</span></div>
+          <div class="card" style="padding:0;overflow:hidden">
+            <table>
+              <thead><tr><th>类型</th><th>名称</th><th>内容</th><th>来源</th><th>版本</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td><span class="tag blue">模板库</span></td><td>测试设计模板</td><td>规范用例输出件格式</td><td>不依赖人</td><td>v2</td><td><a>编辑</a></td></tr>
+                <tr><td><span class="tag blue">模板库</span></td><td>报告模板库</td><td>结果管理模板权威源</td><td>不依赖人</td><td>v3</td><td><a>编辑</a></td></tr>
+                <tr><td><span class="tag green">产品规格</span></td><td>营销系统特性文档</td><td>DFx 指标 / 特性设计</td><td>开发提供</td><td>v2.4</td><td><a>编辑</a></td></tr>
+                <tr><td><span class="tag amber">框架规范</span></td><td>Pytest/Playwright 语法</td><td>Harness 约束·命名规范</td><td>不依赖人</td><td>v1</td><td><a>编辑</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 故障库 -->
+        <div class="tabpanel" id="tab-fault">
+          <div class="btn-row"><button class="btn">+ 新增故障条目</button><span class="hint">⚠ advisory 建议层 · 不进确定性匹配引擎</span></div>
+          <div class="card" style="padding:0;overflow:hidden">
+            <table>
+              <thead><tr><th>条目</th><th>维度</th><th>场景模板</th><th>断言模式</th><th>来源</th><th>状态</th><th>接入</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td>F-08 释放后状态残留</td><td>功能</td><td>边界/状态</td><td>状态验证</td><td>历史缺陷泛化</td><td><span class="tag green">已合入</span></td><td><span class="switch on" onclick="this.classList.toggle('on')"></span></td><td><a>编辑</a></td></tr>
+                <tr><td>F-09 并发写冲突</td><td>性能</td><td>组合/DFx</td><td>assert_close</td><td>测试经验</td><td><span class="tag amber">待评审</span></td><td><span class="switch" onclick="this.classList.toggle('on')"></span></td><td><a>编辑</a></td></tr>
+                <tr><td>F-10 兼容性回退</td><td>场景</td><td>等价/状态</td><td>状态验证</td><td>局点案例</td><td><span class="tag green">已合入</span></td><td><span class="switch on" onclick="this.classList.toggle('on')"></span></td><td><a>编辑</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="card" style="margin-top:12px"><h3>故障条目 F-08 详情</h3>
+            <div class="kv">
+              <div class="k">来源链</div><div>历史缺陷 → issue #332 → 泛化（反思智能体）</div>
+              <div class="k">使用情况</div><div>被 tc_save_inmemory 引用 · 触发发现 DEF-118</div>
+              <div class="k">评审</div><div>合入需人工把关 · 已评审</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 环境变量 -->
+        <div class="tabpanel" id="tab-env">
+          <div class="btn-row"><button class="btn">+ 新增环境</button></div>
+          <div class="card" style="padding:0;overflow:hidden">
+            <table>
+              <thead><tr><th>环境</th><th>软件版本</th><th>运行时</th><th>配置变量</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td>测试-SUT</td><td>v2.4.1</td><td>agent-runtime-java</td><td>BASE_URL=10.x</td><td><a>编辑</a></td></tr>
+                <tr><td>开发-DEV</td><td>v2.5.0-SNAPSHOT</td><td>agent-runtime-python</td><td>BASE_URL=10.y</td><td><a>编辑</a></td></tr>
+                <tr><td>生产-PROD(只读)</td><td>v2.4.0</td><td>EDPAgent</td><td>—</td><td><a>查看</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 契约管理 -->
+        <div class="tabpanel" id="tab-contract">
+          <div class="btn-row"><button class="btn">+ 新增契约</button><span class="small">判据来源（运行前已就绪）</span></div>
+          <div class="card" style="padding:0;overflow:hidden">
+            <table>
+              <thead><tr><th>契约条目</th><th>Rest API Schema</th><th>请求/响应模板</th><th>Mock 规则</th><th>版本</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td>C-12 save</td><td>POST /api/save</td><td>{exists:true}</td><td>三层隔离·固定种子</td><td>v5</td><td><a>编辑</a></td></tr>
+                <tr><td>C-13 query</td><td>GET /api/query</td><td>{items:[]}</td><td>三层隔离</td><td>v4</td><td><a>编辑</a></td></tr>
+                <tr><td>C-20 login</td><td>POST /api/login</td><td>{token}</td><td>—</td><td>v2</td><td><a>编辑</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== 系统设置 ===== -->
+      <section class="page" id="page-settings">
+        <div class="page-title">系统设置</div>
+        <div class="tabs">
+          <div class="tab active" onclick="switchTab(this,'set1')">环境与租户</div>
+          <div class="tab" onclick="switchTab(this,'set2')">权限 (RBAC)</div>
+          <div class="tab" onclick="switchTab(this,'set3')">审计</div>
+          <div class="tab" onclick="switchTab(this,'set4')">集成</div>
+        </div>
+        <div class="tabpanel active" id="set1"><div class="card">多环境切换：开发/测试/生产 SUT</div></div>
+        <div class="tabpanel" id="set2"><div class="card">角色：执行指挥(只读脚本) / 结果分析(只读) / 资产治理(脚本管理+知识中心写)</div></div>
+        <div class="tabpanel" id="set3"><div class="card">审计：发起/续跑/中止/分流/新建脚本/合入资产 全留痕</div></div>
+        <div class="tabpanel" id="set4"><div class="card">集成：自动化流水线触发 · PR/issue 推送配置(可选)</div></div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- STATUSBAR -->
+  <div class="statusbar">
+    <span>当前进程：<b class="live">EXEC-2041</b></span>
+    <span>阶段：批量执行 ●</span>
+    <span>progress 指针：42/68</span>
+    <span>健康度：良好</span>
+    <span style="flex:1"></span>
+    <span class="live">▶ [10:42:06] POST /api/load 500 — 待分流</span>
+  </div>
+</div>
+
+<script>
+  function showPage(id){
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    var el=document.getElementById('page-'+id); if(el) el.classList.add('active');
+    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+    var nav=document.querySelector('.nav-item[data-page="'+id+'"]');
+    if(nav) nav.classList.add('active');
+    document.getElementById('content').scrollTop=0;
+  }
+  function activatePanel(el){
+    var parent=el.parentElement;
+    parent.querySelectorAll(':scope > .tabpanel').forEach(t=>{ t.classList.remove('active'); t.style.display='none'; });
+    el.classList.add('active'); el.style.display='block';
+  }
+  function switchTab(el,panelId){
+    var tabs=el.parentElement;
+    tabs.querySelectorAll(':scope > .tab').forEach(t=>t.classList.remove('active'));
+    el.classList.add('active');
+    var target=document.getElementById(panelId);
+    if(target) activatePanel(target);
+  }
+  function switchTabById(id){
+    var el=document.getElementById(id); if(!el) return;
+    var page=el.closest('.page');
+    var matched=null;
+    page.querySelectorAll('.tab').forEach(t=>{ var o=t.getAttribute('onclick')||''; if(o.indexOf("'"+id+"'")>=0) matched=t; });
+    if(matched){ switchTab(matched,id); return; }
+    activatePanel(el);
+    page.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  }
+  function wizardStep(n){
+    for(var i=1;i<=2;i++){ document.getElementById('wp'+i).style.display='none'; }
+    document.getElementById('wp'+n).style.display='block';
+    for(var i=1;i<=2;i++){
+      var s=document.getElementById('ws'+i);
+      s.classList.remove('active','done');
+      if(i<n) s.classList.add('done');
+      if(i===n) s.classList.add('active');
+    }
+  }
+  document.querySelectorAll('.nav-item').forEach(n=>{
+    n.addEventListener('click',()=>showPage(n.getAttribute('data-page')));
+  });
+</script>
+</body>
+</html>
