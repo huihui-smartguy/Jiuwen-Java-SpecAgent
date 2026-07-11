@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TestWise Runtime Config",
+  "type": "object",
+  "required": ["apiBaseUrl", "deploymentMode", "defaultLanguage", "sutTargets"],
+  "properties": {
+    "apiBaseUrl": { "type": "string" },
+    "deploymentMode": { "enum": ["process", "container"] },
+    "defaultLanguage": { "enum": ["zh", "en"] },
+    "enableMockFallback": { "type": "boolean" },
+    "auth": {
+      "type": "object",
+      "required": ["loginUrl", "registerUrl"],
+      "properties": {
+        "profileUrl": { "type": "string" },
+        "loginUrl": { "type": "string" },
+        "registerUrl": { "type": "string" },
+        "logoutUrl": { "type": "string" }
+      }
+    },
+    "sutTargets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "product", "scene", "version", "apiBaseUrl", "status"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "product": { "type": "string" },
+          "scene": { "type": "string" },
+          "version": { "type": "string" },
+          "apiBaseUrl": { "type": "string" },
+          "status": { "enum": ["healthy", "degraded", "offline"] }
+        }
+      }
+    }
+  }
+}

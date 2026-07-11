@@ -1,0 +1,23 @@
+{
+  "apiBaseUrl": "/api",
+  "deploymentMode": "container",
+  "defaultLanguage": "zh",
+  "enableMockFallback": false,
+  "auth": {
+    "profileUrl": "/identity/profile",
+    "loginUrl": "https://identity.example.test/login",
+    "registerUrl": "https://identity.example.test/register",
+    "logoutUrl": "https://identity.example.test/logout"
+  },
+  "sutTargets": [
+    {
+      "id": "production-java",
+      "name": "Java Production Verification",
+      "product": "java-product",
+      "scene": "regression",
+      "version": "v1.0.0",
+      "apiBaseUrl": "/api",
+      "status": "healthy"
+    }
+  ]
+}
