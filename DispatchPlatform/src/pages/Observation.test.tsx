@@ -95,4 +95,55 @@ describe('Observation', () => {
       expect.objectContaining({ status: 'success', canExportLogs: true })
     );
   });
+
+  test('renders a live nested terminal task without inventing a current command', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      await mockJson({
+        success: true,
+        task: {
+          id: activeTask.task_id,
+          status: 'completed',
+          progress: 100,
+          total_scripts: 2,
+          executed_scripts: 2,
+          failed_scripts: 0,
+          queue_position: -1,
+          log_dir: 'task_live',
+          download_url: 'http://testwise.local/api/download/task_live/execution.log'
+        }
+      })
+    );
+
+    renderObservation();
+
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: /export logs/i })).toHaveAttribute(
+        'href',
+        'http://testwise.local/api/download/task_live/execution.log'
+      );
+    });
+    expect(screen.getByText(/no current command has been returned/i)).toBeInTheDocument();
+    expect(screen.queryByText(/live log/i)).not.toBeInTheDocument();
+  });
+
+  test('shows the live queue position for a queued task', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      await mockJson({
+        success: true,
+        task: {
+          id: activeTask.task_id,
+          status: 'queued',
+          progress: 0,
+          total_scripts: 2,
+          executed_scripts: 0,
+          failed_scripts: 0,
+          queue_position: 3
+        }
+      })
+    );
+
+    renderObservation();
+
+    expect(await screen.findByText(/queue position: 3/i)).toBeInTheDocument();
+  });
 });

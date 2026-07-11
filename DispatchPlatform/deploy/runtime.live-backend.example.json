@@ -1,0 +1,17 @@
+{
+  "apiBaseUrl": "/api",
+  "deploymentMode": "process",
+  "defaultLanguage": "zh",
+  "enableMockFallback": false,
+  "sutTargets": [
+    {
+      "id": "heyi-api-integration",
+      "name": "合一版本 API",
+      "product": "合一版本",
+      "scene": "API",
+      "version": "Live",
+      "apiBaseUrl": "/api",
+      "status": "healthy"
+    }
+  ]
+}

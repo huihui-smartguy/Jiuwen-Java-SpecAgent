@@ -96,6 +96,7 @@ export const copy = {
     executionDetails: '执行详情',
     taskReference: '任务引用',
     taskQueued: '任务已入队',
+    queuePosition: '队列位置',
     executionInProgress: '正在执行',
     terminalState: '终态结果',
     polling: '正在刷新',
@@ -117,6 +118,7 @@ export const copy = {
     pending: '等待中',
     success: '成功',
     failed: '失败',
+    cancelled: '已取消',
     polling_error: '轮询异常'
   },
   en: {
@@ -214,6 +216,7 @@ export const copy = {
     executionDetails: 'Execution details',
     taskReference: 'Task reference',
     taskQueued: 'Task queued',
+    queuePosition: 'Queue position',
     executionInProgress: 'Execution in progress',
     terminalState: 'Terminal result',
     polling: 'Refreshing',
@@ -235,6 +238,7 @@ export const copy = {
     pending: 'Pending',
     success: 'Success',
     failed: 'Failed',
+    cancelled: 'Cancelled',
     polling_error: 'Polling error'
   }
 } as const;

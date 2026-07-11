@@ -7,7 +7,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { NavLink, Route, Routes } from 'react-router-dom';
 import { getCopy } from './i18n';
 import { activeTask as initialActiveTask } from './data/mockData';
-import { normalizeTaskStatus } from './api/client';
+import { normalizeCreatedTask } from './api/client';
 import type { Language, NormalizedTaskStatus, RuntimeConfig, SutTarget, TaskCreateResponse } from './types';
 import { Dashboard } from './pages/Dashboard';
 import { Tasks } from './pages/Tasks';
@@ -59,14 +59,7 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
     runtimeConfig
   };
   const handleTaskCreated = useCallback((response: TaskCreateResponse) => {
-    const task = normalizeTaskStatus({
-      success: response.success,
-      task_id: response.task_id,
-      status: response.status,
-      trigger_type: response.trigger_type,
-      started_at: response.created_at,
-      estimated_remaining: response.estimated_duration
-    });
+    const task = normalizeCreatedTask(response);
     setActiveTask(task);
     setSessionTasks((current) => [task, ...current.filter((item) => item.task_id !== task.task_id)]);
   }, []);

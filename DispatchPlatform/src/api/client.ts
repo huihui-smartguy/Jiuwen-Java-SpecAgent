@@ -4,9 +4,12 @@ import type {
   NormalizedTaskStatus,
   Script,
   ScriptQuery,
+  BackendTaskStatus,
   TaskCreateRequest,
   TaskCreateResponse,
-  TaskStatusResponse
+  TaskStatus,
+  TaskStatusResponse,
+  TriggerType
 } from '../types';
 
 interface FeatureResponse {
@@ -22,6 +25,38 @@ interface ScriptResponse {
   scripts: Script[];
   total: number;
   filters?: Record<string, string | null>;
+}
+
+interface LiveTaskCreateResponse {
+  success: boolean;
+  task_id: string;
+  status: BackendTaskStatus;
+  message: string;
+  queue_position?: number;
+  total_scripts?: number;
+  created_at?: string;
+  estimated_duration?: string;
+}
+
+interface LiveTask {
+  id?: string;
+  task_id?: string;
+  status: BackendTaskStatus;
+  progress?: number;
+  total_scripts?: number;
+  executed_scripts?: number;
+  failed_scripts?: number;
+  queue_position?: number;
+  started_at?: string;
+  completed_at?: string;
+  log_dir?: string;
+  download_url?: string;
+  error_message?: string;
+}
+
+interface LiveTaskStatusEnvelope {
+  success: boolean;
+  task: LiveTask;
 }
 
 export class ApiError extends Error {
@@ -42,6 +77,10 @@ function trimTrailingSlash(value: string): string {
   return value.endsWith('/') ? value.slice(0, -1) : value;
 }
 
+function isAbsoluteHttpUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value);
+}
+
 export function buildApiUrl(
   apiBaseUrl: string,
   path: string,
@@ -56,7 +95,7 @@ export function buildApiUrl(
     }
   });
 
-  return `${url.pathname}${url.search}`;
+  return isAbsoluteHttpUrl(base) ? url.toString() : `${url.pathname}${url.search}`;
 }
 
 async function readJson<T>(response: Response): Promise<T> {
@@ -111,21 +150,41 @@ export async function createTask(
     },
     body: JSON.stringify(payload)
   });
-  return readJson<TaskCreateResponse>(response);
+  const body = await readJson<LiveTaskCreateResponse>(response);
+
+  return {
+    success: body.success,
+    task_id: body.task_id,
+    status: mapBackendTaskStatus(body.status),
+    trigger_type: triggerTypeForRequest(payload),
+    message: body.message,
+    created_at: body.created_at,
+    estimated_duration: body.estimated_duration,
+    backend_status: body.status,
+    queue_position: body.queue_position,
+    total_scripts: body.total_scripts
+  };
 }
 
 export async function getTaskStatus(
   context: ApiContext,
-  taskId: string
+  taskId: string,
+  fallbackTriggerType: TriggerType = 'feature'
 ): Promise<TaskStatusResponse> {
   const response = await fetch(buildApiUrl(context.apiBaseUrl, `/tasks/${taskId}`), {
     headers: { Accept: 'application/json' }
   });
-  return readJson<TaskStatusResponse>(response);
+  const body = await readJson<LiveTaskStatusEnvelope | TaskStatusResponse>(response);
+
+  if (isLiveTaskStatusEnvelope(body)) {
+    return normalizeLiveTaskStatus(body, fallbackTriggerType);
+  }
+
+  return body;
 }
 
 export function normalizeTaskStatus(response: TaskStatusResponse): NormalizedTaskStatus {
-  const isTerminal = response.status === 'success' || response.status === 'failed';
+  const isTerminal = response.status === 'success' || response.status === 'failed' || response.status === 'cancelled';
   const logDownloadUrl = response.logs?.download_url;
 
   return {
@@ -135,4 +194,98 @@ export function normalizeTaskStatus(response: TaskStatusResponse): NormalizedTas
     canExportLogs: Boolean(isTerminal && logDownloadUrl),
     logDownloadUrl
   };
+}
+
+export function normalizeCreatedTask(response: TaskCreateResponse): NormalizedTaskStatus {
+  return normalizeTaskStatus({
+    success: response.success,
+    task_id: response.task_id,
+    status: response.status,
+    trigger_type: response.trigger_type,
+    backend_status: response.backend_status,
+    queue_position: response.queue_position,
+    total_scripts: response.total_scripts,
+    progress: response.total_scripts === undefined
+      ? undefined
+      : {
+          total_commands: response.total_scripts,
+          completed: 0,
+          failed: 0
+        },
+    started_at: response.created_at,
+    estimated_remaining: response.estimated_duration
+  });
+}
+
+function triggerTypeForRequest(payload: TaskCreateRequest): TriggerType {
+  if ('script_name' in payload) {
+    return 'scripts';
+  }
+  return 'level' in payload ? 'level' : 'feature';
+}
+
+function mapBackendTaskStatus(status: BackendTaskStatus): TaskStatus {
+  switch (status) {
+    case 'queued':
+    case 'pending':
+      return 'pending';
+    case 'running':
+      return 'running';
+    case 'completed':
+      return 'success';
+    case 'cancelled':
+      return 'cancelled';
+    case 'failed':
+      return 'failed';
+  }
+}
+
+function normalizeLiveTaskStatus(
+  response: LiveTaskStatusEnvelope,
+  fallbackTriggerType: TriggerType
+): TaskStatusResponse {
+  const task = response.task;
+  const status = mapBackendTaskStatus(task.status);
+  const totalCommands = task.total_scripts ?? 0;
+  const completed = task.executed_scripts ?? 0;
+  const failed = task.failed_scripts ?? 0;
+  const isTerminal = status === 'success' || status === 'failed' || status === 'cancelled';
+  const logs = task.log_dir || task.download_url
+    ? {
+        file_path: task.log_dir ?? '',
+        download_url: task.download_url
+      }
+    : undefined;
+
+  return {
+    success: response.success,
+    task_id: task.id ?? task.task_id ?? '',
+    status,
+    trigger_type: fallbackTriggerType,
+    backend_status: task.status,
+    queue_position: task.queue_position,
+    total_scripts: task.total_scripts,
+    progress: {
+      total_commands: totalCommands,
+      completed,
+      failed
+    },
+    result: isTerminal
+      ? {
+          total_commands: totalCommands,
+          success_count: Math.max(completed - failed, 0),
+          failed_count: failed,
+          error_message: task.error_message
+        }
+      : undefined,
+    logs,
+    started_at: task.started_at,
+    completed_at: task.completed_at
+  };
+}
+
+function isLiveTaskStatusEnvelope(
+  response: LiveTaskStatusEnvelope | TaskStatusResponse
+): response is LiveTaskStatusEnvelope {
+  return 'task' in response && Boolean(response.task);
 }

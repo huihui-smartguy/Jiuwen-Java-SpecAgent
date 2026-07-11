@@ -11,6 +11,7 @@ const statusTone: Record<SutHealth | UiTaskStatus, BadgeTone> = {
   running: 'info',
   success: 'success',
   failed: 'danger',
+  cancelled: 'neutral',
   polling_error: 'danger'
 };
 

@@ -30,7 +30,11 @@ The built artifact reads `/config/runtime.json` at startup. This keeps the same 
 
 The contract is defined by [`deploy/runtime-config.schema.json`](deploy/runtime-config.schema.json). Start from [`deploy/runtime.example.json`](deploy/runtime.example.json) for environment-specific values.
 
+For a temporary read-only integration against the live execution backend, use [`deploy/runtime.live-backend.example.json`](deploy/runtime.live-backend.example.json) with the Vite proxy described in the [process deployment guide](deploy/process.md).
+
 配置契约由 [`deploy/runtime-config.schema.json`](deploy/runtime-config.schema.json) 定义。环境配置可以从 [`deploy/runtime.example.json`](deploy/runtime.example.json) 开始填写。
+
+如需临时以只读方式联调真实执行后端，请使用 [`deploy/runtime.live-backend.example.json`](deploy/runtime.live-backend.example.json)，并按[进程级部署说明](deploy/process.md)配置 Vite 代理。
 
 ### Enterprise identity / 企业身份
 
@@ -52,8 +56,8 @@ The execution flow uses:
 - `POST /api/tasks`
 - `GET /api/tasks/{task_id}`
 
-Log export is terminal-only and uses `logs.download_url` from task status.
+Log export is terminal-only and uses the backend-provided download URL after compatible task responses are normalized.
 
-The Observation workspace polls `GET /api/tasks/{task_id}` every five seconds while a task is pending or running. It stops on success or failure; no live-log stream is created or simulated.
+The Observation workspace polls `GET /api/tasks/{task_id}` every five seconds while a task is pending or running. It stops on success, failure, or cancellation; no live-log stream is created or simulated.
 
-执行观测台会在任务处于等待或执行中时每五秒轮询 `GET /api/tasks/{task_id}`，成功或失败后停止。系统不会创建或模拟实时日志流。
+执行观测台会在任务处于等待或执行中时每五秒轮询 `GET /api/tasks/{task_id}`，成功、失败或取消后停止。系统不会创建或模拟实时日志流。

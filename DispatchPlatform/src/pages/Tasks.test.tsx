@@ -117,13 +117,19 @@ describe('Execute Tasks workspace', () => {
     );
   });
 
-  test('creates an explicit script task when script trigger mode is selected', async () => {
+  test('scopes explicit scripts to one feature and posts the backend-required context', async () => {
     const user = userEvent.setup();
     const onTaskCreated = vi.fn();
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
       const url = String(input);
       if (url.includes('/features')) {
-        return json({ success: true, product: selectedSut.product, scene: selectedSut.scene, features: [], total: 0 });
+        return json({
+          success: true,
+          product: selectedSut.product,
+          scene: selectedSut.scene,
+          features: [{ id: 'save', name: 'Save API', type: 'L0' }],
+          total: 1
+        });
       }
       if (url.includes('/scripts')) {
         return json({
@@ -160,14 +166,29 @@ describe('Execute Tasks workspace', () => {
     renderTasks(onTaskCreated);
     await user.click(screen.getByRole('tab', { name: /new task/i }));
     await user.selectOptions(screen.getByLabelText(/trigger mode/i), 'scripts');
+    await waitFor(() => expect(screen.getByRole('button', { name: /next/i })).toBeEnabled());
     await user.click(screen.getByRole('button', { name: /next/i }));
+    expect(await screen.findByLabelText(/feature/i)).toBeInTheDocument();
     await user.click(await screen.findByRole('checkbox', { name: /save_api_test/i }));
     await user.click(screen.getByRole('button', { name: /create task/i }));
 
     await waitFor(() => expect(onTaskCreated).toHaveBeenCalled());
     const postCall = fetchSpy.mock.calls.find(([, init]) => init?.method === 'POST');
     expect(postCall?.[1]).toEqual(
-      expect.objectContaining({ body: JSON.stringify({ script_name: ['save_api_test'] }) })
+      expect.objectContaining({
+        body: JSON.stringify({
+          product: selectedSut.product,
+          scene: selectedSut.scene,
+          feature: 'Save API',
+          script_name: ['save_api_test']
+        })
+      })
     );
+
+    const scopedScriptCall = fetchSpy.mock.calls.find(([input]) => {
+      const url = new URL(String(input), 'http://local.test');
+      return url.pathname.endsWith('/scripts') && url.searchParams.get('feature') === 'Save API';
+    });
+    expect(scopedScriptCall).toBeDefined();
   });
 });

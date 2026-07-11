@@ -23,6 +23,12 @@ Use process-level deployment for a VM, internal server, or early private deliver
    - `/api/features?product=高码java&scene=场景` reaches the backend.
    - `auth.profileUrl` returns the documented user profile or `401` behind an authenticated gateway.
 
+### Temporary live-backend verification
+
+For a short-lived local integration check, keep `apiBaseUrl` and every SUT `apiBaseUrl` as `/api`, disable mock fallback, and start Vite preview with `TESTWISE_API_PROXY_TARGET` set to the reachable backend origin. The preview proxy preserves the browser host, so backend-provided download URLs continue through TestWise rather than requiring browser CORS.
+
+Use [`runtime.live-backend.example.json`](runtime.live-backend.example.json) as the shape for the mounted local runtime configuration. Read-only verification calls only feature and script discovery endpoints; do not create or cancel tasks.
+
 ## 中文
 
 进程级部署适用于虚拟机、内部服务器或早期私有化交付。
@@ -45,3 +51,9 @@ Use process-level deployment for a VM, internal server, or early private deliver
    - 刷新 `/tasks` 或 `/observation` 能回退到 `index.html`。
    - `/api/features?product=高码java&scene=场景` 能到达后端。
    - 已认证网关下的 `auth.profileUrl` 返回约定的用户档案或 `401`。
+
+### 临时联调验证
+
+短期本地联调时，`apiBaseUrl` 和每个 SUT 的 `apiBaseUrl` 均保持为 `/api`，关闭演示数据回退，并使用设置了 `TESTWISE_API_PROXY_TARGET` 的 Vite preview 指向可访问的后端地址。Preview 代理会保留浏览器主机名，因此后端返回的日志下载地址仍通过 TestWise 访问，无需浏览器 CORS。
+
+本地运行时配置可参考 [`runtime.live-backend.example.json`](runtime.live-backend.example.json) 的结构。只读验证仅调用特性和脚本发现接口，不创建或取消任务。

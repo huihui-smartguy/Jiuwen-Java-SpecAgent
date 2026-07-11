@@ -45,7 +45,7 @@ export function Observation({
     queryKey: ['task-status', api.apiBaseUrl, activeTask.task_id],
     queryFn: async () => {
       try {
-        return normalizeTaskStatus(await getTaskStatus(api, activeTask.task_id));
+        return normalizeTaskStatus(await getTaskStatus(api, activeTask.task_id, activeTask.trigger_type));
       } catch (error) {
         if (runtimeConfig.enableMockFallback) {
           return activeTask;
@@ -64,7 +64,8 @@ export function Observation({
   const completedCommands = progress?.completed ?? task.result?.success_count ?? 0;
   const totalCommands = progress?.total_commands ?? task.result?.total_commands ?? 0;
   const failedCommands = progress?.failed ?? task.result?.failed_count ?? 0;
-  const terminalStage = task.status === 'failed' ? 'failed' : 'success';
+  const terminalStage = task.status === 'failed' || task.status === 'cancelled' ? task.status : 'success';
+  const terminalHasError = task.status === 'failed' || task.status === 'cancelled';
   const currentStage = task.status === 'pending' ? 0 : task.status === 'running' ? 1 : 2;
   const stages = [
     { key: 'pending', label: t.pending },
@@ -90,6 +91,11 @@ export function Observation({
         </div>
         <div className="observation-title-status">
           <span>{t.pollingEveryFiveSeconds}</span>
+          {task.backend_status === 'queued' && (task.queue_position ?? -1) > 0 && (
+            <span className="queue-position" aria-live="polite">
+              {t.queuePosition}: {task.queue_position}
+            </span>
+          )}
           <StatusBadge status={task.uiStatus} language={language} />
         </div>
       </div>
@@ -162,10 +168,10 @@ export function Observation({
           </div>
 
           {task.result && (
-            <div className={`observation-result ${task.status === 'failed' ? 'has-error' : ''}`}>
-              {task.status === 'failed' ? <AlertTriangle aria-hidden="true" /> : <Check aria-hidden="true" />}
+            <div className={`observation-result ${terminalHasError ? 'has-error' : ''}`}>
+              {terminalHasError ? <AlertTriangle aria-hidden="true" /> : <Check aria-hidden="true" />}
               <div>
-                <strong>{task.status === 'failed' ? t.failed : t.success}</strong>
+                <strong>{task.status === 'failed' ? t.failed : task.status === 'cancelled' ? t.cancelled : t.success}</strong>
                 {task.result.error_message && <span>{task.result.error_message}</span>}
               </div>
             </div>

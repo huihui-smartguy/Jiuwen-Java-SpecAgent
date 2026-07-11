@@ -2,7 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { ArrowRight, ChevronLeft, Play, Plus, Search } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { createTask, getFeatures, getScripts } from '../api/client';
+import { ApiError, createTask, getFeatures, getScripts } from '../api/client';
 import { getCopy } from '../i18n';
 import { mockFeatures, mockScripts } from '../data/mockData';
 import { StatusBadge } from '../components/StatusBadge';
@@ -46,6 +46,14 @@ function createFallbackTask(payload: TaskCreateRequest, triggerType: TriggerType
   };
 }
 
+function getRequestErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof ApiError) {
+    return error.code ? `${error.message} (${error.code})` : error.message;
+  }
+
+  return fallback;
+}
+
 export function Tasks({
   language,
   selectedSut,
@@ -62,6 +70,7 @@ export function Tasks({
   const [selectedLevel, setSelectedLevel] = useState('L0');
   const [selectedScriptNames, setSelectedScriptNames] = useState<string[]>([]);
   const api = useMemo(() => ({ apiBaseUrl: selectedSut.apiBaseUrl || runtimeConfig.apiBaseUrl }), [selectedSut.apiBaseUrl, runtimeConfig.apiBaseUrl]);
+  const requiresFeature = mode === 'feature' || mode === 'scripts';
 
   const featuresQuery = useQuery({
     queryKey: ['features', selectedSut.product, selectedSut.scene],
@@ -84,7 +93,7 @@ export function Tasks({
       const query = {
         product: selectedSut.product,
         scene: selectedSut.scene,
-        feature: mode === 'feature' ? selectedFeature || undefined : undefined,
+        feature: requiresFeature ? selectedFeature || undefined : undefined,
         level: mode === 'level' ? selectedLevel : undefined
       };
       try {
@@ -145,16 +154,21 @@ export function Tasks({
       return { product: selectedSut.product, scene: selectedSut.scene, level: selectedLevel };
     }
     if (mode === 'scripts') {
-      return { script_name: selectedScriptNames };
+      return {
+        product: selectedSut.product,
+        scene: selectedSut.scene,
+        feature: selectedFeature,
+        script_name: selectedScriptNames
+      };
     }
     return { product: selectedSut.product, scene: selectedSut.scene, feature: selectedFeature };
   }, [mode, selectedFeature, selectedLevel, selectedScriptNames, selectedSut.product, selectedSut.scene]);
 
-  const canAdvance = mode !== 'feature' || Boolean(selectedFeature);
+  const canAdvance = !requiresFeature || Boolean(selectedFeature);
   const canCreate =
     !creation.isPending &&
     (mode !== 'scripts' || selectedScriptNames.length > 0) &&
-    (mode !== 'feature' || Boolean(selectedFeature));
+    (!requiresFeature || Boolean(selectedFeature));
   const modeLabel = (value: TriggerType) =>
     value === 'feature' ? t.byFeature : value === 'level' ? t.byLevel : t.byScripts;
 
@@ -228,7 +242,14 @@ export function Tasks({
                   <tr key={task.task_id}>
                     <td className="mono-cell">{task.task_id}</td>
                     <td>{modeLabel(task.trigger_type)}</td>
-                    <td><StatusBadge status={task.uiStatus} language={language} /></td>
+                    <td>
+                      <div className="queue-status">
+                        <StatusBadge status={task.uiStatus} language={language} />
+                        {task.backend_status === 'queued' && (task.queue_position ?? -1) > 0 && (
+                          <span className="queue-position">{t.queuePosition}: {task.queue_position}</span>
+                        )}
+                      </div>
+                    </td>
                     <td>
                       {task.progress?.completed ?? 0}/{task.progress?.total_commands ?? task.result?.total_commands ?? 0}
                     </td>
@@ -298,7 +319,7 @@ export function Tasks({
               </div>
               <div className="task-builder-grid">
                 <div className="task-selector-panel">
-                  {mode === 'feature' && (
+                  {requiresFeature && (
                     <label className="field">
                       <span>{t.feature}</span>
                       <select value={selectedFeature} onChange={(event) => setSelectedFeature(event.target.value)}>
@@ -329,7 +350,11 @@ export function Tasks({
                       ))}
                     </fieldset>
                   )}
-                  {(featuresQuery.isError || scriptQuery.isError) && <p className="helper-text">{t.contextLoadFailed}</p>}
+                  {(featuresQuery.isError || scriptQuery.isError) && (
+                    <p className="helper-text">
+                      {getRequestErrorMessage(featuresQuery.error ?? scriptQuery.error, t.contextLoadFailed)}
+                    </p>
+                  )}
                 </div>
                 <div className="task-snapshot-panel">
                   <div className="table-search">
@@ -360,7 +385,11 @@ export function Tasks({
                   </div>
                 </div>
               </div>
-              {creation.isError && <p className="helper-text task-error">{t.taskCreateFailed}</p>}
+              {creation.isError && (
+                <p className="helper-text task-error">
+                  {getRequestErrorMessage(creation.error, t.taskCreateFailed)}
+                </p>
+              )}
               <div className="task-builder__actions">
                 <button className="button button--secondary" type="button" onClick={() => setStep(1)}>
                   <ChevronLeft aria-hidden="true" />

@@ -65,27 +65,53 @@ export interface Script {
   path: string;
 }
 
-export interface TaskCreateRequest {
-  product?: string;
-  scene?: string;
-  feature?: string;
-  level?: string;
-  script_name?: string[];
-}
-
 export type TriggerType = 'feature' | 'level' | 'scripts';
+
+export type TaskCreateRequest =
+  | {
+      product: string;
+      scene: string;
+      feature: string;
+      level?: never;
+      script_name?: never;
+    }
+  | {
+      product: string;
+      scene: string;
+      level: string;
+      feature?: never;
+      script_name?: never;
+    }
+  | {
+      product: string;
+      scene: string;
+      feature: string;
+      script_name: string[];
+      level?: never;
+    };
+
+export type BackendTaskStatus =
+  | 'queued'
+  | 'pending'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
 
 export interface TaskCreateResponse {
   success: boolean;
   task_id: string;
-  status: 'pending';
+  status: TaskStatus;
   trigger_type: TriggerType;
   message: string;
   created_at?: string;
   estimated_duration?: string;
+  backend_status?: BackendTaskStatus;
+  queue_position?: number;
+  total_scripts?: number;
 }
 
-export type TaskStatus = 'pending' | 'running' | 'success' | 'failed';
+export type TaskStatus = 'pending' | 'running' | 'success' | 'failed' | 'cancelled';
 export type UiTaskStatus = TaskStatus | 'polling_error';
 
 export interface TaskProgress {
@@ -113,6 +139,9 @@ export interface TaskStatusResponse {
   task_id: string;
   status: TaskStatus;
   trigger_type: TriggerType;
+  backend_status?: BackendTaskStatus;
+  queue_position?: number;
+  total_scripts?: number;
   progress?: TaskProgress;
   result?: TaskResult;
   logs?: TaskLogs;

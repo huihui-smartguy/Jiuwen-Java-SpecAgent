@@ -382,6 +382,11 @@ a {
   color: var(--info);
 }
 
+.status-badge--neutral {
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+}
+
 .account-menu {
   position: relative;
 }
@@ -955,6 +960,19 @@ tbody tr:hover td {
   gap: 8px;
   color: var(--text-secondary);
   font-size: 11px;
+  white-space: nowrap;
+}
+
+.queue-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.queue-position {
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 16px;
   white-space: nowrap;
 }
 
