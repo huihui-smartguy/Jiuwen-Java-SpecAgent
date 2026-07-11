@@ -25,6 +25,7 @@ interface PageProps {
   runtimeConfig: RuntimeConfig;
   sessionTasks: NormalizedTaskStatus[];
   onTaskCreated: (task: TaskCreateResponse) => void;
+  onTaskSelected: (task: NormalizedTaskStatus) => void;
 }
 
 type WorkspaceTab = 'queue' | 'new';
@@ -59,7 +60,8 @@ export function Tasks({
   selectedSut,
   runtimeConfig,
   sessionTasks,
-  onTaskCreated
+  onTaskCreated,
+  onTaskSelected
 }: PageProps) {
   const t = getCopy(language);
   const navigate = useNavigate();
@@ -254,7 +256,7 @@ export function Tasks({
                       {task.progress?.completed ?? 0}/{task.progress?.total_commands ?? task.result?.total_commands ?? 0}
                     </td>
                     <td>
-                      <Link className="table-link" to="/observation">
+                      <Link className="table-link" to="/observation" onClick={() => onTaskSelected(task)}>
                         {t.openObservation}
                         <ArrowRight aria-hidden="true" />
                       </Link>

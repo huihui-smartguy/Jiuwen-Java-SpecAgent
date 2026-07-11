@@ -1,4 +1,5 @@
 import type { RuntimeConfig } from '../types';
+import { runtimeConfigPath } from './appBasePath';
 
 export const defaultSutTargets: RuntimeConfig['sutTargets'] = [
   {
@@ -43,7 +44,7 @@ export function resolveRuntimeConfig(input?: Partial<RuntimeConfig>): RuntimeCon
 
 export async function loadRuntimeConfig(): Promise<RuntimeConfig> {
   try {
-    const response = await fetch('/config/runtime.json', {
+    const response = await fetch(runtimeConfigPath(import.meta.env.BASE_URL), {
       headers: { Accept: 'application/json' },
       cache: 'no-store'
     });

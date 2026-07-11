@@ -83,3 +83,57 @@ Make TestWise compatible with the current live execution backend and complete a 
 - Temporary process-level verification uses Vite preview with `TESTWISE_API_PROXY_TARGET`; browser runtime config remains `/api` with mock fallback disabled.
 - Container deployment remains compatible with the existing `BACKEND_UPSTREAM` and Nginx `/api` proxy contract.
 - Docker is not installed in this sandbox, so local container startup was not executed.
+
+## Follow-up: Task Lifecycle And Persistent Deployment / 补充：任务生命周期与持久化部署
+
+### 中文
+
+#### 联调结果
+
+- 真实 `GET /api/features` 返回 15 个“合一版本 / API”特性，`GET /api/scripts` 返回“API密钥管理”的 5 个脚本。
+- 通过真实后端和已部署的 TestWise 网关分别验证了 `POST /api/tasks`、`GET /api/tasks/{task_id}` 与 `DELETE /api/tasks/{task_id}`。
+- 验证只使用了 `test_tc_040_ak006_list_api_keys` 这个只读 API Key 列表脚本；未调用创建或删除 API Key 的测试脚本。
+- `DELETE` 成功时返回的是取消请求确认（含 `previous_status`），不是完整终态任务对象。正在运行的脚本会先完成当前脚本，再在后续状态轮询中变为 `cancelled` 并返回日志下载地址。
+
+#### 前端修订
+
+- 新增 `TaskCancelResponse` 和 `cancelTask`，严格保留后端取消确认，而不伪造即时取消终态。
+- 执行观测台在等待态和执行态提供“请求取消”操作；成功确认后保持轮询，直到后端返回真实终态。
+- 从任务队列打开观测台时，先选择对应行的任务，避免取消操作误指向最近创建的其他任务；取消确认状态也按任务 ID 隔离。
+- 新增中英文取消状态、错误提示和受控危险操作样式；未新增实时日志面板。
+- 支持 `VITE_BASE_PATH=/testwise/`：静态资源、React 路由、运行时配置和 Vite 开发/预览代理均可在子路径下运行。
+- 当同源子路径网关收到后端生成的绝对或根相对 `/api/download/...` 地址时，前端会将其重写为已配置的 `/testwise/api/download/...`，确保日志导出仍经过 TestWise 网关。
+
+#### 持久化部署
+
+- 活跃发布目录：`/data1/testwise/releases/20260711-185728`；`/data1/testwise/current` 指向该目录。
+- 公共入口：`http://1.92.123.95/testwise/`；健康检查：`/testwise/healthz`；后端代理：`/testwise/api/`。
+- 已验证静态首页、`/testwise/tasks` 刷新回退、运行时配置无缓存响应、特性/脚本代理，以及通过网关的任务创建、取消与终态查询。
+- Nginx 配置先通过 `nginx -t`；系统服务的 `systemctl reload nginx` 受宿主环境限制返回 `226/NAMESPACE`，随后使用 `nginx -s reload` 成功应用配置并通过公共健康检查验证。
+- 服务器根文件系统在部署时已满（`/` 为 100%），因此发布文件和暂存区均位于空间充足的 `/data1`。建议运维团队尽快清理或扩容根卷。
+
+### English
+
+#### Integration Results
+
+- Live `GET /api/features` returned 15 features for `合一版本 / API`, and `GET /api/scripts` returned five API-key-management scripts.
+- `POST /api/tasks`, `GET /api/tasks/{task_id}`, and `DELETE /api/tasks/{task_id}` were verified both against the live backend and through the deployed TestWise gateway.
+- Verification used only the read-only `test_tc_040_ak006_list_api_keys` API-key-list script; no API-key creation or deletion script was invoked.
+- A successful `DELETE` returns a cancellation acknowledgement with `previous_status`, not a complete terminal task object. A running task finishes its current script first, then later polling returns `cancelled` together with its log-download URL.
+
+#### Frontend Changes
+
+- Added `TaskCancelResponse` and `cancelTask`, preserving the backend acknowledgement instead of fabricating an immediate terminal state.
+- The Observation page now exposes a guarded `Request cancellation` action for pending and running work; after acknowledgement it continues polling until the backend reports the actual terminal state.
+- Opening Observation from the task queue selects the matching row task first, preventing cancellation from targeting another recently created task; acknowledgement state is also isolated by task ID.
+- Added bilingual cancellation copy, error feedback, and a controlled destructive-action style without introducing a live-log panel.
+- Added `VITE_BASE_PATH=/testwise/` support across static assets, React routing, runtime configuration, and the Vite development/preview proxy.
+- When a same-origin subpath gateway receives a backend-generated absolute or root-relative `/api/download/...` URL, the frontend rebases it to `/testwise/api/download/...`, keeping log export inside the TestWise gateway.
+
+#### Persistent Deployment
+
+- Active release directory: `/data1/testwise/releases/20260711-185728`; `/data1/testwise/current` points to this release.
+- Public entry: `http://1.92.123.95/testwise/`; health check: `/testwise/healthz`; backend proxy: `/testwise/api/`.
+- Verified the static home page, `/testwise/tasks` refresh fallback, no-store runtime configuration, feature/script proxying, and task creation, cancellation, and terminal-status polling through the gateway.
+- Nginx configuration passed `nginx -t`. The host's `systemctl reload nginx` returned `226/NAMESPACE`; `nginx -s reload` then applied the configuration successfully, confirmed by the public health check.
+- The server root filesystem was already full (`/` at 100%) during deployment, so the release and staging area are both under the spacious `/data1` volume. Operations should clean up or expand the root volume promptly.

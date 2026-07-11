@@ -5,6 +5,7 @@ import type {
   Script,
   ScriptQuery,
   BackendTaskStatus,
+  TaskCancelResponse,
   TaskCreateRequest,
   TaskCreateResponse,
   TaskStatus,
@@ -166,6 +167,17 @@ export async function createTask(
   };
 }
 
+export async function cancelTask(
+  context: ApiContext,
+  taskId: string
+): Promise<TaskCancelResponse> {
+  const response = await fetch(buildApiUrl(context.apiBaseUrl, `/tasks/${taskId}`), {
+    method: 'DELETE',
+    headers: { Accept: 'application/json' }
+  });
+  return readJson<TaskCancelResponse>(response);
+}
+
 export async function getTaskStatus(
   context: ApiContext,
   taskId: string,
@@ -177,10 +189,10 @@ export async function getTaskStatus(
   const body = await readJson<LiveTaskStatusEnvelope | TaskStatusResponse>(response);
 
   if (isLiveTaskStatusEnvelope(body)) {
-    return normalizeLiveTaskStatus(body, fallbackTriggerType);
+    return normalizeLiveTaskStatus(body, fallbackTriggerType, context.apiBaseUrl);
   }
 
-  return body;
+  return rebaseTaskLogs(body, context.apiBaseUrl);
 }
 
 export function normalizeTaskStatus(response: TaskStatusResponse): NormalizedTaskStatus {
@@ -242,7 +254,8 @@ function mapBackendTaskStatus(status: BackendTaskStatus): TaskStatus {
 
 function normalizeLiveTaskStatus(
   response: LiveTaskStatusEnvelope,
-  fallbackTriggerType: TriggerType
+  fallbackTriggerType: TriggerType,
+  apiBaseUrl: string
 ): TaskStatusResponse {
   const task = response.task;
   const status = mapBackendTaskStatus(task.status);
@@ -253,7 +266,7 @@ function normalizeLiveTaskStatus(
   const logs = task.log_dir || task.download_url
     ? {
         file_path: task.log_dir ?? '',
-        download_url: task.download_url
+        download_url: rebaseDownloadUrl(task.download_url, apiBaseUrl)
       }
     : undefined;
 
@@ -281,6 +294,38 @@ function normalizeLiveTaskStatus(
     logs,
     started_at: task.started_at,
     completed_at: task.completed_at
+  };
+}
+
+function rebaseDownloadUrl(downloadUrl: string | undefined, apiBaseUrl: string): string | undefined {
+  if (!downloadUrl || isAbsoluteHttpUrl(apiBaseUrl)) {
+    return downloadUrl;
+  }
+
+  const apiPath = new URL(trimTrailingSlash(apiBaseUrl || '/api'), 'http://local.test').pathname;
+  const download = new URL(downloadUrl, 'http://local.test');
+
+  if (apiPath === '/api' || !download.pathname.startsWith('/api/')) {
+    return downloadUrl;
+  }
+
+  return `${apiPath}${download.pathname.slice('/api'.length)}${download.search}${download.hash}`;
+}
+
+function rebaseTaskLogs(response: TaskStatusResponse, apiBaseUrl: string): TaskStatusResponse {
+  const downloadUrl = response.logs?.download_url;
+  const rebasedDownloadUrl = rebaseDownloadUrl(downloadUrl, apiBaseUrl);
+
+  if (!response.logs || !downloadUrl || rebasedDownloadUrl === downloadUrl) {
+    return response;
+  }
+
+  return {
+    ...response,
+    logs: {
+      ...response.logs,
+      download_url: rebasedDownloadUrl
+    }
   };
 }
 

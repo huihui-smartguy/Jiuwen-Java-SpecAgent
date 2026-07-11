@@ -111,6 +111,14 @@ export interface TaskCreateResponse {
   total_scripts?: number;
 }
 
+export interface TaskCancelResponse {
+  success: boolean;
+  task_id: string;
+  message: string;
+  previous_status?: BackendTaskStatus;
+  current_status?: BackendTaskStatus;
+}
+
 export type TaskStatus = 'pending' | 'running' | 'success' | 'failed' | 'cancelled';
 export type UiTaskStatus = TaskStatus | 'polling_error';
 

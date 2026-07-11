@@ -1,0 +1,17 @@
+{
+  "apiBaseUrl": "/testwise/api",
+  "deploymentMode": "process",
+  "defaultLanguage": "zh",
+  "enableMockFallback": false,
+  "sutTargets": [
+    {
+      "id": "heyi-api-live",
+      "name": "合一版本 API",
+      "product": "合一版本",
+      "scene": "API",
+      "version": "Live",
+      "apiBaseUrl": "/testwise/api",
+      "status": "healthy"
+    }
+  ]
+}

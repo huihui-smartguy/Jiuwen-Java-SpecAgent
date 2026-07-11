@@ -336,6 +336,22 @@ a {
   background: var(--surface-subtle);
 }
 
+.button--danger {
+  border-color: #f3c1c4;
+  background: #fffafa;
+  color: var(--danger);
+}
+
+.button--danger:hover:not(:disabled) {
+  border-color: #e99ea4;
+  background: #fff3f3;
+}
+
+.button--danger:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
 .icon-button {
   width: 32px;
   padding: 0;
@@ -974,6 +990,12 @@ tbody tr:hover td {
   font-size: 11px;
   line-height: 16px;
   white-space: nowrap;
+}
+
+.cancellation-status {
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: normal;
 }
 
 .observation-workbench {

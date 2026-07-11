@@ -1,7 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Check, CircleDot, Clock3, FileTerminal, TimerReset } from 'lucide-react';
-import { useEffect, useMemo } from 'react';
-import { getTaskStatus, normalizeTaskStatus } from '../api/client';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { AlertTriangle, Check, CircleDot, CircleX, Clock3, FileTerminal, TimerReset } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ApiError, cancelTask, getTaskStatus, normalizeTaskStatus } from '../api/client';
 import { LogExportPanel } from '../components/LogExportPanel';
 import { StatusBadge } from '../components/StatusBadge';
 import { getCopy } from '../i18n';
@@ -37,6 +37,7 @@ export function Observation({
   onTaskStatusChange
 }: PageProps) {
   const t = getCopy(language);
+  const [cancellationRequestedTaskId, setCancellationRequestedTaskId] = useState<string>();
   const api = useMemo(
     () => ({ apiBaseUrl: selectedSut.apiBaseUrl || runtimeConfig.apiBaseUrl }),
     [runtimeConfig.apiBaseUrl, selectedSut.apiBaseUrl]
@@ -59,6 +60,13 @@ export function Observation({
     },
     refetchIntervalInBackground: true
   });
+  const cancellation = useMutation({
+    mutationFn: (taskId: string) => cancelTask(api, taskId),
+    onSuccess: (_response, taskId) => {
+      setCancellationRequestedTaskId(taskId);
+      void taskQuery.refetch();
+    }
+  });
   const task = taskQuery.isError ? asPollingError(activeTask) : taskQuery.data ?? activeTask;
   const progress = task.progress;
   const completedCommands = progress?.completed ?? task.result?.success_count ?? 0;
@@ -66,6 +74,13 @@ export function Observation({
   const failedCommands = progress?.failed ?? task.result?.failed_count ?? 0;
   const terminalStage = task.status === 'failed' || task.status === 'cancelled' ? task.status : 'success';
   const terminalHasError = task.status === 'failed' || task.status === 'cancelled';
+  const cancellationAcknowledged = cancellationRequestedTaskId === task.task_id;
+  const cancellationPending = cancellation.isPending && cancellation.variables === task.task_id;
+  const cancellationFailed = cancellation.isError && cancellation.variables === task.task_id;
+  const canRequestCancellation = isPollingTask(task) && !cancellationAcknowledged;
+  const cancellationError = cancellation.error instanceof ApiError
+    ? cancellation.error.message
+    : t.cancellationFailed;
   const currentStage = task.status === 'pending' ? 0 : task.status === 'running' ? 1 : 2;
   const stages = [
     { key: 'pending', label: t.pending },
@@ -97,6 +112,22 @@ export function Observation({
             </span>
           )}
           <StatusBadge status={task.uiStatus} language={language} />
+          {canRequestCancellation && (
+            <button
+              type="button"
+              className="button button--danger observation-cancel"
+              onClick={() => cancellation.mutate(task.task_id)}
+              disabled={cancellationPending}
+            >
+              <CircleX aria-hidden="true" />
+              {cancellationPending ? t.requestingCancellation : t.requestCancellation}
+            </button>
+          )}
+          {isPollingTask(task) && cancellationAcknowledged && (
+            <span className="cancellation-status" role="status">
+              {t.cancellationRequested}
+            </span>
+          )}
         </div>
       </div>
 
@@ -177,6 +208,7 @@ export function Observation({
             </div>
           )}
           {taskQuery.isError && <p className="polling-error">{t.pollingErrorHint}</p>}
+          {cancellationFailed && <p className="polling-error">{cancellationError}</p>}
         </section>
 
         <LogExportPanel task={task} language={language} />

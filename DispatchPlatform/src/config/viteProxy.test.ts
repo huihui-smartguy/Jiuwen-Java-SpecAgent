@@ -14,4 +14,20 @@ describe('development API proxy', () => {
       }
     });
   });
+
+  test('also routes the configured deployment subpath API', () => {
+    const proxy = createApiProxy('http://backend.example.test:3000', '/testwise/');
+
+    expect(proxy).toMatchObject({
+      '/api': {
+        target: 'http://backend.example.test:3000',
+        changeOrigin: false
+      },
+      '/testwise/api': {
+        target: 'http://backend.example.test:3000',
+        changeOrigin: false
+      }
+    });
+    expect(proxy?.['/testwise/api'].rewrite?.('/testwise/api/features')).toBe('/api/features');
+  });
 });

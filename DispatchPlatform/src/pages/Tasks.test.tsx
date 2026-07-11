@@ -33,6 +33,7 @@ function renderTasks(onTaskCreated = vi.fn()) {
           runtimeConfig={runtimeConfig}
           sessionTasks={[activeTask]}
           onTaskCreated={onTaskCreated}
+          onTaskSelected={vi.fn()}
         />
       </MemoryRouter>
     </QueryClientProvider>
@@ -51,6 +52,39 @@ describe('Execute Tasks workspace', () => {
     expect(screen.getByRole('tab', { name: /new task/i })).toBeInTheDocument();
     expect(screen.getByText(/this session/i)).toBeInTheDocument();
     expect(screen.getByText(activeTask.task_id)).toBeInTheDocument();
+  });
+
+  test('selects the row task before opening its observation', async () => {
+    const user = userEvent.setup();
+    const onTaskSelected = vi.fn();
+    const earlierTask = {
+      ...activeTask,
+      task_id: 'task_earlier_session',
+      trigger_type: 'scripts' as const
+    };
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } }
+    });
+
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <Tasks
+            language="en"
+            selectedSut={selectedSut}
+            activeTask={activeTask}
+            runtimeConfig={runtimeConfig}
+            sessionTasks={[activeTask, earlierTask]}
+            onTaskCreated={vi.fn()}
+            onTaskSelected={onTaskSelected}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    await user.click(screen.getAllByRole('link', { name: /open observation/i })[1]);
+
+    expect(onTaskSelected).toHaveBeenCalledWith(earlierTask);
   });
 
   test('creates a task from the selected feature through the documented API payload', async () => {

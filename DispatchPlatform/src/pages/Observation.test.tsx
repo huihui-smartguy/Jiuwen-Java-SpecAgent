@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { activeTask } from '../data/mockData';
 import { resolveRuntimeConfig } from '../config/runtime';
@@ -13,27 +14,43 @@ function mockJson(body: unknown) {
   } as Response);
 }
 
-function renderObservation(overrides?: { task?: typeof activeTask; onTaskStatusChange?: ReturnType<typeof vi.fn> }) {
+type ObservationOverrides = {
+  task?: typeof activeTask;
+  onTaskStatusChange?: ReturnType<typeof vi.fn>;
+};
+
+function renderObservation(overrides?: ObservationOverrides) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } }
   });
-  const runtimeConfig = resolveRuntimeConfig();
-  const task = overrides?.task ?? activeTask;
+  const renderPage = (nextOverrides?: ObservationOverrides) => {
+    const runtimeConfig = resolveRuntimeConfig();
+    const task = nextOverrides?.task ?? activeTask;
 
-  return render(
-    <QueryClientProvider client={client}>
-      <Observation
-        language="en"
-        selectedSut={runtimeConfig.sutTargets[0]}
-        activeTask={task}
-        runtimeConfig={runtimeConfig}
-        onTaskStatusChange={overrides?.onTaskStatusChange ?? vi.fn()}
-      />
-    </QueryClientProvider>
-  );
+    return (
+      <QueryClientProvider client={client}>
+        <Observation
+          language="en"
+          selectedSut={runtimeConfig.sutTargets[0]}
+          activeTask={task}
+          runtimeConfig={runtimeConfig}
+          onTaskStatusChange={nextOverrides?.onTaskStatusChange ?? vi.fn()}
+        />
+      </QueryClientProvider>
+    );
+  };
+  const result = render(renderPage(overrides));
+
+  return {
+    ...result,
+    rerenderObservation: (nextOverrides?: ObservationOverrides) => {
+      result.rerender(renderPage({ ...overrides, ...nextOverrides }));
+    }
+  };
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -145,5 +162,156 @@ describe('Observation', () => {
     renderObservation();
 
     expect(await screen.findByText(/queue position: 3/i)).toBeInTheDocument();
+  });
+
+  test('requests live cancellation and continues showing the polling task state', async () => {
+    const runningEnvelope = {
+      success: true,
+      task: {
+        id: activeTask.task_id,
+        status: 'running',
+        progress: 0,
+        total_scripts: 2,
+        executed_scripts: 0,
+        failed_scripts: 0,
+        queue_position: -1
+      }
+    };
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(await mockJson(runningEnvelope))
+      .mockResolvedValueOnce(
+        await mockJson({
+          success: true,
+          task_id: activeTask.task_id,
+          previous_status: 'running',
+          message: 'Cancellation signal sent'
+        })
+      )
+      .mockResolvedValueOnce(await mockJson(runningEnvelope));
+    const user = userEvent.setup();
+
+    renderObservation();
+
+    const button = await screen.findByRole('button', { name: /request cancellation/i });
+    await user.click(button);
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledWith(`/api/tasks/${activeTask.task_id}`, {
+        method: 'DELETE',
+        headers: { Accept: 'application/json' }
+      });
+    });
+    expect(await screen.findByText(/cancellation requested/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /request cancellation/i })).not.toBeInTheDocument();
+    expect(screen.getAllByText(/running/i).length).toBeGreaterThan(0);
+  });
+
+  test('scopes a cancellation acknowledgement to the task that requested it', async () => {
+    const earlierTask = {
+      ...activeTask,
+      task_id: 'task_earlier_session'
+    };
+    const runningEnvelope = (taskId: string) => ({
+      success: true,
+      task: {
+        id: taskId,
+        status: 'running',
+        progress: 0,
+        total_scripts: 1,
+        executed_scripts: 0,
+        failed_scripts: 0,
+        queue_position: -1
+      }
+    });
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(await mockJson(runningEnvelope(activeTask.task_id)))
+      .mockResolvedValueOnce(
+        await mockJson({
+          success: true,
+          task_id: activeTask.task_id,
+          previous_status: 'running',
+          message: 'Cancellation signal sent'
+        })
+      )
+      .mockResolvedValueOnce(await mockJson(runningEnvelope(activeTask.task_id)))
+      .mockResolvedValueOnce(await mockJson(runningEnvelope(earlierTask.task_id)));
+    const user = userEvent.setup();
+    const { rerenderObservation } = renderObservation();
+
+    await user.click(await screen.findByRole('button', { name: /request cancellation/i }));
+    expect(await screen.findByText(/cancellation requested/i)).toBeInTheDocument();
+
+    rerenderObservation({ task: earlierTask });
+
+    expect(await screen.findByRole('button', { name: /request cancellation/i })).toBeEnabled();
+  });
+
+  test('continues five-second polling after acknowledgement until cancellation reaches a terminal log export', async () => {
+    vi.useFakeTimers();
+    const runningEnvelope = {
+      success: true,
+      task: {
+        id: activeTask.task_id,
+        status: 'running',
+        progress: 0,
+        total_scripts: 1,
+        executed_scripts: 0,
+        failed_scripts: 0,
+        queue_position: -1
+      }
+    };
+    const cancelledEnvelope = {
+      success: true,
+      task: {
+        id: activeTask.task_id,
+        status: 'cancelled',
+        progress: 100,
+        total_scripts: 1,
+        executed_scripts: 1,
+        failed_scripts: 0,
+        queue_position: -1,
+        log_dir: 'task_cancelled',
+        download_url: '/api/download/task_cancelled/execution.log'
+      }
+    };
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(await mockJson(runningEnvelope))
+      .mockResolvedValueOnce(
+        await mockJson({
+          success: true,
+          task_id: activeTask.task_id,
+          previous_status: 'running',
+          message: 'Cancellation signal sent'
+        })
+      )
+      .mockResolvedValueOnce(await mockJson(runningEnvelope))
+      .mockResolvedValueOnce(await mockJson(cancelledEnvelope));
+    renderObservation();
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /request cancellation/i }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText(/cancellation requested/i)).toBeInTheDocument();
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+      await vi.runOnlyPendingTimersAsync();
+    });
+
+    expect(fetchSpy).toHaveBeenCalledTimes(4);
+    expect(screen.getByRole('link', { name: /export logs/i })).toHaveAttribute(
+      'href',
+      '/api/download/task_cancelled/execution.log'
+    );
+    expect(screen.getAllByText(/cancelled/i).length).toBeGreaterThan(0);
   });
 });

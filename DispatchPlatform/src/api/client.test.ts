@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
   buildApiUrl,
+  cancelTask,
   createTask,
   getFeatures,
   getScripts,
@@ -95,6 +96,30 @@ describe('execution API client', () => {
     );
   });
 
+  test('cancellation preserves the live acknowledgement instead of inventing a terminal task state', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      await mockJson({
+        success: true,
+        task_id: 'task_live_cancelling',
+        previous_status: 'running',
+        message: '已发送取消信号,任务将安全退出'
+      })
+    );
+
+    const result = await cancelTask(api, 'task_live_cancelling');
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/tasks/task_live_cancelling', {
+      method: 'DELETE',
+      headers: { Accept: 'application/json' }
+    });
+    expect(result).toEqual({
+      success: true,
+      task_id: 'task_live_cancelling',
+      previous_status: 'running',
+      message: '已发送取消信号,任务将安全退出'
+    });
+  });
+
   test('normalizes a live queued task creation response and derives its trigger', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       await mockJson({
@@ -185,6 +210,56 @@ describe('execution API client', () => {
     });
     expect(normalized.canExportLogs).toBe(true);
     expect(normalized.logDownloadUrl).toBe('http://testwise.local/api/download/task_live_completed/execution.log');
+  });
+
+  test('rebases a backend-generated absolute log URL through a same-origin subpath API gateway', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      await mockJson({
+        success: true,
+        task: {
+          id: 'task_live_subpath',
+          status: 'completed',
+          total_scripts: 1,
+          executed_scripts: 1,
+          failed_scripts: 0,
+          log_dir: 'task_live_subpath',
+          download_url: 'http://gateway.example.test/api/download/task_live_subpath/execution.log'
+        }
+      })
+    );
+
+    const result = await getTaskStatus(
+      { apiBaseUrl: '/testwise/api' },
+      'task_live_subpath'
+    );
+
+    expect(result.logs?.download_url).toBe(
+      '/testwise/api/download/task_live_subpath/execution.log'
+    );
+  });
+
+  test('rebases a documented root-relative log URL through a same-origin subpath API gateway', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      await mockJson({
+        success: true,
+        task_id: 'task_documented_subpath',
+        status: 'success',
+        trigger_type: 'feature',
+        logs: {
+          file_path: 'task_documented_subpath',
+          download_url: '/api/download/task_documented_subpath/execution.log'
+        }
+      })
+    );
+
+    const result = await getTaskStatus(
+      { apiBaseUrl: '/testwise/api' },
+      'task_documented_subpath'
+    );
+
+    expect(result.logs?.download_url).toBe(
+      '/testwise/api/download/task_documented_subpath/execution.log'
+    );
   });
 
   test('task creation posts level and explicit script triggers', async () => {

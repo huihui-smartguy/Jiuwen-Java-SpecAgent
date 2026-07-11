@@ -71,6 +71,9 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
       return hasTask ? nextTasks : [task, ...nextTasks];
     });
   }, []);
+  const handleTaskSelected = useCallback((task: NormalizedTaskStatus) => {
+    setActiveTask(task);
+  }, []);
 
   return (
     <div className="app-shell">
@@ -155,7 +158,14 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
             <Route path="/" element={<Dashboard {...sharedProps} />} />
             <Route
               path="/tasks"
-              element={<Tasks {...sharedProps} sessionTasks={sessionTasks} onTaskCreated={handleTaskCreated} />}
+              element={
+                <Tasks
+                  {...sharedProps}
+                  sessionTasks={sessionTasks}
+                  onTaskCreated={handleTaskCreated}
+                  onTaskSelected={handleTaskSelected}
+                />
+              }
             />
             <Route
               path="/observation"
