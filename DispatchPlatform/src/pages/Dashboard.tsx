@@ -33,7 +33,7 @@ export function Dashboard({ language, selectedSut, activeTask }: PageProps) {
     <div className="page-stack">
       <div className="page-title-row">
         <div>
-          <p className="eyebrow">TestWise</p>
+          <p className="eyebrow">{selectedSut.name} · {selectedSut.version}</p>
           <h1>{t.dashboard}</h1>
           <p className="page-subtitle">{t.dashboardSubtitle}</p>
         </div>

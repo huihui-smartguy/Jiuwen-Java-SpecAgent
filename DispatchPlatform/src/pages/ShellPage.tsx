@@ -11,6 +11,7 @@ export interface ShellPageBaseProps {
 
 export function ShellPage({
   language,
+  selectedSut,
   titleKey,
   bodyKey,
   icon: Icon
@@ -25,7 +26,7 @@ export function ShellPage({
     <div className="page-stack">
       <div className="page-title-row">
         <div>
-          <p className="eyebrow">TestWise</p>
+          <p className="eyebrow">{selectedSut.name} · {selectedSut.version}</p>
           <h1>{t[titleKey]}</h1>
         </div>
       </div>

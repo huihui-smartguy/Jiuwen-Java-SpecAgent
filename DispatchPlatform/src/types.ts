@@ -142,6 +142,33 @@ export interface TaskLogs {
   view_url?: string;
 }
 
+export type TaskLogLevel = 'debug' | 'info' | 'warn' | 'error' | 'log';
+
+export interface TaskLogEntry {
+  id: string;
+  timestamp?: string;
+  level: TaskLogLevel;
+  message: string;
+}
+
+export interface TaskLogSnapshot {
+  entries: TaskLogEntry[];
+  cursor?: string;
+}
+
+/** Exact wire shape observed from GET /api/tasks/{task_id}/logs on 2026-07-13. */
+export interface TaskLogsWireEntry {
+  timestamp: string;
+  level: string;
+  message: string;
+}
+
+export interface TaskLogsWireResponse {
+  success: boolean;
+  total: number;
+  logs: TaskLogsWireEntry[];
+}
+
 export interface TaskStatusResponse {
   success: boolean;
   task_id: string;

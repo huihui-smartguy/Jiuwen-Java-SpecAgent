@@ -14,6 +14,34 @@ function mockJson(body: unknown) {
   } as Response);
 }
 
+function mockTaskApi(
+  statusResponses: unknown[],
+  cancellationResponses: unknown[] = []
+) {
+  let statusIndex = 0;
+  let cancellationIndex = 0;
+  return vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+    const url = String(input);
+    if (url.endsWith('/logs')) {
+      return mockJson({ success: true, total: 0, logs: [] });
+    }
+    if (init?.method === 'DELETE') {
+      const response = cancellationResponses[Math.min(cancellationIndex, cancellationResponses.length - 1)];
+      cancellationIndex += 1;
+      return mockJson(response);
+    }
+    const response = statusResponses[Math.min(statusIndex, statusResponses.length - 1)];
+    statusIndex += 1;
+    return mockJson(response);
+  });
+}
+
+function countStatusRequests(fetchSpy: ReturnType<typeof vi.spyOn>, taskId: string) {
+  return fetchSpy.mock.calls.filter(([input, init]) => (
+    String(input) === `/api/tasks/${taskId}` && init?.method !== 'DELETE'
+  )).length;
+}
+
 type ObservationOverrides = {
   task?: typeof activeTask;
   onTaskStatusChange?: ReturnType<typeof vi.fn>;
@@ -55,16 +83,16 @@ afterEach(() => {
 });
 
 describe('Observation', () => {
-  test('shows the current command in execution details while keeping logs terminal-only', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      await mockJson({
+  test('shows the current command, live backend console, and terminal-only export', async () => {
+    mockTaskApi([
+      {
         ...activeTask,
         status: 'running',
         uiStatus: undefined,
         isTerminal: undefined,
         canExportLogs: undefined
-      })
-    );
+      }
+    ]);
 
     renderObservation();
 
@@ -74,7 +102,7 @@ describe('Observation', () => {
       'aria-disabled',
       'true'
     );
-    expect(screen.queryByText(/live log/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /live logs/i })).toBeInTheDocument();
 
     await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledWith(
       `/api/tasks/${activeTask.task_id}`,
@@ -84,8 +112,8 @@ describe('Observation', () => {
 
   test('uses the terminal task response to enable the backend-provided log export', async () => {
     const onTaskStatusChange = vi.fn();
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      await mockJson({
+    mockTaskApi([
+      {
         success: true,
         task_id: activeTask.task_id,
         status: 'success',
@@ -96,8 +124,8 @@ describe('Observation', () => {
           file_path: 'logs/task_20260710.log',
           download_url: '/api/tasks/task_20260710/logs/download'
         }
-      })
-    );
+      }
+    ]);
 
     renderObservation({ onTaskStatusChange });
 
@@ -114,8 +142,8 @@ describe('Observation', () => {
   });
 
   test('renders a live nested terminal task without inventing a current command', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      await mockJson({
+    mockTaskApi([
+      {
         success: true,
         task: {
           id: activeTask.task_id,
@@ -128,8 +156,8 @@ describe('Observation', () => {
           log_dir: 'task_live',
           download_url: 'http://testwise.local/api/download/task_live/execution.log'
         }
-      })
-    );
+      }
+    ]);
 
     renderObservation();
 
@@ -140,12 +168,12 @@ describe('Observation', () => {
       );
     });
     expect(screen.getByText(/no current command has been returned/i)).toBeInTheDocument();
-    expect(screen.queryByText(/live log/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /live logs/i })).toBeInTheDocument();
   });
 
   test('shows the live queue position for a queued task', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      await mockJson({
+    mockTaskApi([
+      {
         success: true,
         task: {
           id: activeTask.task_id,
@@ -156,8 +184,8 @@ describe('Observation', () => {
           failed_scripts: 0,
           queue_position: 3
         }
-      })
-    );
+      }
+    ]);
 
     renderObservation();
 
@@ -177,18 +205,15 @@ describe('Observation', () => {
         queue_position: -1
       }
     };
-    const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(await mockJson(runningEnvelope))
-      .mockResolvedValueOnce(
-        await mockJson({
+    const fetchSpy = mockTaskApi(
+      [runningEnvelope, runningEnvelope],
+      [{
           success: true,
           task_id: activeTask.task_id,
           previous_status: 'running',
           message: 'Cancellation signal sent'
-        })
-      )
-      .mockResolvedValueOnce(await mockJson(runningEnvelope));
+      }]
+    );
     const user = userEvent.setup();
 
     renderObservation();
@@ -224,18 +249,15 @@ describe('Observation', () => {
         queue_position: -1
       }
     });
-    vi.spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(await mockJson(runningEnvelope(activeTask.task_id)))
-      .mockResolvedValueOnce(
-        await mockJson({
+    mockTaskApi(
+      [runningEnvelope(activeTask.task_id), runningEnvelope(activeTask.task_id), runningEnvelope(earlierTask.task_id)],
+      [{
           success: true,
           task_id: activeTask.task_id,
           previous_status: 'running',
           message: 'Cancellation signal sent'
-        })
-      )
-      .mockResolvedValueOnce(await mockJson(runningEnvelope(activeTask.task_id)))
-      .mockResolvedValueOnce(await mockJson(runningEnvelope(earlierTask.task_id)));
+      }]
+    );
     const user = userEvent.setup();
     const { rerenderObservation } = renderObservation();
 
@@ -275,19 +297,15 @@ describe('Observation', () => {
         download_url: '/api/download/task_cancelled/execution.log'
       }
     };
-    const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(await mockJson(runningEnvelope))
-      .mockResolvedValueOnce(
-        await mockJson({
+    const fetchSpy = mockTaskApi(
+      [runningEnvelope, runningEnvelope, cancelledEnvelope],
+      [{
           success: true,
           task_id: activeTask.task_id,
           previous_status: 'running',
           message: 'Cancellation signal sent'
-        })
-      )
-      .mockResolvedValueOnce(await mockJson(runningEnvelope))
-      .mockResolvedValueOnce(await mockJson(cancelledEnvelope));
+      }]
+    );
     renderObservation();
 
     await act(async () => {
@@ -300,14 +318,14 @@ describe('Observation', () => {
       await Promise.resolve();
     });
     expect(screen.getByText(/cancellation requested/i)).toBeInTheDocument();
-    expect(fetchSpy).toHaveBeenCalledTimes(3);
+    expect(countStatusRequests(fetchSpy, activeTask.task_id)).toBe(2);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5000);
       await vi.runOnlyPendingTimersAsync();
     });
 
-    expect(fetchSpy).toHaveBeenCalledTimes(4);
+    expect(countStatusRequests(fetchSpy, activeTask.task_id)).toBe(3);
     expect(screen.getByRole('link', { name: /export logs/i })).toHaveAttribute(
       'href',
       '/api/download/task_cancelled/execution.log'

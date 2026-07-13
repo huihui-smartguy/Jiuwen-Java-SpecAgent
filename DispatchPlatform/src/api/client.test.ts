@@ -5,6 +5,7 @@ import {
   createTask,
   getFeatures,
   getScripts,
+  getTaskLogs,
   getTaskStatus,
   normalizeCreatedTask,
   normalizeTaskStatus
@@ -25,6 +26,128 @@ afterEach(() => {
 });
 
 describe('execution API client', () => {
+  test('normalizes the observed live task log payload without inventing entries', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      await mockJson({
+        success: true,
+        total: 3,
+        logs: [
+          { timestamp: '2026-07-13 09:00:00', level: 'INFO', message: 'Task accepted' },
+          { timestamp: '2026-07-13 09:00:01', level: 'WARNING', message: 'Retrying request' },
+          { timestamp: '2026-07-13 09:00:02', level: 'TRACE', message: 'Worker detail' }
+        ]
+      })
+    );
+
+    const result = await getTaskLogs(api, 'task_live_logs');
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/tasks/task_live_logs/logs', {
+      headers: { Accept: 'application/json' }
+    });
+    expect(result).toEqual({
+      cursor: '3',
+      entries: [
+        expect.objectContaining({ timestamp: '2026-07-13 09:00:00', level: 'info', message: 'Task accepted' }),
+        expect.objectContaining({ timestamp: '2026-07-13 09:00:01', level: 'warn', message: 'Retrying request' }),
+        expect.objectContaining({ timestamp: '2026-07-13 09:00:02', level: 'log', message: 'Worker detail' })
+      ]
+    });
+    expect(new Set(result.entries.map((entry) => entry.id)).size).toBe(3);
+  });
+
+  test('uses and rebases a backend-provided task log view URL through the selected environment', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      await mockJson({ success: true, total: 0, logs: [] })
+    );
+
+    await getTaskLogs(
+      { apiBaseUrl: '/testwise/api' },
+      'task_subpath',
+      'http://gateway.example.test/api/tasks/task_subpath/logs'
+    );
+
+    expect(fetchSpy).toHaveBeenCalledWith('/testwise/api/tasks/task_subpath/logs', {
+      headers: { Accept: 'application/json' }
+    });
+  });
+
+  test('resolves a root-relative task log view URL against an absolute environment origin', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      await mockJson({ success: true, total: 0, logs: [] })
+    );
+
+    await getTaskLogs(
+      { apiBaseUrl: 'https://backend.example.test:3443/api' },
+      'task_absolute_environment',
+      '/api/tasks/task_absolute_environment/logs'
+    );
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://backend.example.test:3443/api/tasks/task_absolute_environment/logs',
+      { headers: { Accept: 'application/json' } }
+    );
+  });
+
+  test('preserves an absolute environment path prefix when rebasing a root-relative log view URL', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      await mockJson({ success: true, total: 0, logs: [] })
+    );
+
+    await getTaskLogs(
+      { apiBaseUrl: 'https://backend.example.test:3443/testwise/api' },
+      'task_absolute_subpath',
+      '/api/tasks/task_absolute_subpath/logs'
+    );
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://backend.example.test:3443/testwise/api/tasks/task_absolute_subpath/logs',
+      { headers: { Accept: 'application/json' } }
+    );
+  });
+
+  test('keeps only the newest 2,000 live log entries', async () => {
+    const logs = Array.from({ length: 2004 }, (_, index) => ({
+      timestamp: `2026-07-13 09:${String(Math.floor(index / 60)).padStart(2, '0')}:${String(index % 60).padStart(2, '0')}`,
+      level: 'DEBUG',
+      message: `Line ${index}`
+    }));
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      await mockJson({ success: true, total: logs.length, logs })
+    );
+
+    const result = await getTaskLogs(api, 'task_bounded');
+
+    expect(result.entries).toHaveLength(2000);
+    expect(result.entries[0].message).toBe('Line 4');
+    expect(result.entries.at(-1)?.message).toBe('Line 2003');
+  });
+
+  test('rejects a malformed task log response explicitly', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      await mockJson({ success: true, total: 1, logs: [{ level: 'INFO' }] })
+    );
+
+    await expect(getTaskLogs(api, 'task_malformed')).rejects.toMatchObject({
+      name: 'ApiError',
+      code: 'INVALID_LOG_RESPONSE'
+    });
+  });
+
+  test('rejects a log snapshot whose total is not a valid full-snapshot count', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      await mockJson({
+        success: true,
+        total: 2,
+        logs: [{ timestamp: '2026-07-13 09:00:00', level: 'INFO', message: 'Only line' }]
+      })
+    );
+
+    await expect(getTaskLogs(api, 'task_bad_total')).rejects.toMatchObject({
+      name: 'ApiError',
+      code: 'INVALID_LOG_RESPONSE'
+    });
+  });
+
   test('keeps an absolute API base when constructing a request URL', () => {
     expect(buildApiUrl('http://backend.example.test:3000/api', '/features', {
       product: '合一版本',

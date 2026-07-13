@@ -55,9 +55,13 @@ The execution flow uses:
 - `GET /api/scripts?product=&scene=&feature=&level=`
 - `POST /api/tasks`
 - `GET /api/tasks/{task_id}`
+- `GET /api/tasks/{task_id}/logs`
+- `DELETE /api/tasks/{task_id}`
 
-Log export is terminal-only and uses the backend-provided download URL after compatible task responses are normalized.
+`GET /api/tasks/{task_id}/logs` returns the backend log snapshot as `{ success, total, logs: [{ timestamp, level, message }] }`. TestWise normalizes that payload for display, retains at most the newest 2,000 entries, and never substitutes generated log lines. If a task response supplies a log `view_url`, TestWise uses it; otherwise it resolves the endpoint from the selected environment's API base.
 
-The Observation workspace polls `GET /api/tasks/{task_id}` every five seconds while a task is pending or running. It stops on success, failure, or cancellation; no live-log stream is created or simulated.
+The Run Details workspace (stable route: `/observation`) polls `GET /api/tasks/{task_id}` every five seconds while a task is pending or running. It polls the log snapshot every two seconds while work is active and the log viewport is not paused, performs one final log fetch at the terminal transition, and then stops. Pausing logs never pauses status polling. Log export is terminal-only and uses the backend-provided download URL after compatible task responses are normalized.
 
-执行观测台会在任务处于等待或执行中时每五秒轮询 `GET /api/tasks/{task_id}`，成功、失败或取消后停止。系统不会创建或模拟实时日志流。
+`GET /api/tasks/{task_id}/logs` 返回 `{ success, total, logs: [{ timestamp, level, message }] }` 后端日志快照。TestWise 会将其归一化后展示，最多保留最新 2,000 条，并且不会用模拟日志替代真实返回。若任务响应提供日志 `view_url`，前端优先使用；否则根据当前所选 environment 的 API Base 解析日志接口。
+
+运行详情工作区（稳定路由仍为 `/observation`）在任务等待或执行中时每五秒轮询 `GET /api/tasks/{task_id}`。日志视图未暂停时，每两秒读取一次日志快照；进入终态时再执行一次最终日志读取并停止。暂停日志不会暂停状态轮询。日志导出仅在终态开放，并使用归一化后的后端下载地址。

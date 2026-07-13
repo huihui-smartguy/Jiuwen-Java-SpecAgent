@@ -82,7 +82,7 @@ describe('Execute Tasks workspace', () => {
       </QueryClientProvider>
     );
 
-    await user.click(screen.getAllByRole('link', { name: /open observation/i })[1]);
+    await user.click(screen.getAllByRole('link', { name: /open run details/i })[1]);
 
     expect(onTaskSelected).toHaveBeenCalledWith(earlierTask);
   });

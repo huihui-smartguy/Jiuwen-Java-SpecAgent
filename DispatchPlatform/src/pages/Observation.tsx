@@ -3,6 +3,7 @@ import { AlertTriangle, Check, CircleDot, CircleX, Clock3, FileTerminal, TimerRe
 import { useEffect, useMemo, useState } from 'react';
 import { ApiError, cancelTask, getTaskStatus, normalizeTaskStatus } from '../api/client';
 import { LogExportPanel } from '../components/LogExportPanel';
+import { LiveLogConsole } from '../components/LiveLogConsole';
 import { StatusBadge } from '../components/StatusBadge';
 import { getCopy } from '../i18n';
 import type { Language, NormalizedTaskStatus, RuntimeConfig, SutTarget } from '../types';
@@ -212,6 +213,7 @@ export function Observation({
         </section>
 
         <LogExportPanel task={task} language={language} />
+        <LiveLogConsole language={language} api={api} task={task} />
       </section>
     </div>
   );

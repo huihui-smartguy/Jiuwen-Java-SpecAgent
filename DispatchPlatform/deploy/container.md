@@ -31,7 +31,7 @@ Use the container image when deploying through Docker Compose, Kubernetes, or en
    - `GET /healthz` returns `ok`.
    - `GET /config/runtime.json` returns the mounted config.
    - SPA refresh fallback works for `/tasks` and `/observation`.
-   - Log export opens the backend-provided `logs.download_url`.
+   - Live logs load from `GET /api/tasks/{task_id}/logs`, and terminal export opens the normalized backend-provided `download_url`.
    - The SSO profile endpoint returns an `AuthUser` response or `401` through the enterprise gateway.
 
 ## 中文
@@ -65,5 +65,5 @@ Use the container image when deploying through Docker Compose, Kubernetes, or en
    - `GET /healthz` 返回 `ok`。
    - `GET /config/runtime.json` 返回挂载配置。
    - `/tasks` 和 `/observation` 刷新时仍回退到 SPA。
-   - 日志导出打开后端返回的 `logs.download_url`。
+   - 实时日志通过 `GET /api/tasks/{task_id}/logs` 加载，终态日志导出打开归一化后的后端 `download_url`。
    - 企业网关中的 SSO 档案接口返回 `AuthUser` 或 `401`。

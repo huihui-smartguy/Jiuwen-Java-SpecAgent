@@ -188,7 +188,7 @@ export function Tasks({
     <div className="page-stack">
       <div className="page-title-row">
         <div>
-          <p className="eyebrow">TestWise</p>
+          <p className="eyebrow">{selectedSut.name} · {selectedSut.version}</p>
           <h1>{t.tasks}</h1>
           <p className="page-subtitle">{t.tasksSubtitle}</p>
         </div>

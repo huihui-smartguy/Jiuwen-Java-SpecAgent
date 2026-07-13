@@ -10,6 +10,10 @@ import type {
   TaskCreateResponse,
   TaskStatus,
   TaskStatusResponse,
+  TaskLogEntry,
+  TaskLogLevel,
+  TaskLogSnapshot,
+  TaskLogsWireResponse,
   TriggerType
 } from '../types';
 
@@ -195,6 +199,59 @@ export async function getTaskStatus(
   return rebaseTaskLogs(body, context.apiBaseUrl);
 }
 
+export async function getTaskLogs(
+  context: ApiContext,
+  taskId: string,
+  viewUrl?: string
+): Promise<TaskLogSnapshot> {
+  const requestUrl = viewUrl
+    ? resolveTaskLogViewUrl(viewUrl, context.apiBaseUrl)
+    : buildApiUrl(context.apiBaseUrl, `/tasks/${taskId}/logs`);
+  const response = await fetch(requestUrl, {
+    headers: { Accept: 'application/json' }
+  });
+  const body = await readJson<TaskLogsWireResponse>(response);
+
+  if (!isTaskLogsWireResponse(body)) {
+    throw new ApiError('The task log response is malformed', {
+      code: 'INVALID_LOG_RESPONSE',
+      status: response.status,
+      details: body
+    });
+  }
+
+  const offset = Math.max(body.logs.length - 2000, 0);
+  const entries = body.logs.slice(offset).map((entry, index): TaskLogEntry => ({
+    id: `${entry.timestamp}:${offset + index}:${entry.level}`,
+    timestamp: entry.timestamp,
+    level: normalizeTaskLogLevel(entry.level),
+    message: entry.message
+  }));
+
+  return {
+    entries,
+    cursor: String(body.total)
+  };
+}
+
+function resolveTaskLogViewUrl(viewUrl: string, apiBaseUrl: string): string {
+  if (!isAbsoluteHttpUrl(apiBaseUrl)) {
+    return rebaseDownloadUrl(viewUrl, apiBaseUrl) ?? viewUrl;
+  }
+
+  if (isAbsoluteHttpUrl(viewUrl)) {
+    return viewUrl;
+  }
+
+  const apiBase = new URL(apiBaseUrl);
+  const resolved = new URL(viewUrl, `${trimTrailingSlash(apiBaseUrl)}/`);
+  const apiPath = trimTrailingSlash(apiBase.pathname);
+  if (viewUrl.startsWith('/') && apiPath !== '/api' && resolved.pathname.startsWith('/api/')) {
+    resolved.pathname = `${apiPath}${resolved.pathname.slice('/api'.length)}`;
+  }
+  return resolved.toString();
+}
+
 export function normalizeTaskStatus(response: TaskStatusResponse): NormalizedTaskStatus {
   const isTerminal = response.status === 'success' || response.status === 'failed' || response.status === 'cancelled';
   const logDownloadUrl = response.logs?.download_url;
@@ -327,6 +384,43 @@ function rebaseTaskLogs(response: TaskStatusResponse, apiBaseUrl: string): TaskS
       download_url: rebasedDownloadUrl
     }
   };
+}
+
+function normalizeTaskLogLevel(level: string): TaskLogLevel {
+  switch (level.trim().toLowerCase()) {
+    case 'debug':
+      return 'debug';
+    case 'info':
+      return 'info';
+    case 'warning':
+    case 'warn':
+      return 'warn';
+    case 'error':
+    case 'critical':
+    case 'fatal':
+      return 'error';
+    case 'log':
+      return 'log';
+    default:
+      return 'log';
+  }
+}
+
+function isTaskLogsWireResponse(value: unknown): value is TaskLogsWireResponse {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<TaskLogsWireResponse>;
+  return candidate.success === true
+    && Array.isArray(candidate.logs)
+    && Number.isSafeInteger(candidate.total)
+    && (candidate.total ?? -1) >= 0
+    && candidate.total === candidate.logs.length
+    && candidate.logs.every((entry) => Boolean(entry)
+      && typeof entry.timestamp === 'string'
+      && typeof entry.level === 'string'
+      && typeof entry.message === 'string');
 }
 
 function isLiveTaskStatusEnvelope(
