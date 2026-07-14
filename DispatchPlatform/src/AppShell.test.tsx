@@ -131,7 +131,9 @@ describe('AppShell', () => {
     expect(shellStyles).toMatch(/\.desktop-object-control\s*\{[^}]*width:\s*216px;/s);
     expect(shellStyles).toMatch(/\.object-control\s*\{[^}]*height:\s*44px;[^}]*border-radius:\s*16px;/s);
     expect(shellStyles).toMatch(/\.language-button,[\s\S]*?\.account-menu__trigger\s*\{[^}]*width:\s*44px;[^}]*height:\s*44px;/s);
-    expect(shellStyles).toMatch(/@media \(max-width:\s*1319px\)/);
+    expect(shellStyles).toMatch(/\.language-button,[\s\S]*?\.account-menu__trigger\s*\{[^}]*font-weight:\s*500;/s);
+    expect(shellStyles).toMatch(/\.account-menu__trigger\s*\{[^}]*font-weight:\s*700;/s);
+    expect(shellStyles).toMatch(/@media \(max-width:\s*1319px\)\s*\{[\s\S]*?\.app-header__inner\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto;[^}]*\}[\s\S]*?\.app-header__actions\s*\{[^}]*grid-column:\s*2;[^}]*\}/s);
   });
 
   test('clicks through every direct destination without exposing legacy or extra UI', async () => {

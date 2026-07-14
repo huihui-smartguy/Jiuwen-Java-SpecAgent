@@ -204,7 +204,7 @@
   color: var(--color-text-secondary);
   background: #fff;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 500;
   line-height: 20px;
   letter-spacing: 0;
   transition: color var(--transition-fast), border-color var(--transition-fast), background-color var(--transition-fast);
@@ -238,6 +238,7 @@
 .account-menu__trigger {
   color: var(--color-text-primary);
   background: var(--color-surface-low);
+  font-weight: 700;
 }
 
 .account-menu__monogram {
@@ -497,6 +498,14 @@
 }
 
 @media (max-width: 1319px) {
+  .app-header__inner {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .app-header__actions {
+    grid-column: 2;
+  }
+
   .desktop-navigation,
   .desktop-object-control,
   .header-language,
@@ -512,6 +521,10 @@
 }
 
 @media (max-width: 480px) {
+  .app-header__inner {
+    padding-inline: 16px;
+  }
+
   .mobile-drawer {
     width: 100%;
     padding-inline: 16px;
