@@ -208,6 +208,56 @@ describe('AppShell', () => {
     expect(within(summary).getByText(/API/i)).toBeInTheDocument();
   });
 
+  test('shares AppShell-owned Object and language state with Settings without persistence', async () => {
+    const user = userEvent.setup();
+    const storageSpy = vi.spyOn(Storage.prototype, 'setItem');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    renderShell('/settings', {
+      apiBaseUrl: '/runtime-api',
+      deploymentMode: 'container',
+      defaultLanguage: 'zh',
+      sutTargets: [
+        {
+          id: 'object-one',
+          name: '对象一',
+          product: '产品一',
+          scene: 'API',
+          version: 'v1',
+          apiBaseUrl: '/object-one-api',
+          status: 'healthy'
+        },
+        {
+          id: 'object-two',
+          name: '对象二',
+          product: '产品二',
+          scene: '场景',
+          version: 'v2',
+          apiBaseUrl: '/object-two-api',
+          status: 'degraded'
+        }
+      ]
+    });
+
+    const settingsObject = screen.getByRole('combobox', { name: '默认 Object' });
+    const headerObject = within(screen.getByTestId('object-control')).getByLabelText('Object');
+    expect(settingsObject).toHaveValue('object-one');
+    expect(headerObject).toHaveValue('object-one');
+
+    await user.selectOptions(settingsObject, 'object-two');
+    expect(headerObject).toHaveValue('object-two');
+    expect(settingsObject).toHaveValue('object-two');
+    expect(screen.getByRole('textbox', { name: 'API base URL' })).toHaveValue('/object-two-api');
+    expect(within(screen.getByRole('region', { name: 'Object 连接' })).getByText('关注'))
+      .toBeInTheDocument();
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Language' }), 'en');
+    expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /switch to chinese/i })).toHaveTextContent('中');
+    expect(screen.getByRole('combobox', { name: 'Language' })).toHaveValue('en');
+    expect(storageSpy).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   test('the Tasks change-Object affordance focuses the desktop Object selector', async () => {
     const user = userEvent.setup();
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({

@@ -119,7 +119,18 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
           />
           <Route path="/scripts" element={<Scripts {...sharedProps} />} />
           <Route path="/knowledge" element={<Knowledge {...sharedProps} />} />
-          <Route path="/settings" element={<SettingsPage {...sharedProps} />} />
+          <Route
+            path="/settings"
+            element={(
+              <SettingsPage
+                language={language}
+                selectedSut={selectedSut}
+                runtimeConfig={runtimeConfig}
+                onObjectChange={setSelectedSutId}
+                onLanguageChange={setLanguage}
+              />
+            )}
+          />
         </Routes>
       </main>
     </div>
