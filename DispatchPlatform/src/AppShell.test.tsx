@@ -75,12 +75,17 @@ describe('AppShell', () => {
     expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();
   });
 
-  test('preserves the existing dashboard hierarchy while replacing the shell', () => {
+  test('renders the approved Overview hierarchy inside the shared shell', () => {
     renderShell();
 
     expect(screen.getByRole('heading', { name: /测试看板/i })).toBeInTheDocument();
-    expect(screen.getByText(/执行焦点/i)).toBeInTheDocument();
-    expect(screen.getByText(/L0 质量摘要/i)).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /当前执行/i })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /质量摘要/i })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /执行路径/i })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /最近活动/i })).toBeInTheDocument();
+    expect(screen.getByRole('complementary', { name: /需要关注/i })).toBeInTheDocument();
+    expect(screen.queryByText(/执行焦点/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/L0 质量摘要/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/五分类责任分流/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/基本功能质量矩阵/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/DFX 维度雷达/i)).not.toBeInTheDocument();

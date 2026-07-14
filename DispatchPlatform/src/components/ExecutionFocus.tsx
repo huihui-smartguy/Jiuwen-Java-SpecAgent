@@ -1,8 +1,7 @@
-import { Activity, ArrowRight, Server, TerminalSquare } from 'lucide-react';
+import { ArrowRight, Flag } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getCopy } from '../i18n';
 import type { Language, NormalizedTaskStatus, SutTarget } from '../types';
-import { StatusBadge } from './StatusBadge';
 
 export function ExecutionFocus({
   language,
@@ -15,37 +14,55 @@ export function ExecutionFocus({
 }) {
   const t = getCopy(language);
   const total = task.progress?.total_commands ?? task.result?.total_commands ?? 0;
-  const completed = task.progress?.completed ?? task.result?.success_count ?? 0;
+  const completed = task.progress
+    ? task.progress.completed
+    : (task.result?.success_count ?? 0) + (task.result?.failed_count ?? 0);
+  const boundedCompleted = Math.min(Math.max(completed, 0), Math.max(total, 0));
+  const percent = total > 0 ? Math.min(100, Math.max(0, (boundedCompleted / total) * 100)) : 0;
+  const rawCommand = task.progress?.current_command;
+  const currentCommand = rawCommand
+    ? rawCommand.replace(/^(?:执行命令|command)\s*[:：]\s*/iu, '')
+    : t.noCurrentCommand;
+  const statusLabel = task.uiStatus === 'polling_error'
+    ? t.polling_error
+    : (task.backend_status ?? task.status).toUpperCase();
 
   return (
-    <section className="execution-focus" aria-labelledby="execution-focus-title">
-      <h2 id="execution-focus-title" className="sr-only">
-        {t.executionFocus}
+    <section className="execution-focus overview-current-run" aria-labelledby="current-run-title">
+      <h2 id="current-run-title" className="sr-only">
+        {t.activeRun}
       </h2>
-      <div className="focus-main">
-        <span className="focus-label">{t.activeRun}</span>
-        <strong className="focus-task-id">{task.task_id}</strong>
-      </div>
-      <div className="focus-meta">
-        <span>
-          <Server aria-hidden="true" />
-          {sut.name} · {sut.version}
+      <div className="current-run__identity">
+        <span className="current-run__icon" aria-hidden="true">
+          <Flag />
         </span>
-        <StatusBadge status={task.uiStatus} language={language} />
+        <div>
+          <span className="current-run__label">{t.activeRun} · {statusLabel}</span>
+          <strong className="focus-task-id">{task.task_id}</strong>
+          <span className="sr-only">{sut.name} · {sut.version}</span>
+        </div>
       </div>
-      <div className="focus-progress" aria-label={t.progress}>
-        <Activity aria-hidden="true" />
-        <strong>
-          {completed}/{total}
-        </strong>
-        <span>{t.progress}</span>
+      <div className="current-run__progress">
+        <span className="current-run__label">
+          {t.progress} · <strong>{boundedCompleted} / {total}</strong>
+        </span>
+        <div
+          className="current-run__progress-track"
+          role="progressbar"
+          aria-label={t.progress}
+          aria-valuemin={0}
+          aria-valuemax={Math.max(total, 1)}
+          aria-valuenow={boundedCompleted}
+        >
+          <span style={{ width: `${percent}%` }} />
+        </div>
       </div>
-      <div className="focus-command">
-        <TerminalSquare aria-hidden="true" />
-        <code>{task.progress?.current_command ?? t.noFakeLiveLogs}</code>
+      <div className="current-run__command">
+        <span className="current-run__label">{t.currentCommand}</span>
+        <code>{currentCommand}</code>
       </div>
       <Link className="focus-link" to="/observation">
-        {t.openObservation}
+        {t.openObserveConsole}
         <ArrowRight aria-hidden="true" />
       </Link>
     </section>
