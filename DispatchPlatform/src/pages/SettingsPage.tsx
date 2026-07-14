@@ -8,7 +8,7 @@ export function SettingsPage({
 }: {
   language: Language;
   selectedSut: SutTarget;
-  activeTask: NormalizedTaskStatus;
+  activeTask: NormalizedTaskStatus | null;
   runtimeConfig: RuntimeConfig;
 }) {
   const t = getCopy(language);

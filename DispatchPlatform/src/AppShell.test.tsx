@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { AppShell } from './AppShell';
 import { resolveRuntimeConfig } from './config/runtime';
+import { activeTask as mockActiveTask } from './data/mockData';
 
 const expectedNavigation = [
   ['Overview', '/'],
@@ -89,6 +90,16 @@ describe('AppShell', () => {
     expect(screen.queryByText(/五分类责任分流/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/基本功能质量矩阵/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/DFX 维度雷达/i)).not.toBeInTheDocument();
+  });
+
+  test('does not seed a mock active task when live mode has no session task', () => {
+    renderShell('/', { enableMockFallback: false });
+
+    const currentRun = screen.getByRole('region', { name: /当前执行/i });
+    expect(within(currentRun).queryByText(mockActiveTask.task_id)).not.toBeInTheDocument();
+    expect(within(currentRun).queryByText(/pytest testcase\/save/i)).not.toBeInTheDocument();
+    expect(within(currentRun).getByText('暂无活动任务')).toBeInTheDocument();
+    expect(within(currentRun).getByText('0 / 0')).toBeInTheDocument();
   });
 
   test('keeps the direct navigation active state aligned with the current route', () => {

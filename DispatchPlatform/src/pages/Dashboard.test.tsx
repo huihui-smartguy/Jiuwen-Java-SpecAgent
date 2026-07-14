@@ -12,7 +12,7 @@ function renderDashboard({
   runtimeConfig = resolveRuntimeConfig({ defaultLanguage: 'zh', enableMockFallback: true }),
   selectedSut = runtimeConfig.sutTargets[0]
 }: {
-  task?: NormalizedTaskStatus;
+  task?: NormalizedTaskStatus | null;
   runtimeConfig?: RuntimeConfig;
   selectedSut?: SutTarget;
 } = {}) {
@@ -184,9 +184,9 @@ describe('Overview dashboard', () => {
     expect(screen.getByRole('heading', { name: '测试看板' })).toBeInTheDocument();
   });
 
-  test('does not present approved sample data when mock fallback is disabled', () => {
+  test('renders truthful unavailable data when mock fallback is disabled and no task is active', () => {
     const runtimeConfig = resolveRuntimeConfig({ defaultLanguage: 'zh', enableMockFallback: false });
-    const { container } = renderDashboard({ runtimeConfig });
+    const { container } = renderDashboard({ runtimeConfig, task: null });
 
     expect(screen.queryByText('93.6')).not.toBeInTheDocument();
     expect(screen.queryByText('93.6%')).not.toBeInTheDocument();
@@ -194,7 +194,11 @@ describe('Overview dashboard', () => {
     expect(screen.queryByText('保存接口任务已发起')).not.toBeInTheDocument();
     expect(screen.queryByText('环境检查')).not.toBeInTheDocument();
     expect(container.querySelectorAll('.overview-metric-card')).toHaveLength(3);
-    expect(screen.getByText(activeTask.task_id)).toBeInTheDocument();
+    const currentRun = screen.getByRole('region', { name: '当前执行' });
+    expect(within(currentRun).queryByText(activeTask.task_id)).not.toBeInTheDocument();
+    expect(within(currentRun).queryByText(/pytest testcase\/save/i)).not.toBeInTheDocument();
+    expect(within(currentRun).getByText('暂无活动任务')).toBeInTheDocument();
+    expect(within(currentRun).getByText('0 / 0')).toBeInTheDocument();
     expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(4);
   });
 });

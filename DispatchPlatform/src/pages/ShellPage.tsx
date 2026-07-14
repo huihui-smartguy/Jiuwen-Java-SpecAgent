@@ -5,7 +5,7 @@ import type { Language, NormalizedTaskStatus, RuntimeConfig, SutTarget } from '.
 export interface ShellPageBaseProps {
   language: Language;
   selectedSut: SutTarget;
-  activeTask: NormalizedTaskStatus;
+  activeTask: NormalizedTaskStatus | null;
   runtimeConfig: RuntimeConfig;
 }
 

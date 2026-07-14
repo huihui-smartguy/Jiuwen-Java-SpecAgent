@@ -10,20 +10,22 @@ export function ExecutionFocus({
 }: {
   language: Language;
   sut: SutTarget;
-  task: NormalizedTaskStatus;
+  task: NormalizedTaskStatus | null;
 }) {
   const t = getCopy(language);
-  const total = task.progress?.total_commands ?? task.result?.total_commands ?? 0;
-  const completed = task.progress
+  const total = task?.progress?.total_commands ?? task?.result?.total_commands ?? 0;
+  const completed = task?.progress
     ? task.progress.completed
-    : (task.result?.success_count ?? 0) + (task.result?.failed_count ?? 0);
+    : (task?.result?.success_count ?? 0) + (task?.result?.failed_count ?? 0);
   const boundedCompleted = Math.min(Math.max(completed, 0), Math.max(total, 0));
   const percent = total > 0 ? Math.min(100, Math.max(0, (boundedCompleted / total) * 100)) : 0;
-  const rawCommand = task.progress?.current_command;
+  const rawCommand = task?.progress?.current_command;
   const currentCommand = rawCommand
     ? rawCommand.replace(/^(?:执行命令|command)\s*[:：]\s*/iu, '')
     : t.noCurrentCommand;
-  const statusLabel = task.uiStatus === 'polling_error'
+  const statusLabel = !task
+    ? t.notAvailable
+    : task.uiStatus === 'polling_error'
     ? t.polling_error
     : (task.backend_status ?? task.status).toUpperCase();
 
@@ -38,7 +40,7 @@ export function ExecutionFocus({
         </span>
         <div>
           <span className="current-run__label">{t.activeRun} · {statusLabel}</span>
-          <strong className="focus-task-id">{task.task_id}</strong>
+          <strong className="focus-task-id">{task?.task_id ?? t.noActiveTask}</strong>
           <span className="sr-only">{sut.name} · {sut.version}</span>
         </div>
       </div>
@@ -53,6 +55,7 @@ export function ExecutionFocus({
           aria-valuemin={0}
           aria-valuemax={Math.max(total, 1)}
           aria-valuenow={boundedCompleted}
+          aria-valuetext={!task ? t.noActiveTask : undefined}
         >
           <span style={{ width: `${percent}%` }} />
         </div>
@@ -61,10 +64,17 @@ export function ExecutionFocus({
         <span className="current-run__label">{t.currentCommand}</span>
         <code>{currentCommand}</code>
       </div>
-      <Link className="focus-link" to="/observation">
-        {t.openObserveConsole}
-        <ArrowRight aria-hidden="true" />
-      </Link>
+      {task ? (
+        <Link className="focus-link" to="/observation">
+          {t.openObserveConsole}
+          <ArrowRight aria-hidden="true" />
+        </Link>
+      ) : (
+        <span className="focus-link" aria-disabled="true">
+          {t.openObserveConsole}
+          <ArrowRight aria-hidden="true" />
+        </span>
+      )}
     </section>
   );
 }

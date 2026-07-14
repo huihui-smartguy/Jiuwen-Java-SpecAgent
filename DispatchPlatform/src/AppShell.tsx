@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import { normalizeCreatedTask } from './api/client';
 import { ConsoleHeader } from './components/ConsoleHeader';
 import { activeTask as initialActiveTask } from './data/mockData';
@@ -21,8 +21,12 @@ import type {
 export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
   const [language, setLanguage] = useState<Language>(runtimeConfig.defaultLanguage);
   const [selectedSutId, setSelectedSutId] = useState(runtimeConfig.sutTargets[0].id);
-  const [activeTask, setActiveTask] = useState(initialActiveTask);
-  const [sessionTasks, setSessionTasks] = useState([initialActiveTask]);
+  const [activeTask, setActiveTask] = useState<NormalizedTaskStatus | null>(() => (
+    runtimeConfig.enableMockFallback ? initialActiveTask : null
+  ));
+  const [sessionTasks, setSessionTasks] = useState<NormalizedTaskStatus[]>(() => (
+    runtimeConfig.enableMockFallback ? [initialActiveTask] : []
+  ));
   const [drawerOpen, setDrawerOpen] = useState(false);
   const selectedSut = useMemo<SutTarget>(
     () => runtimeConfig.sutTargets.find((sut) => sut.id === selectedSutId) ?? runtimeConfig.sutTargets[0],
@@ -48,7 +52,7 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
     setSessionTasks((current) => [task, ...current.filter((item) => item.task_id !== task.task_id)]);
   }, []);
   const handleTaskStatusChange = useCallback((task: NormalizedTaskStatus) => {
-    setActiveTask((current) => (current.task_id === task.task_id ? task : current));
+    setActiveTask((current) => (current?.task_id === task.task_id ? task : current));
     setSessionTasks((current) => {
       const hasTask = current.some((item) => item.task_id === task.task_id);
       const nextTasks = current.map((item) => (item.task_id === task.task_id ? task : item));
@@ -90,7 +94,20 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
               />
             )}
           />
-          <Route path="/observation" element={<Observation {...sharedProps} onTaskStatusChange={handleTaskStatusChange} />} />
+          <Route
+            path="/observation"
+            element={activeTask ? (
+              <Observation
+                language={language}
+                selectedSut={selectedSut}
+                activeTask={activeTask}
+                runtimeConfig={runtimeConfig}
+                onTaskStatusChange={handleTaskStatusChange}
+              />
+            ) : (
+              <Navigate to="/tasks" replace />
+            )}
+          />
           <Route path="/results" element={<Results {...sharedProps} />} />
           <Route path="/scripts" element={<Scripts {...sharedProps} />} />
           <Route path="/knowledge" element={<Knowledge {...sharedProps} />} />

@@ -21,7 +21,7 @@ import type {
 interface PageProps {
   language: Language;
   selectedSut: SutTarget;
-  activeTask: NormalizedTaskStatus;
+  activeTask: NormalizedTaskStatus | null;
   runtimeConfig: RuntimeConfig;
   sessionTasks: NormalizedTaskStatus[];
   onTaskCreated: (task: TaskCreateResponse) => void;

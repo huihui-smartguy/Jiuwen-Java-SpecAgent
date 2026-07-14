@@ -17,7 +17,7 @@ import type { Language, NormalizedTaskStatus, RuntimeConfig, SutTarget } from '.
 interface PageProps {
   language: Language;
   selectedSut: SutTarget;
-  activeTask: NormalizedTaskStatus;
+  activeTask: NormalizedTaskStatus | null;
   runtimeConfig: RuntimeConfig;
 }
 
