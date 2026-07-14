@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, ChevronDown, Search, Sparkles } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { getScripts } from '../api/client';
 import { PageHeader } from '../components/PageHeader';
 import { PresentationOnlyButton } from '../components/PresentationOnlyButton';
@@ -39,7 +39,7 @@ const mockLastResultByScriptId: Record<MockScriptId, ScriptLastResult> = {
   'script-web088': 'Flaky'
 };
 
-function fallbackScripts(sut: SutTarget): Script[] {
+function fallbackScripts(sut: Pick<SutTarget, 'product' | 'scene'>): Script[] {
   return mockScripts.filter((script) => (
     script.product === sut.product && script.scene === sut.scene
   ));
@@ -92,28 +92,39 @@ export function Scripts({ language, selectedSut, runtimeConfig }: ScriptsProps) 
   const [search, setSearch] = useState('');
   const [level, setLevel] = useState(allFilter);
   const [feature, setFeature] = useState(allFilter);
-  const api = useMemo(
-    () => ({ apiBaseUrl: selectedSut.apiBaseUrl || runtimeConfig.apiBaseUrl }),
-    [runtimeConfig.apiBaseUrl, selectedSut.apiBaseUrl]
+  const resolvedApiBaseUrl = selectedSut.apiBaseUrl || runtimeConfig.apiBaseUrl;
+  const targetIdentity = useMemo(
+    () => ({
+      id: selectedSut.id,
+      product: selectedSut.product,
+      scene: selectedSut.scene,
+      apiBaseUrl: resolvedApiBaseUrl
+    }),
+    [resolvedApiBaseUrl, selectedSut.id, selectedSut.product, selectedSut.scene]
   );
 
   const scriptsQuery = useQuery({
-    queryKey: ['scripts', selectedSut.product, selectedSut.scene],
+    queryKey: ['scripts', targetIdentity],
     queryFn: async (): Promise<ScriptsQueryData> => {
       try {
-        const response = await getScripts(api, {
-          product: selectedSut.product,
-          scene: selectedSut.scene
+        const response = await getScripts({ apiBaseUrl: targetIdentity.apiBaseUrl }, {
+          product: targetIdentity.product,
+          scene: targetIdentity.scene
         });
         return { scripts: response.scripts, source: 'live' };
       } catch (error) {
         if (runtimeConfig.enableMockFallback) {
-          return { scripts: fallbackScripts(selectedSut), source: 'mock' };
+          return { scripts: fallbackScripts(targetIdentity), source: 'mock' };
         }
         throw error;
       }
     }
   });
+
+  useEffect(() => {
+    setLevel(allFilter);
+    setFeature(allFilter);
+  }, [targetIdentity]);
 
   const scripts = scriptsQuery.data?.scripts ?? emptyScripts;
   const source: ScriptSource = scriptsQuery.data?.source ?? 'live';
@@ -147,7 +158,11 @@ export function Scripts({ language, selectedSut, runtimeConfig }: ScriptsProps) 
     scripts.filter(isApiScript).length,
     scripts.filter(isScenarioScript).length
   ], [scripts]);
-  const summaryValues = source === 'mock' ? [286, 84, 126, 76] : liveSummaryValues;
+  const summaryValues = scriptsQuery.isPending || scriptsQuery.isError
+    ? ['—', '—', '—', '—']
+    : source === 'mock'
+      ? [286, 84, 126, 76]
+      : liveSummaryValues;
   const liveSummaryNotes = useMemo(() => {
     const objectCount = new Set(scripts.map((script) => `${script.product}\u0000${script.scene}`)).size;
     const featureCount = new Set(scripts.map((script) => script.feature)).size;
@@ -171,14 +186,16 @@ export function Scripts({ language, selectedSut, runtimeConfig }: ScriptsProps) 
           `${liveSummaryValues[3]} scripts`
         ];
   }, [language, liveSummaryValues, scripts]);
-  const summaryNotes = source === 'mock'
-    ? [
-        t.allScriptsNote,
-        t.foundationalValidationNote,
-        t.apiTestsNote,
-        t.scenarioAutomationNote
-      ]
-    : liveSummaryNotes;
+  const summaryNotes = scriptsQuery.isPending || scriptsQuery.isError
+    ? ['—', '—', '—', '—']
+    : source === 'mock'
+      ? [
+          t.allScriptsNote,
+          t.foundationalValidationNote,
+          t.apiTestsNote,
+          t.scenarioAutomationNote
+        ]
+      : liveSummaryNotes;
   const summaryCards = [
     {
       label: t.allScripts,
@@ -222,7 +239,11 @@ export function Scripts({ language, selectedSut, runtimeConfig }: ScriptsProps) 
         ))}
       </section>
 
-      <section className="scripts-table-card" aria-label={t.scripts}>
+      <section
+        className="scripts-table-card"
+        aria-label={t.scripts}
+        aria-busy={scriptsQuery.isPending}
+      >
         <div className="scripts-toolbar" role="region" aria-label={t.scriptFilters}>
           <label className="scripts-search">
             <Search aria-hidden="true" />
@@ -278,38 +299,54 @@ export function Scripts({ language, selectedSut, runtimeConfig }: ScriptsProps) 
               </tr>
             </thead>
             <tbody>
-              {filteredScripts.map((script) => {
-                const lastResult = source === 'mock' ? getMockLastResult(script.id) : undefined;
-                return (
-                  <tr key={script.id}>
-                    <td>
-                      <strong>{script.name}</strong>
-                      <span>{script.path}</span>
-                    </td>
-                    <td>{script.feature}</td>
-                    <td>
-                      <span className={`scripts-level-pill is-${script.level.toLocaleLowerCase()}`}>
-                        <span aria-hidden="true" />
-                        {script.level}
-                      </span>
-                    </td>
-                    <td>
-                      {lastResult ? (
-                        <span className={`scripts-status-pill is-${lastResult.toLocaleLowerCase()}`}>
-                          <span aria-hidden="true" />
-                          {lastResult}
-                        </span>
-                      ) : '—'}
-                    </td>
-                    <td>{script.uploaded_by || '—'}</td>
-                    <td>{formatUpdated(script.uploaded_at, source)}</td>
-                  </tr>
-                );
-              })}
-              {!filteredScripts.length && (
+              {scriptsQuery.isPending ? (
                 <tr>
-                  <td className="scripts-empty-row" colSpan={6}>{t.noMatchingScripts}</td>
+                  <td className="scripts-empty-row" colSpan={6}>
+                    <span role="status">{t.loadingScripts}</span>
+                  </td>
                 </tr>
+              ) : scriptsQuery.isError ? (
+                <tr>
+                  <td className="scripts-empty-row" colSpan={6}>
+                    <span role="alert">{t.scriptsUnavailable}</span>
+                  </td>
+                </tr>
+              ) : (
+                <>
+                  {filteredScripts.map((script) => {
+                    const lastResult = source === 'mock' ? getMockLastResult(script.id) : undefined;
+                    return (
+                      <tr key={script.id}>
+                        <td>
+                          <strong>{script.name}</strong>
+                          <span>{script.path}</span>
+                        </td>
+                        <td>{script.feature}</td>
+                        <td>
+                          <span className={`scripts-level-pill is-${script.level.toLocaleLowerCase()}`}>
+                            <span aria-hidden="true" />
+                            {script.level}
+                          </span>
+                        </td>
+                        <td>
+                          {lastResult ? (
+                            <span className={`scripts-status-pill is-${lastResult.toLocaleLowerCase()}`}>
+                              <span aria-hidden="true" />
+                              {lastResult}
+                            </span>
+                          ) : '—'}
+                        </td>
+                        <td>{script.uploaded_by || '—'}</td>
+                        <td>{formatUpdated(script.uploaded_at, source)}</td>
+                      </tr>
+                    );
+                  })}
+                  {!filteredScripts.length && (
+                    <tr>
+                      <td className="scripts-empty-row" colSpan={6}>{t.noMatchingScripts}</td>
+                    </tr>
+                  )}
+                </>
               )}
             </tbody>
           </table>

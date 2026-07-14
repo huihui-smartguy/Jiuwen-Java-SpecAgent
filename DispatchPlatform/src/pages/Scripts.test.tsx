@@ -37,18 +37,24 @@ function renderScripts({
     defaultOptions: { queries: { retry: false } }
   });
 
-  return render(
+  const renderTree = (sut: SutTarget) => (
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={['/scripts']}>
         <Scripts
           language="zh"
-          selectedSut={selectedSut}
+          selectedSut={sut}
           runtimeConfig={runtimeConfig}
         />
         <LocationProbe />
       </MemoryRouter>
     </QueryClientProvider>
   );
+  const view = render(renderTree(selectedSut));
+
+  return {
+    ...view,
+    rerenderSelectedSut: (sut: SutTarget) => view.rerender(renderTree(sut))
+  };
 }
 
 function json(body: unknown) {
@@ -57,6 +63,17 @@ function json(body: unknown) {
     status: 200,
     json: () => Promise.resolve(body)
   } as Response);
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+
+  return { promise, reject, resolve };
 }
 
 function mockLiveScriptsApi(scripts: Script[]) {
@@ -169,6 +186,56 @@ describe('approved Scripts frame', () => {
     ]);
   });
 
+  test('keeps pending summaries unknown and announces loading inside the busy table card', async () => {
+    const pendingResponse = deferred<Response>();
+    vi.spyOn(globalThis, 'fetch').mockReturnValue(pendingResponse.promise);
+    renderScripts();
+
+    const summary = screen.getByRole('region', { name: '脚本概览' });
+    expect(within(summary).getAllByTestId('script-summary-value').map((value) => value.textContent)).toEqual([
+      '—',
+      '—',
+      '—',
+      '—'
+    ]);
+
+    const tableCard = screen.getByRole('region', { name: '脚本资产' });
+    const table = within(tableCard).getByRole('table', { name: '脚本资产' });
+    expect(tableCard).toHaveAttribute('aria-busy', 'true');
+    expect(within(table).getByRole('status')).toHaveTextContent('正在加载脚本');
+    expect(within(table).queryByText('没有匹配的脚本')).not.toBeInTheDocument();
+
+    pendingResponse.resolve(await json({
+      success: true,
+      scripts: [],
+      total: 0,
+      filters: {}
+    }));
+    await waitFor(() => expect(tableCard).not.toHaveAttribute('aria-busy', 'true'));
+  });
+
+  test('keeps fallback-disabled errors unknown and announces unavailability inside the table', async () => {
+    const runtimeConfig = resolveRuntimeConfig({
+      defaultLanguage: 'zh',
+      enableMockFallback: false
+    });
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('offline'));
+    renderScripts({ runtimeConfig, selectedSut: runtimeConfig.sutTargets[0] });
+
+    const summary = screen.getByRole('region', { name: '脚本概览' });
+    const tableCard = screen.getByRole('region', { name: '脚本资产' });
+    const table = within(tableCard).getByRole('table', { name: '脚本资产' });
+    expect(await within(table).findByRole('alert')).toHaveTextContent('脚本暂不可用');
+    expect(within(summary).getAllByTestId('script-summary-value').map((value) => value.textContent)).toEqual([
+      '—',
+      '—',
+      '—',
+      '—'
+    ]);
+    expect(tableCard).not.toHaveAttribute('aria-busy', 'true');
+    expect(within(table).queryByText('没有匹配的脚本')).not.toBeInTheDocument();
+  });
+
   test('keeps the import affordance focusable and inert without upload, feedback, or navigation', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('offline'));
     const user = userEvent.setup();
@@ -271,6 +338,167 @@ describe('approved Scripts frame', () => {
     expect(within(table).getByText('test_ak007_create_key')).toBeInTheDocument();
     expect(within(table).queryByText('test_ak006_list_api_keys')).not.toBeInTheDocument();
     expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('refetches and resets target filters when Object ID and API base change within one scope', async () => {
+    const runtimeConfig = resolveRuntimeConfig({
+      defaultLanguage: 'zh',
+      enableMockFallback: false,
+      sutTargets: [
+        {
+          id: 'alpha-object',
+          name: 'Alpha Object',
+          product: 'SharedProduct',
+          scene: 'SharedScene',
+          version: 'v1',
+          apiBaseUrl: '/alpha-api',
+          status: 'healthy'
+        },
+        {
+          id: 'beta-object',
+          name: 'Beta Object',
+          product: 'SharedProduct',
+          scene: 'SharedScene',
+          version: 'v2',
+          apiBaseUrl: '/beta-api',
+          status: 'healthy'
+        }
+      ]
+    });
+    const rowsByPath: Record<string, Script[]> = {
+      '/alpha-api/scripts': [{
+        id: 'alpha-script',
+        name: 'alpha_script',
+        filename: 'alpha_script.py',
+        extension: '.py',
+        product: 'SharedProduct',
+        scene: 'SharedScene',
+        feature: 'Alpha Feature',
+        level: 'L1',
+        size: 10,
+        uploaded_by: 'alpha-owner',
+        path: 'alpha/alpha_script.py'
+      }],
+      '/beta-api/scripts': [{
+        id: 'beta-script',
+        name: 'beta_script',
+        filename: 'beta_script.py',
+        extension: '.py',
+        product: 'SharedProduct',
+        scene: 'SharedScene',
+        feature: 'Beta Feature',
+        level: 'L3',
+        size: 20,
+        uploaded_by: 'beta-owner',
+        path: 'beta/beta_script.py'
+      }]
+    };
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = new URL(String(input), 'http://local.test');
+      const scripts = rowsByPath[url.pathname] ?? [];
+      return json({ success: true, scripts, total: scripts.length, filters: {} });
+    });
+    const user = userEvent.setup();
+    const { rerenderSelectedSut } = renderScripts({
+      runtimeConfig,
+      selectedSut: runtimeConfig.sutTargets[0]
+    });
+
+    expect(await screen.findByText('alpha_script')).toBeInTheDocument();
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Level' }), 'L1');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Feature' }), 'Alpha Feature');
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    rerenderSelectedSut(runtimeConfig.sutTargets[1]);
+
+    expect(await screen.findByText('beta_script')).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Level' })).toHaveValue('All');
+    expect(screen.getByRole('combobox', { name: 'Feature' })).toHaveValue('All');
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Level' }), 'L3');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Feature' }), 'Beta Feature');
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy.mock.calls.map(([input]) => (
+      new URL(String(input), 'http://local.test').pathname
+    ))).toEqual(['/alpha-api/scripts', '/beta-api/scripts']);
+  });
+
+  test('refetches and resets target filters when Object data changes under the same ID', async () => {
+    const initialTarget: SutTarget = {
+      id: 'mutable-object',
+      name: 'Mutable Object v1',
+      product: 'InitialProduct',
+      scene: 'InitialScene',
+      version: 'v1',
+      apiBaseUrl: '/initial-api',
+      status: 'healthy'
+    };
+    const updatedTarget: SutTarget = {
+      id: 'mutable-object',
+      name: 'Mutable Object v2',
+      product: 'UpdatedProduct',
+      scene: 'UpdatedScene',
+      version: 'v2',
+      apiBaseUrl: '/updated-api',
+      status: 'healthy'
+    };
+    const runtimeConfig = resolveRuntimeConfig({
+      defaultLanguage: 'zh',
+      enableMockFallback: false,
+      sutTargets: [initialTarget]
+    });
+    const rowsByPath: Record<string, Script[]> = {
+      '/initial-api/scripts': [{
+        id: 'initial-script',
+        name: 'initial_script',
+        filename: 'initial_script.py',
+        extension: '.py',
+        product: 'InitialProduct',
+        scene: 'InitialScene',
+        feature: 'Initial Feature',
+        level: 'L1',
+        size: 10,
+        uploaded_by: 'initial-owner',
+        path: 'initial/initial_script.py'
+      }],
+      '/updated-api/scripts': [{
+        id: 'updated-script',
+        name: 'updated_script',
+        filename: 'updated_script.py',
+        extension: '.py',
+        product: 'UpdatedProduct',
+        scene: 'UpdatedScene',
+        feature: 'Updated Feature',
+        level: 'L3',
+        size: 20,
+        uploaded_by: 'updated-owner',
+        path: 'updated/updated_script.py'
+      }]
+    };
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = new URL(String(input), 'http://local.test');
+      const scripts = rowsByPath[url.pathname] ?? [];
+      return json({ success: true, scripts, total: scripts.length, filters: {} });
+    });
+    const user = userEvent.setup();
+    const { rerenderSelectedSut } = renderScripts({ runtimeConfig, selectedSut: initialTarget });
+
+    expect(await screen.findByText('initial_script')).toBeInTheDocument();
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Level' }), 'L1');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Feature' }), 'Initial Feature');
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    rerenderSelectedSut(updatedTarget);
+
+    expect(await screen.findByText('updated_script')).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Level' })).toHaveValue('All');
+    expect(screen.getByRole('combobox', { name: 'Feature' })).toHaveValue('All');
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Level' }), 'L3');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Feature' }), 'Updated Feature');
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 
   test('derives live summaries only from fetched rows and never assigns mock Last result values', async () => {
