@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, test, vi } from 'vitest';
@@ -273,5 +273,92 @@ describe('AppShell', () => {
     expect(screen.getByRole('heading', { name: /任务调度/i })).toBeInTheDocument();
     expect(screen.queryByText(mockActiveTask.task_id)).not.toBeInTheDocument();
     expect(screen.queryByText(/Environment validation passed/i)).not.toBeInTheDocument();
+  });
+
+  test('passes newly created session task state through to Results without requesting reports', async () => {
+    const user = userEvent.setup();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = new URL(String(input), 'http://local.test');
+      if (url.pathname.endsWith('/features')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          success: true,
+          product: '高码java',
+          scene: '场景',
+          features: [{ id: 'shell-feature', name: 'Shell feature', type: 'L0' }],
+          total: 1
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+      }
+      if (url.pathname.endsWith('/scripts')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          success: true,
+          scripts: [{
+            id: 'shell-script',
+            name: 'shell_script',
+            filename: 'shell_script.py',
+            extension: '.py',
+            product: '高码java',
+            scene: '场景',
+            feature: 'Shell feature',
+            level: 'L0',
+            size: 100,
+            uploaded_at: '2026-07-14T10:00:00',
+            uploaded_by: 'shell-user',
+            path: 'testcase/shell_script.py'
+          }],
+          total: 1,
+          filters: {}
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+      }
+      if (url.pathname.endsWith('/tasks') && init?.method === 'POST') {
+        return Promise.resolve(new Response(JSON.stringify({
+          success: true,
+          task_id: 'task_from_app_shell',
+          status: 'queued',
+          message: 'Task queued',
+          queue_position: 1,
+          total_scripts: 1,
+          created_at: '2026-07-14T10:42:00',
+          estimated_duration: '1 minute'
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+      }
+      if (url.pathname.endsWith('/tasks/task_from_app_shell/logs')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          success: true,
+          total: 0,
+          logs: []
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+      }
+      if (url.pathname.endsWith('/tasks/task_from_app_shell')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          success: true,
+          task: {
+            id: 'task_from_app_shell',
+            status: 'queued',
+            progress: 0,
+            total_scripts: 1,
+            executed_scripts: 0,
+            failed_scripts: 0,
+            queue_position: 1,
+            started_at: '2026-07-14T10:42:00'
+          }
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+      }
+      return Promise.reject(new Error(`Unexpected request: ${url.pathname}`));
+    });
+    renderShell('/tasks', { enableMockFallback: false });
+
+    await waitFor(() => expect(screen.getByLabelText('Feature')).toHaveValue('Shell feature'));
+    await waitFor(() => expect(screen.getByRole('button', { name: '启动执行' })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: '启动执行' }));
+    expect(await screen.findByRole('heading', { name: '执行观测' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('link', { name: 'Results' }));
+
+    const reports = await screen.findByRole('region', { name: '最近报告' });
+    expect(within(reports).getByText('task_from_app_shell')).toBeInTheDocument();
+    expect(within(reports).getAllByRole('row')).toHaveLength(2);
+    expect(fetchSpy.mock.calls.filter(([input]) => (
+      new URL(String(input), 'http://local.test').pathname.includes('/reports')
+    ))).toHaveLength(0);
   });
 });

@@ -113,7 +113,10 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
               <Navigate to="/tasks" replace />
             )}
           />
-          <Route path="/results" element={<Results {...sharedProps} />} />
+          <Route
+            path="/results"
+            element={<Results {...sharedProps} sessionTasks={sessionTasks} />}
+          />
           <Route path="/scripts" element={<Scripts {...sharedProps} />} />
           <Route path="/knowledge" element={<Knowledge {...sharedProps} />} />
           <Route path="/settings" element={<SettingsPage {...sharedProps} />} />
