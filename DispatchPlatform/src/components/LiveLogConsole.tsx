@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query';
-import { ArrowDownToLine } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { ApiError, getTaskLogs } from '../api/client';
 import { getCopy } from '../i18n';
@@ -116,8 +115,14 @@ export function LiveLogConsole({
     <section className="live-log-panel" aria-labelledby="execution-events-title">
       <header className="live-log-heading">
         <h2 id="execution-events-title">{t.executionEvents}</h2>
+        <span className="live-log-count" aria-hidden="true">
+          {language === 'zh' ? `${visibleEntries.length} 条日志` : `${visibleEntries.length} logs`}
+        </span>
+        <span className="sr-only" aria-live="polite">
+          {t.logLineCount.replace('{count}', String(visibleEntries.length))}
+        </span>
         {showMockEntries ? (
-          <span className="live-log-disclosure">LIVE STATUS · NOT LIVE LOGS</span>
+          <span className="sr-only">LIVE STATUS · NOT LIVE LOGS</span>
         ) : null}
       </header>
 
@@ -144,7 +149,6 @@ export function LiveLogConsole({
           </ol>
         ) : (
           <div className="live-log-empty">
-            <ArrowDownToLine aria-hidden="true" />
             <strong>{t.waitingForLogs}</strong>
             <span>{t.waitingForLogsHint}</span>
           </div>
@@ -154,9 +158,6 @@ export function LiveLogConsole({
       {logQuery.isError && hasRealSnapshot ? (
         <p className="sr-only" role="status">{t.logsUnavailable}</p>
       ) : null}
-      <p className="sr-only" aria-live="polite">
-        {t.logLineCount.replace('{count}', String(visibleEntries.length))}
-      </p>
     </section>
   );
 }

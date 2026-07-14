@@ -227,7 +227,7 @@ export const copy = {
     weeklyReports: '本周报告',
     weeklyReportsMockNote: '较上周 +8',
     sessionReportsNote: '仅本次会话',
-    overallPassRate: '总体通过率',
+    overallPassRate: '综合通过率',
     consecutiveImprovement: '连续 4 天改善',
     reportsWithResults: '份含结果',
     failedCases: '失败用例',

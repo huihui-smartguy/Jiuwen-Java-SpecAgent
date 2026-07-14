@@ -1,12 +1,4 @@
-import {
-  ArrowRight,
-  CalendarDays,
-  ChartNoAxesCombined,
-  CircleAlert,
-  Clock3,
-  Search
-} from 'lucide-react';
-import { useId, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { MetricCard } from '../components/MetricCard';
 import { PageHeader } from '../components/PageHeader';
 import { PresentationOnlyButton } from '../components/PresentationOnlyButton';
@@ -30,6 +22,7 @@ interface ResultsProps {
 type ResultTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
 
 interface ReportRow {
+  title: string;
   id: string;
   object: string;
   result: string;
@@ -43,73 +36,87 @@ interface ReportRow {
 interface TrendPoint {
   label: string;
   value: number;
+  barHeight?: number;
 }
 
 interface FailureRow {
   label: string;
   count: number;
   tone: 'danger' | 'warning' | 'accent';
+  barWidth?: number;
 }
 
 interface ResultsViewModel {
   metrics: [string, string, string, string];
   metricNotes: [string, string, string, string];
   trendPoints: TrendPoint[];
-  trendChange?: string;
-  trendObject: string;
   failures: FailureRow[];
+  failureTotal: number;
   reports: ReportRow[];
 }
 
-const mockTrendPoints: TrendPoint[] = [
-  { label: '07/08', value: 91.5 },
-  { label: '07/09', value: 92.3 },
-  { label: '07/10', value: 92.9 },
-  { label: '07/11', value: 92.7 },
-  { label: '07/12', value: 93.2 },
-  { label: '07/13', value: 93.0 },
-  { label: '07/14', value: 93.6 }
-];
+const mockTrendValues = [88.4, 89.7, 90.5, 89.9, 91.2, 90.8, 91.8];
+const mockTrendHeights = [72, 88, 96, 82, 104, 94, 112];
+const mockFailureCounts = [3, 2, 1, 1];
+const mockFailureWidths = [316, 213, 130, 102];
 
-const mockFailures: FailureRow[] = [
-  { label: 'API 密钥', count: 7, tone: 'danger' },
-  { label: '用户权限', count: 5, tone: 'warning' },
-  { label: '会话管理', count: 3, tone: 'accent' },
-  { label: '其他', count: 2, tone: 'accent' }
-];
+function mockViewModel(language: Language): ResultsViewModel {
+  const isChinese = language === 'zh';
+  const trendLabels = isChinese
+    ? ['周一', '周二', '周三', '周四', '周五', '周六', '今天']
+    : ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Today'];
+  const failureLabels = isChinese
+    ? ['断言失败', '环境异常', '执行超时', '数据准备']
+    : ['Assertion failure', 'Environment error', 'Execution timeout', 'Data preparation'];
+  const reportTitles = isChinese
+    ? ['回归验证 · API 密钥管理', '角色权限边界验证', '会话过期策略回归', '数据源配置冒烟']
+    : [
+        'Regression validation · API key management',
+        'Role permission boundary validation',
+        'Session expiry policy regression',
+        'Data source configuration smoke test'
+      ];
+  const reportResults = isChinese
+    ? ['通过', '失败', '通过', '部分通过']
+    : ['Passed', 'Failed', 'Passed', 'Partial'];
+  const completed = isChinese
+    ? ['今天 10:42', '今天 09:18', '昨天 16:26', '7 月 13 日']
+    : ['Today 10:42', 'Today 09:18', 'Yesterday 16:26', 'Jul 13'];
+  const ids = ['task-ad06c8e5', 'task-c91b2d4a', 'task-7f1820bd', 'task-2e9a170c'];
+  const resultTones: ResultTone[] = ['success', 'danger', 'success', 'warning'];
+  const passRates = ['100.0%', '75.0%', '100.0%', '80.0%'];
+  const passRateValues = [100, 75, 100, 80];
 
-const mockReports: ReportRow[] = [
-  {
-    id: 'EXEC-2042',
-    object: '合一版本 API',
-    result: 'Success',
-    resultTone: 'success',
-    passRate: '96.2%',
-    passRateValue: 96.2,
-    completed: 'Today · 10:42',
-    trendLabel: 'Today · 10:42'
-  },
-  {
-    id: 'EXEC-2041',
-    object: '高码 Python',
-    result: 'Partial',
-    resultTone: 'warning',
-    passRate: '88.9%',
-    passRateValue: 88.9,
-    completed: 'Today · 09:18',
-    trendLabel: 'Today · 09:18'
-  },
-  {
-    id: 'EXEC-2039',
-    object: '合一版本 Web',
-    result: 'Success',
-    resultTone: 'success',
-    passRate: '94.7%',
-    passRateValue: 94.7,
-    completed: 'Yesterday',
-    trendLabel: 'Yesterday'
-  }
-];
+  return {
+    metrics: ['18', '91.8%', '7', isChinese ? '6分42秒' : '6m 42s'],
+    metricNotes: isChinese
+      ? ['较上周 +3', '近 7 天 +2.4%', '需要复核', '较上周 -38秒']
+      : ['Compared with last week +3', 'Last 7 days +2.4%', 'Review required', 'Compared with last week -38s'],
+    trendPoints: trendLabels.map((label, index) => ({
+      label,
+      value: mockTrendValues[index],
+      barHeight: mockTrendHeights[index]
+    })),
+    failures: failureLabels.map((label, index) => ({
+      label,
+      count: mockFailureCounts[index],
+      tone: index === 0 ? 'danger' : 'warning',
+      barWidth: mockFailureWidths[index]
+    })),
+    failureTotal: 7,
+    reports: ids.map((id, index) => ({
+      title: reportTitles[index],
+      id,
+      object: '合一版本 API',
+      result: reportResults[index],
+      resultTone: resultTones[index],
+      passRate: passRates[index],
+      passRateValue: passRateValues[index],
+      completed: completed[index],
+      trendLabel: completed[index]
+    }))
+  };
+}
 
 function uniqueTasks(
   sessionTasks: NormalizedTaskStatus[],
@@ -234,6 +241,7 @@ function liveViewModel(
     withResults: string;
     returnedFailures: string;
     withDuration: string;
+    reportPrefix: string;
   }
 ): ResultsViewModel {
   const object = `${selectedSut.product} ${selectedSut.scene}`.trim();
@@ -242,6 +250,7 @@ function liveViewModel(
     const passRateValue = passRateForTask(task);
     const sourceTime = task.completed_at;
     return {
+      title: `${notes.reportPrefix} · ${task.task_id}`,
       id: task.task_id,
       object,
       result: result.label,
@@ -249,7 +258,7 @@ function liveViewModel(
       passRate: passRateValue === undefined ? '—' : `${passRateValue.toFixed(1)}%`,
       passRateValue,
       completed: displayTaskTime(sourceTime),
-      trendLabel: displayTaskTime(sourceTime) === '—' ? task.task_id : displayTaskTime(sourceTime)
+      trendLabel: displayTaskTime(sourceTime)
     };
   });
   const resultTasks = tasks.filter((task) => Boolean(task.result && task.result.total_commands > 0));
@@ -285,48 +294,10 @@ function liveViewModel(
       durations.length ? `${durations.length} ${notes.withDuration}` : '—'
     ],
     trendPoints,
-    trendObject: object,
     failures: [],
+    failureTotal: failedCommands,
     reports
   };
-}
-
-function chartPath(points: TrendPoint[]): string {
-  if (!points.length) {
-    return '';
-  }
-  const width = 660;
-  const top = 12;
-  const bottom = 132;
-  const values = points.map((point) => point.value);
-  const minimum = Math.min(...values);
-  const maximum = Math.max(...values);
-  const span = Math.max(maximum - minimum, 0.1);
-  const padding = Math.max(span * 0.08, 0.05);
-  const domainMinimum = minimum - padding;
-  const domainMaximum = maximum + padding;
-  const coordinates = points.map((point, index) => ({
-    x: points.length === 1 ? width / 2 : (index / (points.length - 1)) * width,
-    y: bottom - ((point.value - domainMinimum) / (domainMaximum - domainMinimum)) * (bottom - top)
-  }));
-
-  if (coordinates.length === 1) {
-    return `M 0 ${coordinates[0].y.toFixed(2)} L ${width} ${coordinates[0].y.toFixed(2)}`;
-  }
-
-  let path = `M ${coordinates[0].x.toFixed(2)} ${coordinates[0].y.toFixed(2)}`;
-  for (let index = 0; index < coordinates.length - 1; index += 1) {
-    const previous = coordinates[index - 1] ?? coordinates[index];
-    const current = coordinates[index];
-    const next = coordinates[index + 1];
-    const following = coordinates[index + 2] ?? next;
-    const firstControlX = current.x + (next.x - previous.x) / 6;
-    const firstControlY = current.y + (next.y - previous.y) / 6;
-    const secondControlX = next.x - (following.x - current.x) / 6;
-    const secondControlY = next.y - (following.y - current.y) / 6;
-    path += ` C ${firstControlX.toFixed(2)} ${firstControlY.toFixed(2)}, ${secondControlX.toFixed(2)} ${secondControlY.toFixed(2)}, ${next.x.toFixed(2)} ${next.y.toFixed(2)}`;
-  }
-  return path;
 }
 
 function TrendChart({
@@ -338,37 +309,31 @@ function TrendChart({
   unavailable: string;
   points: TrendPoint[];
 }) {
-  const titleId = useId();
-  const descriptionId = useId();
-  const linePath = chartPath(points);
   const description = points.length
     ? points.map((point) => `${point.label} ${point.value.toFixed(1)}%`).join('，')
     : unavailable;
 
   return (
-    <svg
+    <div
       className="results-trend-chart"
-      viewBox="0 0 660 150"
-      preserveAspectRatio="none"
       role="img"
-      aria-labelledby={titleId}
-      aria-describedby={descriptionId}
+      aria-label={`${title}：${description}`}
       data-point-count={points.length}
     >
-      <title id={titleId}>{title}</title>
-      <desc id={descriptionId}>{description}</desc>
-      <g className="results-trend-chart__grid" aria-hidden="true">
-        <line x1="0" y1="24" x2="660" y2="24" />
-        <line x1="0" y1="75" x2="660" y2="75" />
-        <line x1="0" y1="126" x2="660" y2="126" />
-      </g>
-      {linePath ? (
-        <>
-          <path className="results-trend-chart__area" d={`${linePath} L 660 150 L 0 150 Z`} />
-          <path className="results-trend-chart__line" d={linePath} />
-        </>
-      ) : null}
-    </svg>
+      {points.map((point, index) => (
+        <div className="results-trend-item" key={`${point.label}-${index}`} aria-hidden="true">
+          <span className="results-trend-bar-track">
+            <span
+              className={`results-trend-bar${index === points.length - 1 ? ' is-current' : ''}`}
+              style={{
+                height: `${point.barHeight ?? Math.max(12, Math.min(112, point.value * 1.12))}px`
+              }}
+            />
+          </span>
+          <span className="results-trend-label">{point.label}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -381,48 +346,39 @@ export function Results({
 }: ResultsProps) {
   const t = getCopy(language);
   const [reportSearch, setReportSearch] = useState('');
+  const trendTitle = language === 'zh' ? '通过率趋势' : 'Pass rate trend';
+  const trendPeriod = language === 'zh' ? '近 7 天' : 'Last 7 days';
+  const searchReportsLabel = language === 'zh' ? '搜索报告或任务' : 'Search reports or tasks';
   const viewModel = useMemo(() => {
     if (runtimeConfig.enableMockFallback) {
-      return {
-        metrics: ['42', '93.6%', '17', '05:48'],
-        metricNotes: [
-          t.weeklyReportsMockNote,
-          t.consecutiveImprovement,
-          t.highPriorityFailures,
-          t.durationChange
-        ],
-        trendPoints: mockTrendPoints,
-        trendChange: '+2.1%',
-        trendObject: '合一版本 API',
-        failures: mockFailures,
-        reports: mockReports
-      } satisfies ResultsViewModel;
+      return mockViewModel(language);
     }
 
     return liveViewModel(
       uniqueTasks(sessionTasks, activeTask),
       selectedSut,
       {
-        success: 'Success',
-        failed: 'Failed',
-        cancelled: 'Cancelled',
-        running: 'Running',
-        pending: 'Pending',
-        polling_error: 'Polling error',
-        partial: 'Partial'
+        success: t.success,
+        failed: t.failed,
+        cancelled: t.cancelled,
+        running: t.running,
+        pending: t.pending,
+        polling_error: t.polling_error,
+        partial: language === 'zh' ? '部分通过' : 'Partial'
       },
       {
         session: t.sessionReportsNote,
         withResults: t.reportsWithResults,
         returnedFailures: t.returnedFailureCount,
-        withDuration: t.reportsWithDuration
+        withDuration: t.reportsWithDuration,
+        reportPrefix: language === 'zh' ? '报告' : 'Report'
       }
     );
-  }, [activeTask, runtimeConfig.enableMockFallback, selectedSut, sessionTasks, t]);
+  }, [activeTask, language, runtimeConfig.enableMockFallback, selectedSut, sessionTasks, t]);
   const normalizedSearch = reportSearch.trim().toLocaleLowerCase();
   const filteredReports = normalizedSearch
     ? viewModel.reports.filter((report) => (
-      [report.id, report.object, report.result, report.passRate, report.completed]
+      [report.title, report.id, report.object, report.result, report.passRate, report.completed]
         .some((value) => value.toLocaleLowerCase().includes(normalizedSearch))
     ))
     : viewModel.reports;
@@ -439,8 +395,7 @@ export function Results({
               {t.filterResults}
             </PresentationOnlyButton>
             <PresentationOnlyButton className="results-header-action results-export-action">
-              {t.exportReport}
-              <ArrowRight aria-hidden="true" />
+              {language === 'zh' ? '导出' : 'Export'}
             </PresentationOnlyButton>
           </div>
         )}
@@ -453,28 +408,24 @@ export function Results({
           label={t.weeklyReports}
           value={viewModel.metrics[0]}
           note={viewModel.metricNotes[0]}
-          icon={<CalendarDays aria-hidden="true" />}
         />
         <MetricCard
           className="results-metric-card"
           label={t.overallPassRate}
           value={viewModel.metrics[1]}
           note={viewModel.metricNotes[1]}
-          icon={<ChartNoAxesCombined aria-hidden="true" />}
         />
         <MetricCard
           className="results-metric-card"
           label={t.failedCases}
           value={viewModel.metrics[2]}
           note={viewModel.metricNotes[2]}
-          icon={<CircleAlert aria-hidden="true" />}
         />
         <MetricCard
           className="results-metric-card"
           label={t.averageDuration}
           value={viewModel.metrics[3]}
           note={viewModel.metricNotes[3]}
-          icon={<Clock3 aria-hidden="true" />}
         />
       </section>
 
@@ -483,20 +434,12 @@ export function Results({
           className="results-chart-card results-trend-card"
           aria-labelledby="results-trend-title"
         >
-          <div className="results-card-heading">
-            <div>
-              <h2 id="results-trend-title">{t.sevenDayPassTrend}</h2>
-              <p>{viewModel.trendObject} · {t.allResultLevels}</p>
-            </div>
-            {viewModel.trendChange ? (
-              <span className="results-trend-change">
-                <span aria-hidden="true" />
-                {viewModel.trendChange}
-              </span>
-            ) : null}
+          <div className="results-card-heading results-trend-heading">
+            <h2 id="results-trend-title">{trendTitle}</h2>
+            <span className="results-trend-period">{trendPeriod}</span>
           </div>
           <TrendChart
-            title={t.sevenDayPassTrend}
+            title={trendTitle}
             unavailable={t.notAvailable}
             points={viewModel.trendPoints}
           />
@@ -508,10 +451,9 @@ export function Results({
         >
           <div className="results-card-heading results-failure-heading">
             <h2 id="results-failure-title">{t.failureDistribution}</h2>
-            <PresentationOnlyButton className="results-view-cases">
-              {t.viewCases}
-              <ArrowRight aria-hidden="true" />
-            </PresentationOnlyButton>
+            <span className="results-failure-total">
+              {language === 'zh' ? `${viewModel.failureTotal} 个用例` : `${viewModel.failureTotal} cases`}
+            </span>
           </div>
           <ul className="results-failure-list" aria-label={t.failureDistribution}>
             {viewModel.failures.map((failure) => (
@@ -520,7 +462,11 @@ export function Results({
                 <span className="results-failure-track" aria-hidden="true">
                   <span
                     className={`is-${failure.tone}`}
-                    style={{ width: `${(failure.count / maximumFailureCount) * 100}%` }}
+                    style={{
+                      width: failure.barWidth === undefined
+                        ? `${(failure.count / maximumFailureCount) * 100}%`
+                        : `${failure.barWidth}px`
+                    }}
                   />
                 </span>
                 <strong>{failure.count}</strong>
@@ -536,17 +482,17 @@ export function Results({
       >
         <div className="results-reports-heading">
           <div>
-            <h2 id="recent-reports-title">{t.recentReports}</h2>
             <p>TRACEABLE ARTIFACTS</p>
+            <h2 id="recent-reports-title">{t.recentReports}</h2>
           </div>
           <label className="results-report-search">
-            <Search aria-hidden="true" />
-            <span className="sr-only">{t.searchReports}</span>
+            <span className="results-report-search-glyph" aria-hidden="true">⌕</span>
+            <span className="sr-only">{searchReportsLabel}</span>
             <input
               type="search"
               value={reportSearch}
-              aria-label={t.searchReports}
-              placeholder={t.searchReports}
+              aria-label={searchReportsLabel}
+              placeholder={searchReportsLabel}
               onChange={(event) => setReportSearch(event.target.value)}
             />
           </label>
@@ -555,26 +501,43 @@ export function Results({
           <table aria-label={t.recentReports}>
             <thead>
               <tr>
-                <th>Report</th>
+                <th>{language === 'zh' ? '报告' : 'Report'}</th>
                 <th>Object</th>
-                <th>Result</th>
-                <th>Pass rate</th>
-                <th>Completed</th>
+                <th>{language === 'zh' ? '任务' : 'Task'}</th>
+                <th>{language === 'zh' ? '结果' : 'Result'}</th>
+                <th>{language === 'zh' ? '完成时间' : 'Completed'}</th>
+                <th>{language === 'zh' ? '操作' : 'Action'}</th>
               </tr>
             </thead>
             <tbody>
               {filteredReports.map((report) => (
                 <tr key={report.id}>
-                  <td className="results-report-id">{report.id}</td>
+                  <td className="results-report-title">{report.title}</td>
                   <td>{report.object}</td>
+                  <td className="results-report-id">{report.id}</td>
                   <td>
-                    <span className={`results-status-pill is-${report.resultTone}`}>
-                      <span aria-hidden="true" />
+                    <span
+                      className={`results-status-pill is-${report.resultTone}`}
+                      aria-label={language === 'zh'
+                        ? `${report.result}，通过率 ${report.passRate}`
+                        : `${report.result}, Pass rate ${report.passRate}`}
+                    >
                       {report.result}
                     </span>
                   </td>
-                  <td className="results-pass-rate">{report.passRate}</td>
                   <td>{report.completed}</td>
+                  <td>
+                    <button
+                      type="button"
+                      className="presentation-only-button results-report-action"
+                      aria-disabled="true"
+                      aria-label={language === 'zh'
+                        ? `${t.viewCases}：${report.title}，${report.id}`
+                        : `${t.viewCases}: ${report.title}, ${report.id}`}
+                    >
+                      {`${t.viewCases}  →`}
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>

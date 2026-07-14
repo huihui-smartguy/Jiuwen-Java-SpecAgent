@@ -89,7 +89,7 @@ afterEach(() => {
 });
 
 describe('Observation', () => {
-  test('owns the exact 24px PageHeader separation before metrics while retaining 18px internal gaps', async () => {
+  test('owns the approved Observe desktop geometry from hero through the lower grid', async () => {
     mockTaskApi([activeTask]);
 
     const { container } = renderObservation();
@@ -101,10 +101,16 @@ describe('Observation', () => {
     expect(page?.firstElementChild).toBe(header);
     expect(header?.nextElementSibling).toBe(metrics);
     expect(observeCss).toMatch(
-      /\.observation-page\s*>\s*\.page-header\s*\{[^}]*margin-bottom:\s*24px;/
+      /\.observation-page\s*>\s*\.page-header\s*\{[^}]*height:\s*100px;[^}]*margin-bottom:\s*24px;/
     );
     expect(observeCss).toMatch(
-      /\.observation-metrics\s*\{[^}]*gap:\s*18px;[^}]*margin-bottom:\s*18px;/
+      /\.observation-metrics\s*\{[^}]*height:\s*128px;[^}]*gap:\s*16px;[^}]*margin-bottom:\s*24px;/
+    );
+    expect(observeCss).toMatch(
+      /\.observation-path-card\s*\{[^}]*height:\s*158px;[^}]*margin-bottom:\s*24px;/
+    );
+    expect(observeCss).toMatch(
+      /\.observation-lower-grid\s*\{[^}]*height:\s*360px;[^}]*grid-template-columns:\s*856px 416px;[^}]*gap:\s*24px;/
     );
     await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
   });
@@ -131,18 +137,22 @@ describe('Observation', () => {
       '已用时间',
       'Object'
     ]);
-    expect(within(metrics).getByText(activeTask.task_id)).toBeInTheDocument();
+    expect(within(metrics).getByText(`…${activeTask.task_id.slice(-6)}`)).toBeInTheDocument();
     expect(within(metrics).getByText('2 / 5')).toBeInTheDocument();
     expect(within(metrics).getByText(/pytest testcase\/save/i)).toBeInTheDocument();
+    expect(metrics.querySelector('svg')).toBeNull();
+    expect(titleRow?.querySelector('.observation-header-actions svg')).toBeNull();
 
     const path = screen.getByRole('region', { name: '执行路径' });
     expect(within(path).getByText('状态每 5 秒刷新一次')).toBeInTheDocument();
     expect(within(path).getAllByRole('listitem')).toHaveLength(5);
     expect(within(path).getByText('环境检查')).toBeInTheDocument();
     expect(within(path).getByText('脚本准备')).toBeInTheDocument();
-    expect(within(path).getByText('保存接口')).toBeInTheDocument();
-    expect(within(path).getByText('查询接口')).toBeInTheDocument();
+    expect(within(path).getByText('保存 API')).toBeInTheDocument();
+    expect(within(path).getByText('查询 API')).toBeInTheDocument();
     expect(within(path).getByText('汇总')).toBeInTheDocument();
+    expect(within(path).getAllByText('等待中')).toHaveLength(2);
+    expect(path.querySelector('.observation-path-list__track')).toBeNull();
 
     expect(screen.getByRole('heading', { name: 'Execution events' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '任务控制' })).toBeInTheDocument();

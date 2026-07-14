@@ -28,13 +28,14 @@ const completedTask: NormalizedTaskStatus = {
 
 describe('LogExportAction', () => {
   test('exposes a disabled download action and prevents activation before terminal export is available', () => {
-    render(<LogExportAction task={runningTask} language="en" />);
+    const { container } = render(<LogExportAction task={runningTask} language="en" />);
 
     const link = screen.getByRole('link', { name: /export logs/i });
     expect(link).toHaveAttribute('aria-disabled', 'true');
     expect(link).toHaveAttribute('href', '#');
     expect(link).toHaveAttribute('download');
     expect(fireEvent.click(link)).toBe(false);
+    expect(container.querySelector('svg')).toBeNull();
   });
 
   test('uses the normalized backend URL for terminal log downloads', () => {

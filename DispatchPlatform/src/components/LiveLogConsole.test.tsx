@@ -50,7 +50,7 @@ afterEach(() => {
 });
 
 describe('LiveLogConsole', () => {
-  test('contains many real lines in the 338px desktop row and releases the row height responsively', async () => {
+  test('contains many real lines in the approved 360px desktop row and releases the row height responsively', async () => {
     const logs = Array.from({ length: 80 }, (_, index) => ({
       timestamp: `2026-07-13 10:00:${String(index).padStart(2, '0')}`,
       level: 'INFO',
@@ -72,7 +72,7 @@ describe('LiveLogConsole', () => {
 
     const observeCss = readFileSync('src/styles/routes/observe.css', 'utf8');
     expect(observeCss).toMatch(
-      /\.observation-lower-grid\s*\{[^}]*height:\s*338px;/
+      /\.observation-lower-grid\s*\{[^}]*height:\s*360px;/
     );
     expect(observeCss).toMatch(
       /\.live-log-viewport\s*\{[^}]*min-height:\s*0;/

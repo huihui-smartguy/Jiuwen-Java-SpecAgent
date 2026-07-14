@@ -1,5 +1,4 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Box, CircleDot, CircleX, Clock3, Command } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ApiError, cancelTask, getTaskStatus, normalizeTaskStatus } from '../api/client';
 import { LiveLogConsole } from '../components/LiveLogConsole';
@@ -95,20 +94,15 @@ function isKnownUiStatus(status: string): status is UiTaskStatus {
 function ObservationMetric({
   label,
   value,
-  detail,
-  icon
+  detail
 }: {
   label: string;
   value: ReactNode;
   detail: ReactNode;
-  icon: ReactNode;
 }) {
   return (
     <article className="observation-metric-card" aria-label={label}>
-      <header>
-        <h2>{label}</h2>
-        {icon}
-      </header>
+      <h2>{label}</h2>
       <strong className="observation-metric-card__value">{value}</strong>
       <p>{detail}</p>
     </article>
@@ -175,8 +169,8 @@ export function Observation({
   const stageLabels = [
     t.environmentCheck,
     t.scriptPreparation,
-    t.saveApi,
-    t.queryApi,
+    language === 'zh' ? '保存 API' : t.saveApi,
+    language === 'zh' ? '查询 API' : t.queryApi,
     t.summary
   ];
   const connectionLabel = taskQuery.isFetching
@@ -223,26 +217,22 @@ export function Observation({
           value={statusLabel}
           detail={task.backend_status === 'queued' && (task.queue_position ?? -1) > 0
             ? `${t.queuePosition}: ${task.queue_position}`
-            : task.task_id}
-          icon={<CircleDot aria-hidden="true" />}
+            : compactTaskId(task.task_id)}
         />
         <ObservationMetric
           label={t.commandProgress}
           value={`${completedCommands} / ${totalCommands}`}
           detail={`${t.current}: ${currentCommand}`}
-          icon={<Command aria-hidden="true" />}
         />
         <ObservationMetric
           label={t.elapsedTime}
           value={task.elapsed_time ?? t.notAvailable}
           detail={`${t.estimatedRemaining}: ${task.estimated_remaining ?? t.notAvailable}`}
-          icon={<Clock3 aria-hidden="true" />}
         />
         <ObservationMetric
           label="Object"
           value={selectedSut.name}
           detail={`${selectedSut.version} · ${t[selectedSut.status]}`}
-          icon={<Box aria-hidden="true" />}
         />
       </section>
 
@@ -264,11 +254,10 @@ export function Observation({
                 : state === 'error'
                   ? statusLabel
                   : state === 'upcoming'
-                    ? t.stagePending
+                    ? language === 'zh' ? '等待中' : t.stagePending
                     : t.notAvailable;
             return (
               <li key={label} data-stage-state={state}>
-                <span className="observation-path-list__track" aria-hidden="true" />
                 <strong>{label}</strong>
                 <small>{detail}</small>
               </li>
@@ -293,7 +282,6 @@ export function Observation({
               role="status"
               aria-live="polite"
             >
-              <span aria-hidden="true" />
               {connectionLabel}
             </span>
           </header>
@@ -324,7 +312,6 @@ export function Observation({
               onClick={() => cancellation.mutate(task.task_id)}
               disabled={!canRequestCancellation || cancellationPending}
             >
-              <CircleX aria-hidden="true" />
               {cancellationPending ? t.requestingCancellation : t.requestCancellation}
             </button>
             {cancellationAcknowledged ? (

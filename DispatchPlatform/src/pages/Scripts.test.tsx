@@ -15,12 +15,18 @@ const mockRuntimeConfig = resolveRuntimeConfig({
 });
 
 const expectedMockRows = [
-  ['test_ak006_list_api_keys', 'api/keys/list.py', 'API 密钥管理', 'L1', 'Passed', 'huihui', '10:36'],
-  ['test_ak007_create_key', 'api/keys/create.py', 'API 密钥管理', 'L1', 'Passed', 'huihui', '10:31'],
-  ['test_auth021_role_scope', 'auth/role/scope.py', '用户权限', 'L2', 'Failed', 'liuming', 'Yesterday'],
-  ['test_session013_expire', 'session/expire.py', '会话管理', 'L1', 'Passed', 'wangqi', 'Jul 12'],
-  ['test_web088_save_flow', 'web/save/flow.py', '场景自动化', 'L3', 'Flaky', 'chenyu', 'Jul 11']
+  ['test_ak006_list_api_keys', 'api/keys/list.py', 'API 密钥管理', 'L1', '通过', 'huihui', '今天 10:36'],
+  ['test_ak007_create_key', 'api/keys/create.py', 'API 密钥管理', 'L1', '通过', 'huihui', '今天 10:31'],
+  ['test_auth021_role_scope', 'auth/role/scope.py', '用户权限', 'L2', '失败', 'liuming', '昨天 16:22'],
+  ['test_session013_expire', 'session/expire.py', '会话管理', 'L1', '通过', 'wangqi', '7 月 12 日']
 ] as const;
+
+const approvedMockScriptIds = new Set([
+  'script-ak006',
+  'script-ak007',
+  'script-auth021',
+  'script-session013'
+]);
 
 function LocationProbe() {
   return <span data-testid="location-path">{useLocation().pathname}</span>;
@@ -102,11 +108,12 @@ afterEach(() => {
 });
 
 describe('approved Scripts frame', () => {
-  test('keeps exactly five target-scoped API-shaped fallback rows for the approved table', () => {
+  test('keeps the approved four-row fallback frame without mutating the shared API-shaped fixtures', () => {
     const selectedSut = mockRuntimeConfig.sutTargets[0];
 
     expect(mockScripts).toHaveLength(5);
-    expect(mockScripts.map((script) => [
+    expect(expectedMockRows).toHaveLength(4);
+    expect(mockScripts.filter((script) => approvedMockScriptIds.has(script.id)).map((script) => [
       script.name,
       script.path,
       script.feature,
@@ -141,6 +148,7 @@ describe('approved Scripts frame', () => {
       within(summary).getAllByTestId('script-summary-value').map((value) => value.textContent)
     ).toEqual(['286', '84', '126', '76']));
     expect(within(summary).getAllByRole('article')).toHaveLength(4);
+    expect(summary.querySelector('.scripts-summary-icon')).not.toBeInTheDocument();
 
     const filters = screen.getByRole('region', { name: '脚本筛选' });
     expect(filters.querySelectorAll('input, select, button')).toHaveLength(4);
@@ -150,23 +158,28 @@ describe('approved Scripts frame', () => {
     );
     expect(within(filters).getByRole('textbox', { name: 'Object' })).toHaveAttribute('readonly');
     expect(within(filters).getByRole('textbox', { name: 'Object' })).toHaveValue(
-      `Object · ${mockRuntimeConfig.sutTargets[0].product}`
+      `Object · ${mockRuntimeConfig.sutTargets[0].product} ${mockRuntimeConfig.sutTargets[0].scene}`
     );
     expect(within(filters).getByRole('combobox', { name: 'Level' })).toHaveValue('All');
     expect(within(filters).getByRole('combobox', { name: 'Feature' })).toHaveValue('All');
+    expect(within(filters).getByRole('option', { name: '全部级别' })).toBeInTheDocument();
+    expect(within(filters).getByRole('option', { name: '全部 Feature' })).toBeInTheDocument();
     expect(within(filters).queryByRole('button')).not.toBeInTheDocument();
+    expect(
+      within(filters).getByRole('searchbox', { name: '搜索脚本' }).closest('label')?.querySelector('svg')
+    ).not.toBeInTheDocument();
 
     const table = await screen.findByRole('table', { name: '脚本资产' });
     expect(within(table).getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
-      'Script',
+      '脚本',
       'Feature',
-      'Level',
-      'Last result',
-      'Owner',
-      'Updated'
+      '级别',
+      '最近结果',
+      '负责人',
+      '更新时间'
     ]);
     const rows = within(table).getAllByRole('row').slice(1);
-    expect(rows).toHaveLength(5);
+    expect(rows).toHaveLength(4);
     expect(rows.map((row) => within(row).getAllByRole('cell').map((cell) => cell.textContent))).toEqual(
       expectedMockRows.map(([name, path, feature, level, result, owner, updated]) => [
         `${name}${path}`,
@@ -178,12 +191,13 @@ describe('approved Scripts frame', () => {
       ])
     );
     expect(rows.map((row) => within(row).getAllByRole('cell')[3].textContent)).toEqual([
-      'Passed',
-      'Passed',
-      'Failed',
-      'Passed',
-      'Flaky'
+      '通过',
+      '通过',
+      '失败',
+      '通过'
     ]);
+    expect(table.querySelector('.scripts-level-pill')).not.toBeInTheDocument();
+    expect(table.querySelectorAll('.scripts-status-pill > span')).toHaveLength(0);
   });
 
   test('keeps pending summaries unknown and announces loading inside the busy table card', async () => {
@@ -304,6 +318,24 @@ describe('approved Scripts frame', () => {
     expect(request.searchParams.has('level')).toBe(false);
   });
 
+  test('never caps live API rows to the four-row approved fallback frame', async () => {
+    const liveRows = mockScripts.map((script, index): Script => ({
+      ...script,
+      id: `live-${index + 1}`,
+      name: `live_script_${index + 1}`,
+      filename: `live_script_${index + 1}.py`
+    }));
+    mockLiveScriptsApi(liveRows);
+
+    renderScripts();
+
+    const table = await screen.findByRole('table', { name: '脚本资产' });
+    await waitFor(() => expect(within(table).getAllByRole('row')).toHaveLength(6));
+    for (const liveRow of liveRows) {
+      expect(within(table).getByText(liveRow.name)).toBeInTheDocument();
+    }
+  });
+
   test('keeps fallback rows target-scoped instead of leaking them to another Object', async () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('offline'));
     const otherObject = mockRuntimeConfig.sutTargets[1];
@@ -324,7 +356,7 @@ describe('approved Scripts frame', () => {
     renderScripts();
 
     const table = await screen.findByRole('table', { name: '脚本资产' });
-    await waitFor(() => expect(within(table).getAllByRole('row')).toHaveLength(6));
+    await waitFor(() => expect(within(table).getAllByRole('row')).toHaveLength(5));
     expect(fetchSpy).toHaveBeenCalledTimes(1);
 
     await user.selectOptions(screen.getByRole('combobox', { name: 'Feature' }), 'API 密钥管理');
@@ -599,11 +631,59 @@ describe('approved Scripts frame', () => {
     expect(scriptsSource.match(/\buseQuery\s*\(/g)).toHaveLength(1);
     expect(scriptsSource).not.toMatch(/useMutation|type=["']file["']|FormData|uploadScripts|\/upload/i);
     expect(scriptsCss).toMatch(
-      /\.scripts-summary\s*\{[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\);[^}]*gap:\s*18px;/
+      /\.scripts-page\s*>\s*\.page-header\s*\{[^}]*height:\s*118px;[^}]*margin-bottom:\s*24px;/
     );
-    expect(scriptsCss).toMatch(/\.scripts-summary-card\s*\{[^}]*height:\s*174px;/);
-    expect(scriptsCss).toMatch(/\.scripts-table-card\s*\{[^}]*height:\s*323px;/);
-    expect(scriptsCss).toMatch(/\.scripts-table-scroll\s*\{[^}]*overflow-x:\s*auto;/);
+    expect(scriptsCss).toMatch(
+      /\.scripts-summary\s*\{[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\);[^}]*gap:\s*16px;[^}]*margin-bottom:\s*24px;/
+    );
+    expect(scriptsCss).toMatch(
+      /\.scripts-summary-card\s*\{[^}]*height:\s*128px;[^}]*padding:\s*18px 24px 16px;/
+    );
+    expect(scriptsCss).toMatch(
+      /\.scripts-table-card\s*\{[^}]*height:\s*586px;[^}]*padding:\s*24px 28px;/
+    );
+    expect(scriptsCss).toMatch(
+      /\.scripts-toolbar\s*\{[^}]*width:\s*calc\(100% \+ 2px\);[^}]*height:\s*48px;[^}]*margin-left:\s*-1px;/
+    );
+    expect(scriptsCss).toMatch(
+      /\.scripts-table-scroll\s*\{[^}]*width:\s*calc\(100% \+ 2px\);[^}]*height:\s*430px;[^}]*flex:\s*0 0 430px;[^}]*margin-left:\s*-1px;/
+    );
+    expect(scriptsCss).toMatch(
+      /\.scripts-search-control\s*\{[^}]*width:\s*430px;[^}]*height:\s*44px;/
+    );
+    expect(scriptsCss).toMatch(
+      /\.scripts-search-control\s*\{[^}]*background:\s*var\(--color-surface\);/
+    );
+    expect(scriptsCss).toMatch(
+      /\.scripts-filter-control\s*\{[^}]*background:\s*var\(--color-surface\);/
+    );
+    expect(scriptsCss).toMatch(
+      /\.scripts-filter-control--object\s*\{[^}]*width:\s*230px;/
+    );
+    expect(scriptsCss).toMatch(
+      /\.scripts-filter-control--level\s*\{[^}]*width:\s*150px;/
+    );
+    expect(scriptsCss).toMatch(
+      /\.scripts-filter-control--feature\s*\{[^}]*width:\s*180px;/
+    );
+    expect(scriptsCss).toMatch(/\.scripts-table thead tr\s*\{[^}]*height:\s*44px;/);
+    expect(scriptsCss).toMatch(/\.scripts-table tbody tr\s*\{[^}]*height:\s*74px;/);
+    for (const [column, width] of [[1, 360], [2, 230], [3, 100], [4, 150], [5, 140], [6, 260]]) {
+      expect(scriptsCss).toMatch(
+        new RegExp(`\\.scripts-table th:nth-child\\(${column}\\)[^}]*width:\\s*${width}px;`)
+      );
+    }
+    const tableScrollRule = scriptsCss.match(/\.scripts-table-scroll\s*\{[^}]*\}/)?.[0] ?? '';
+    expect(tableScrollRule).not.toMatch(/border(?:-radius)?:|background:|box-shadow:|padding:/);
+    expect(scriptsCss).toMatch(
+      /\.scripts-table th,\s*\.scripts-table td\s*\{[^}]*padding:\s*0;/
+    );
+    expect(scriptsCss).toMatch(
+      /\.scripts-table th\s*\{[^}]*border-bottom:\s*1px solid var\(--color-outline\);[^}]*background:\s*transparent;/
+    );
+    expect(scriptsCss).toMatch(
+      /\.scripts-table td\s*\{[^}]*border-bottom:\s*1px solid var\(--color-outline\);/
+    );
     expect(scriptsCss).toMatch(
       /@media \(max-width:\s*680px\)[\s\S]*\.scripts-filter-control[^}]*min-height:\s*44px;/
     );

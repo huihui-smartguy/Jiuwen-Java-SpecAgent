@@ -65,17 +65,27 @@ export function Tasks({
   const [selectedLevel, setSelectedLevel] = useState('L1');
   const [selectedScriptNames, setSelectedScriptNames] = useState<string[]>([]);
   const [scriptSearch, setScriptSearch] = useState('');
+  const resolvedApiBaseUrl = selectedSut.apiBaseUrl || runtimeConfig.apiBaseUrl;
+  const targetIdentity = useMemo(
+    () => ({
+      id: selectedSut.id,
+      product: selectedSut.product,
+      scene: selectedSut.scene,
+      apiBaseUrl: resolvedApiBaseUrl
+    }),
+    [resolvedApiBaseUrl, selectedSut.id, selectedSut.product, selectedSut.scene]
+  );
   const api = useMemo(
-    () => ({ apiBaseUrl: selectedSut.apiBaseUrl || runtimeConfig.apiBaseUrl }),
-    [selectedSut.apiBaseUrl, runtimeConfig.apiBaseUrl]
+    () => ({ apiBaseUrl: targetIdentity.apiBaseUrl }),
+    [targetIdentity.apiBaseUrl]
   );
   const requiresFeature = mode === 'feature' || mode === 'scripts';
 
   const featuresQuery = useQuery({
-    queryKey: ['features', selectedSut.product, selectedSut.scene],
+    queryKey: ['features', targetIdentity],
     queryFn: async (): Promise<Feature[]> => {
       try {
-        return (await getFeatures(api, selectedSut.product, selectedSut.scene)).features;
+        return (await getFeatures(api, targetIdentity.product, targetIdentity.scene)).features;
       } catch (error) {
         if (runtimeConfig.enableMockFallback) {
           return mockFeatures;
@@ -87,11 +97,11 @@ export function Tasks({
 
   const features = featuresQuery.data ?? emptyFeatures;
   const scriptQuery = useQuery({
-    queryKey: ['scripts', selectedSut.product, selectedSut.scene, mode, selectedFeature, selectedLevel],
+    queryKey: ['scripts', targetIdentity, mode, selectedFeature, selectedLevel],
     queryFn: async (): Promise<Script[]> => {
       const query = {
-        product: selectedSut.product,
-        scene: selectedSut.scene,
+        product: targetIdentity.product,
+        scene: targetIdentity.scene,
         feature: requiresFeature ? selectedFeature || undefined : undefined,
         level: mode === 'level' ? selectedLevel : undefined
       };

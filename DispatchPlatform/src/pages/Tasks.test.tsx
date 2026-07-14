@@ -2,10 +2,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
+import { useState } from 'react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { resolveRuntimeConfig } from '../config/runtime';
-import type { Script, TaskCreateResponse } from '../types';
+import type { Script, SutTarget, TaskCreateResponse } from '../types';
 import { Tasks } from './Tasks';
 
 const liveRuntimeConfig = resolveRuntimeConfig({ defaultLanguage: 'zh', enableMockFallback: false });
@@ -286,6 +287,76 @@ describe('approved Tasks composition', () => {
     expect(tasksStyles.slice(stackedStart, tabletStart)).toMatch(
       /\.tasks-table-scroll\s*\{[^}]*width:\s*auto;/
     );
+  });
+
+  test('refetches discovery data when same-named Objects use different API endpoints', async () => {
+    const firstTarget: SutTarget = {
+      id: 'shared-one',
+      name: 'Shared one',
+      product: 'Shared Product',
+      scene: 'API',
+      version: 'v1',
+      apiBaseUrl: '/api-one',
+      status: 'healthy'
+    };
+    const secondTarget: SutTarget = {
+      ...firstTarget,
+      id: 'shared-two',
+      name: 'Shared two',
+      apiBaseUrl: '/api-two'
+    };
+    const runtimeConfig = resolveRuntimeConfig({
+      defaultLanguage: 'zh',
+      enableMockFallback: false,
+      sutTargets: [firstTarget, secondTarget]
+    });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = new URL(String(input), 'http://local.test');
+      if (url.pathname.endsWith('/features')) {
+        const featureName = url.pathname.startsWith('/api-two/') ? 'Endpoint B' : 'Endpoint A';
+        return json({
+          success: true,
+          product: firstTarget.product,
+          scene: firstTarget.scene,
+          features: [{ id: featureName, name: featureName, type: 'L1' }],
+          total: 1
+        });
+      }
+      if (url.pathname.endsWith('/scripts')) {
+        return json({ success: true, scripts: [], total: 0, filters: {} });
+      }
+      throw new Error(`unexpected request: ${url.toString()}`);
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    function TargetHarness() {
+      const [target, setTarget] = useState(firstTarget);
+      return (
+        <MemoryRouter initialEntries={['/tasks']}>
+          <button type="button" onClick={() => setTarget(secondTarget)}>Switch endpoint</button>
+          <Tasks
+            language="zh"
+            selectedSut={target}
+            runtimeConfig={runtimeConfig}
+            onTaskCreated={vi.fn()}
+            onRequestObjectChange={vi.fn()}
+          />
+        </MemoryRouter>
+      );
+    }
+
+    render(
+      <QueryClientProvider client={client}>
+        <TargetHarness />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Feature' })).toHaveValue('Endpoint A'));
+    await userEvent.click(screen.getByRole('button', { name: 'Switch endpoint' }));
+    await waitFor(() => expect(fetchSpy.mock.calls.some(([input]) => (
+      new URL(String(input), 'http://local.test').pathname === '/api-two/features'
+    ))).toBe(true));
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Feature' })).toHaveValue('Endpoint B'));
   });
 
   test('encodes the exact approved desktop Tasks geometry', () => {

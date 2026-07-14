@@ -1,4 +1,3 @@
-import { Download } from 'lucide-react';
 import { getCopy } from '../i18n';
 import type { Language, NormalizedTaskStatus } from '../types';
 
@@ -24,7 +23,6 @@ export function LogExportAction({
         }
       }}
     >
-      <Download aria-hidden="true" />
       {t.exportLogs}
     </a>
   );

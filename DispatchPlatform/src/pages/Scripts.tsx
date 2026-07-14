@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRight, ChevronDown, Search, Sparkles } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { getScripts } from '../api/client';
 import { PageHeader } from '../components/PageHeader';
@@ -30,6 +30,12 @@ interface ScriptsQueryData {
 
 const allFilter = 'All';
 const emptyScripts: Script[] = [];
+const approvedFallbackScriptIds = new Set([
+  'script-ak006',
+  'script-ak007',
+  'script-auth021',
+  'script-session013'
+]);
 
 const mockLastResultByScriptId: Record<MockScriptId, ScriptLastResult> = {
   'script-ak006': 'Passed',
@@ -41,7 +47,9 @@ const mockLastResultByScriptId: Record<MockScriptId, ScriptLastResult> = {
 
 function fallbackScripts(sut: Pick<SutTarget, 'product' | 'scene'>): Script[] {
   return mockScripts.filter((script) => (
-    script.product === sut.product && script.scene === sut.scene
+    approvedFallbackScriptIds.has(script.id) &&
+    script.product === sut.product &&
+    script.scene === sut.scene
   ));
 }
 
@@ -56,7 +64,11 @@ function isScenarioScript(script: Script): boolean {
   return script.feature.includes('场景') || /(^|\/)(?:ui|web)(\/|$)/i.test(script.path);
 }
 
-function formatUpdated(value: string | undefined, source: ScriptSource): string {
+function formatUpdated(
+  value: string | undefined,
+  source: ScriptSource,
+  language: Language
+): string {
   if (!value) {
     return '—';
   }
@@ -64,10 +76,14 @@ function formatUpdated(value: string | undefined, source: ScriptSource): string 
   if (source === 'mock') {
     const date = value.slice(0, 10);
     if (date === '2026-07-14') {
-      return value.slice(11, 16);
+      return language === 'zh' ? `今天 ${value.slice(11, 16)}` : value.slice(11, 16);
     }
     if (date === '2026-07-13') {
-      return 'Yesterday';
+      return language === 'zh' ? `昨天 ${value.slice(11, 16)}` : 'Yesterday';
+    }
+    if (language === 'zh') {
+      const [, month, day] = date.split('-').map(Number);
+      return `${month} 月 ${day} 日`;
     }
   }
 
@@ -85,6 +101,18 @@ function formatUpdated(value: string | undefined, source: ScriptSource): string 
 
 function getMockLastResult(scriptId: string): ScriptLastResult | undefined {
   return mockLastResultByScriptId[scriptId as MockScriptId];
+}
+
+function getLastResultLabel(result: ScriptLastResult, language: Language): string {
+  if (language !== 'zh') {
+    return result;
+  }
+
+  return {
+    Passed: '通过',
+    Failed: '失败',
+    Flaky: '波动'
+  }[result];
 }
 
 export function Scripts({ language, selectedSut, runtimeConfig }: ScriptsProps) {
@@ -170,7 +198,7 @@ export function Scripts({ language, selectedSut, runtimeConfig }: ScriptsProps) 
       .map((script) => script.uploaded_at)
       .filter((value): value is string => Boolean(value))
       .sort((left, right) => Date.parse(right) - Date.parse(left))[0];
-    const latestLabel = formatUpdated(latestUpload, 'live');
+    const latestLabel = formatUpdated(latestUpload, 'live', language);
 
     return language === 'zh'
       ? [
@@ -197,23 +225,14 @@ export function Scripts({ language, selectedSut, runtimeConfig }: ScriptsProps) 
         ]
       : liveSummaryNotes;
   const summaryCards = [
-    {
-      label: t.allScripts,
-      icon: <Sparkles aria-hidden="true" />
-    },
-    {
-      label: t.foundationalValidation,
-      icon: <span>L0</span>
-    },
-    {
-      label: t.apiTests,
-      icon: <span>API</span>
-    },
-    {
-      label: t.scenarioAutomation,
-      icon: <span>UI</span>
-    }
+    t.allScripts,
+    t.foundationalValidation,
+    t.apiTests,
+    t.scenarioAutomation
   ] as const;
+  const tableHeadings = language === 'zh'
+    ? ['脚本', 'Feature', '级别', '最近结果', '负责人', '更新时间']
+    : ['Script', 'Feature', 'Level', 'Last result', 'Owner', 'Updated'];
 
   return (
     <div className="page-stack scripts-page">
@@ -223,16 +242,15 @@ export function Scripts({ language, selectedSut, runtimeConfig }: ScriptsProps) 
         action={(
           <PresentationOnlyButton className="scripts-import-action">
             {t.importScripts}
-            <ArrowRight aria-hidden="true" />
+            <span aria-hidden="true">→</span>
           </PresentationOnlyButton>
         )}
       />
 
       <section className="scripts-summary" aria-label={t.scriptsSummary}>
-        {summaryCards.map((card, index) => (
-          <article className="scripts-summary-card" key={card.label}>
-            <span className="scripts-summary-icon">{card.icon}</span>
-            <h2>{card.label}</h2>
+        {summaryCards.map((label, index) => (
+          <article className="scripts-summary-card" key={label}>
+            <h2>{label}</h2>
             <strong data-testid="script-summary-value">{summaryValues[index]}</strong>
             <p>{summaryNotes[index]}</p>
           </article>
@@ -245,8 +263,7 @@ export function Scripts({ language, selectedSut, runtimeConfig }: ScriptsProps) 
         aria-busy={scriptsQuery.isPending}
       >
         <div className="scripts-toolbar" role="region" aria-label={t.scriptFilters}>
-          <label className="scripts-search">
-            <Search aria-hidden="true" />
+          <label className="scripts-search-control">
             <span className="sr-only">{t.searchScripts}</span>
             <input
               type="search"
@@ -258,27 +275,31 @@ export function Scripts({ language, selectedSut, runtimeConfig }: ScriptsProps) 
           </label>
 
           <div className="scripts-filter-controls">
-            <label className="scripts-filter-control scripts-object-control">
+            <label className="scripts-filter-control scripts-filter-control--object">
               <span className="sr-only">Object</span>
               <input
                 aria-label="Object"
                 readOnly
-                value={`Object · ${selectedSut.product}`}
+                value={`Object · ${selectedSut.product} ${selectedSut.scene}`}
               />
               <ChevronDown aria-hidden="true" />
             </label>
-            <label className="scripts-filter-control">
+            <label className="scripts-filter-control scripts-filter-control--level">
               <span className="sr-only">Level</span>
               <select aria-label="Level" value={level} onChange={(event) => setLevel(event.target.value)}>
-                <option value={allFilter}>Level · All</option>
-                {levelOptions.map((option) => <option key={option} value={option}>{`Level · ${option}`}</option>)}
+                <option value={allFilter}>{language === 'zh' ? '全部级别' : 'All levels'}</option>
+                {levelOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {language === 'zh' ? `级别 · ${option}` : `Level · ${option}`}
+                  </option>
+                ))}
               </select>
               <ChevronDown aria-hidden="true" />
             </label>
-            <label className="scripts-filter-control">
+            <label className="scripts-filter-control scripts-filter-control--feature">
               <span className="sr-only">Feature</span>
               <select aria-label="Feature" value={feature} onChange={(event) => setFeature(event.target.value)}>
-                <option value={allFilter}>Feature · All</option>
+                <option value={allFilter}>{language === 'zh' ? '全部 Feature' : 'All Features'}</option>
                 {featureOptions.map((option) => <option key={option} value={option}>{`Feature · ${option}`}</option>)}
               </select>
               <ChevronDown aria-hidden="true" />
@@ -287,15 +308,10 @@ export function Scripts({ language, selectedSut, runtimeConfig }: ScriptsProps) 
         </div>
 
         <div className="scripts-table-scroll">
-          <table aria-label={t.scripts}>
+          <table className="scripts-table" aria-label={t.scripts}>
             <thead>
               <tr>
-                <th>Script</th>
-                <th>Feature</th>
-                <th>Level</th>
-                <th>Last result</th>
-                <th>Owner</th>
-                <th>Updated</th>
+                {tableHeadings.map((heading) => <th key={heading}>{heading}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -322,22 +338,16 @@ export function Scripts({ language, selectedSut, runtimeConfig }: ScriptsProps) 
                           <span>{script.path}</span>
                         </td>
                         <td>{script.feature}</td>
-                        <td>
-                          <span className={`scripts-level-pill is-${script.level.toLocaleLowerCase()}`}>
-                            <span aria-hidden="true" />
-                            {script.level}
-                          </span>
-                        </td>
+                        <td><strong className="scripts-level">{script.level}</strong></td>
                         <td>
                           {lastResult ? (
                             <span className={`scripts-status-pill is-${lastResult.toLocaleLowerCase()}`}>
-                              <span aria-hidden="true" />
-                              {lastResult}
+                              {getLastResultLabel(lastResult, language)}
                             </span>
                           ) : '—'}
                         </td>
                         <td>{script.uploaded_by || '—'}</td>
-                        <td>{formatUpdated(script.uploaded_at, source)}</td>
+                        <td>{formatUpdated(script.uploaded_at, source, language)}</td>
                       </tr>
                     );
                   })}
