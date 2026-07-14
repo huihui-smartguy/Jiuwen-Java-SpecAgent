@@ -129,13 +129,15 @@ describe('approved Settings frame', () => {
 
     const objectCard = screen.getByRole('region', { name: 'Object 连接' });
     expect(within(objectCard).getByText('Connected')).toBeInTheDocument();
-    expect(within(objectCard).getByText('合一版本 API')).toBeInTheDocument();
-    expect(within(objectCard).getByText('Live')).toBeInTheDocument();
+    expect(within(objectCard).getByText('合一版本 API', { selector: '.settings-select-object-name' }))
+      .toBeInTheDocument();
+    expect(within(objectCard).queryByText('Live')).not.toBeInTheDocument();
     expect(within(objectCard).getByRole('combobox', { name: '默认 Object' })).toHaveValue(
       'object-live'
     );
 
     const runtimeCard = screen.getByRole('region', { name: '运行环境' });
+    expect(within(runtimeCard).getByText('只读配置')).toBeInTheDocument();
     const deployment = within(runtimeCard).getByRole('textbox', { name: 'Deployment mode' });
     const apiBase = within(runtimeCard).getByRole('textbox', { name: 'API base URL' });
     expect(deployment).toHaveValue('Container');
@@ -175,7 +177,7 @@ describe('approved Settings frame', () => {
     const format = screen.getByRole('combobox', { name: 'Default format' });
     const retention = screen.getByRole('combobox', { name: 'Retention' });
     expect(connection).toHaveAttribute('aria-checked', 'true');
-    expect(reducedMotion).toHaveAttribute('aria-checked', 'true');
+    expect(reducedMotion).toHaveAttribute('aria-checked', 'false');
     expect(format).toHaveValue('pdf-json');
     expect(retention).toHaveValue('30');
 
@@ -185,7 +187,7 @@ describe('approved Settings frame', () => {
     await user.selectOptions(retention, '90');
 
     expect(connection).toHaveAttribute('aria-checked', 'false');
-    expect(reducedMotion).toHaveAttribute('aria-checked', 'false');
+    expect(reducedMotion).toHaveAttribute('aria-checked', 'true');
     expect(format).toHaveValue('pdf');
     expect(retention).toHaveValue('90');
     expect(onObjectChange).not.toHaveBeenCalled();
@@ -201,8 +203,11 @@ describe('approved Settings frame', () => {
     const user = userEvent.setup();
     const view = renderSettings();
 
-    expect(document.documentElement).toHaveClass('settings-reduced-motion');
+    expect(document.documentElement).not.toHaveClass('settings-reduced-motion');
     expect(document.documentElement).toHaveClass('settings-test-class');
+
+    await user.click(screen.getByRole('switch', { name: 'Reduced motion' }));
+    expect(document.documentElement).toHaveClass('settings-reduced-motion');
 
     await user.click(screen.getByRole('switch', { name: 'Reduced motion' }));
     expect(document.documentElement).not.toHaveClass('settings-reduced-motion');
@@ -281,10 +286,28 @@ describe('approved Settings frame', () => {
       /useQuery|useMutation|fetch\s*\(|localStorage|sessionStorage|<Link|<NavLink|useNavigate/
     );
     expect(settingsCss).toMatch(
-      /\.settings-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);[^}]*gap:\s*18px;/
+      /\.settings-page\s*\{[^}]*gap:\s*24px;/
     );
-    expect(settingsCss).toMatch(/\.settings-card--object,[\s\S]*\.settings-card--runtime\s*\{[^}]*height:\s*220px;/);
-    expect(settingsCss).toMatch(/\.settings-card--preferences,[\s\S]*\.settings-card--reports\s*\{[^}]*height:\s*216px;/);
+    expect(settingsCss).toMatch(
+      /\.settings-page > \.page-header\s*\{[^}]*height:\s*118px;[^}]*min-height:\s*118px;/
+    );
+    expect(settingsCss).toMatch(
+      /\.settings-page > \.page-header h1\s*\{[^}]*letter-spacing:\s*0;/
+    );
+    expect(settingsCss).toMatch(
+      /\.settings-page > \.page-header \.page-subtitle\s*\{[^}]*margin-top:\s*10px;/
+    );
+    expect(settingsCss).toMatch(/\.settings-save\s*\{[^}]*gap:\s*10px;/);
+    expect(settingsCss).toMatch(
+      /\.settings-runtime-pill\s*\{[^}]*width:\s*auto;[^}]*min-width:\s*96px;/
+    );
+    expect(settingsCss).toMatch(
+      /\.settings-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*636px\)\);[^}]*grid-template-rows:\s*repeat\(2,\s*310px\);[^}]*gap:\s*24px;/
+    );
+    expect(settingsCss).toMatch(/\.settings-card\s*\{[^}]*height:\s*310px;[^}]*padding:\s*24px 28px;/);
+    expect(settingsCss).toMatch(/\.settings-row\s*\{[^}]*height:\s*78px;/);
+    expect(settingsCss).toMatch(/\.settings-card--preferences \.settings-row,[\s\S]*\.settings-card--reports \.settings-row\s*\{[^}]*height:\s*91px;/);
+    expect(settingsCss).toMatch(/\.settings-select-shell\s*\{[^}]*width:\s*250px;/);
     expect(settingsCss).toMatch(/\.settings-control\s*\{[^}]*min-height:\s*44px;/);
     expect(settingsCss).toMatch(
       /@media \(max-width:\s*980px\)[\s\S]*\.settings-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/

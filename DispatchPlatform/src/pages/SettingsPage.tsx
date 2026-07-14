@@ -1,4 +1,4 @@
-import { ChevronDown, Contrast, SquareDashed } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { PageHeader } from '../components/PageHeader';
 import { PresentationOnlyButton } from '../components/PresentationOnlyButton';
@@ -25,7 +25,7 @@ export function SettingsPage({
 }: SettingsProps) {
   const t = getCopy(language);
   const [connectionCheck, setConnectionCheck] = useState(true);
-  const [reducedMotion, setReducedMotion] = useState(true);
+  const [reducedMotion, setReducedMotion] = useState(false);
   const [systemPrefersReducedMotion, setSystemPrefersReducedMotion] = useState(false);
   const [reportFormat, setReportFormat] = useState('pdf-json');
   const [retention, setRetention] = useState('30');
@@ -84,6 +84,7 @@ export function SettingsPage({
         action={(
           <PresentationOnlyButton className="settings-save">
             {t.saveChanges}
+            <span aria-hidden="true">→</span>
           </PresentationOnlyButton>
         )}
       />
@@ -96,7 +97,6 @@ export function SettingsPage({
           <div className="settings-card__header">
             <h2 id="settings-object-title">{t.objectConnection}</h2>
             <span className={`settings-status-pill settings-status-pill--${selectedSut.status}`}>
-              <span aria-hidden="true" />
               {objectStatusLabel}
             </span>
           </div>
@@ -110,7 +110,6 @@ export function SettingsPage({
               <label className="settings-select-shell settings-select-shell--object settings-control">
                 <span className="settings-select-visual" aria-hidden="true">
                   <span className="settings-select-object-name">{selectedSut.name}</span>
-                  <span className="settings-select-object-version">{selectedSut.version}</span>
                   <ChevronDown />
                 </span>
                 <select
@@ -120,7 +119,7 @@ export function SettingsPage({
                 >
                   {runtimeConfig.sutTargets.map((object) => (
                     <option key={object.id} value={object.id}>
-                      {object.name} · {object.version}
+                      {object.name}
                     </option>
                   ))}
                 </select>
@@ -154,16 +153,14 @@ export function SettingsPage({
           <div className="settings-card__header">
             <h2 id="settings-runtime-title">{t.runtimeEnvironment}</h2>
             <span className="settings-runtime-pill">
-              <span aria-hidden="true" />
-              {deploymentMode}
+              {t.readOnlyConfiguration}
             </span>
           </div>
           <p className="settings-card__description">{t.runtimeEnvironmentDescription}</p>
           <div className="settings-card__body">
-            <div className="settings-row">
-              <label className="settings-row__label" htmlFor="settings-deployment-mode">
-                <strong>{t.settingsDeploymentMode}</strong>
-                <span>{t.readOnlyConfiguration}</span>
+            <div className="settings-row settings-runtime-row">
+              <label className="settings-runtime-label" htmlFor="settings-deployment-mode">
+                {t.settingsDeploymentMode}
               </label>
               <input
                 id="settings-deployment-mode"
@@ -173,9 +170,11 @@ export function SettingsPage({
                 readOnly
               />
             </div>
-            <div className="settings-row settings-row--api">
-              <label className="settings-row__label" htmlFor="settings-api-base-url">
-                <strong>{t.apiBaseUrl}</strong>
+            <div className="settings-row settings-row--api settings-runtime-row">
+              <label className="settings-runtime-label" htmlFor="settings-api-base-url">
+                {t.apiBaseUrl}
+              </label>
+              <div className="settings-api-controls">
                 <input
                   id="settings-api-base-url"
                   className="settings-readonly-value settings-readonly-value--api"
@@ -183,15 +182,15 @@ export function SettingsPage({
                   value={resolvedApiBaseUrl}
                   readOnly
                 />
-              </label>
-              <button
-                type="button"
-                className="settings-copy settings-control"
-                aria-label={`${t.copy} API base URL`}
-                onClick={copyApiBaseUrl}
-              >
-                {t.copy}
-              </button>
+                <button
+                  type="button"
+                  className="settings-copy settings-control"
+                  aria-label={`${t.copy} API base URL`}
+                  onClick={copyApiBaseUrl}
+                >
+                  {t.copy}
+                </button>
+              </div>
             </div>
           </div>
         </section>
@@ -202,7 +201,6 @@ export function SettingsPage({
         >
           <div className="settings-card__header">
             <h2 id="settings-preferences-title">{t.consolePreferences}</h2>
-            <Contrast aria-hidden="true" />
           </div>
           <p className="settings-card__description">{t.consolePreferencesDescription}</p>
           <div className="settings-card__body">
@@ -253,7 +251,6 @@ export function SettingsPage({
         >
           <div className="settings-card__header">
             <h2 id="settings-reports-title">{t.reportsAndLogs}</h2>
-            <SquareDashed aria-hidden="true" />
           </div>
           <p className="settings-card__description">{t.reportsAndLogsDescription}</p>
           <div className="settings-card__body">
