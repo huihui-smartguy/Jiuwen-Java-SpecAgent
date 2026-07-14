@@ -306,6 +306,29 @@ describe('Results', () => {
     expect(row!.querySelector('.results-pass-rate')).toHaveTextContent(expectedRate);
   });
 
+  test('never presents a running task start time as Completed evidence', () => {
+    const runtimeConfig = resolveRuntimeConfig({ enableMockFallback: false });
+    const runningTask = task('task-started-only', {
+      status: 'running',
+      uiStatus: 'running',
+      isTerminal: false,
+      started_at: '2026-07-14T10:45:00',
+      completed_at: undefined
+    });
+
+    renderResults({
+      runtimeConfig,
+      activeTask: runningTask,
+      sessionTasks: [runningTask]
+    });
+
+    const row = screen.getByText('task-started-only').closest('tr');
+    expect(row).not.toBeNull();
+    const cells = within(row!).getAllByRole('cell');
+    expect(cells[4]).toHaveTextContent('—');
+    expect(row).not.toHaveTextContent('2026-07-14 · 10:45');
+  });
+
   test('uses a dash or zero when live report result and timing fields are absent', () => {
     const runtimeConfig = resolveRuntimeConfig({ enableMockFallback: false });
     const progressOnlyTask = task('task-progress-only', {

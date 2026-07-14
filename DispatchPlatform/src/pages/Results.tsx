@@ -240,7 +240,7 @@ function liveViewModel(
   const reports = tasks.map((task): ReportRow => {
     const result = resultForTask(task, labels);
     const passRateValue = passRateForTask(task);
-    const sourceTime = task.completed_at ?? task.started_at;
+    const sourceTime = task.completed_at;
     return {
       id: task.task_id,
       object,
