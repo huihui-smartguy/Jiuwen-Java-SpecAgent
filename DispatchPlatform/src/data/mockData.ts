@@ -8,54 +8,82 @@ import type {
 } from '../types';
 
 export const mockFeatures: Feature[] = [
-  { id: 'feature-save', name: '保存接口', type: 'L0' },
-  { id: 'feature-query', name: '查询接口', type: 'L0' },
-  { id: 'feature-performance', name: '基线性能', type: 'L1' },
-  { id: 'feature-workflow', name: '释放-加载端到端', type: 'L0' }
+  { id: 'feature-api-keys', name: 'API 密钥管理', type: 'L1' },
+  { id: 'feature-auth', name: '用户权限', type: 'L2' },
+  { id: 'feature-session', name: '会话管理', type: 'L1' },
+  { id: 'feature-scenario', name: '场景自动化', type: 'L3' }
 ];
 
 export const mockScripts: Script[] = [
   {
-    id: 'script-save',
-    name: 'tc_save_inmemory',
-    filename: 'tc_save_inmemory.py',
+    id: 'script-ak006',
+    name: 'test_ak006_list_api_keys',
+    filename: 'test_ak006_list_api_keys.py',
     extension: '.py',
     product: '高码java',
     scene: '场景',
-    feature: '保存接口',
-    level: 'L0',
-    size: 2048,
-    uploaded_at: '2026-07-10T10:30:00',
-    uploaded_by: 'asset-admin',
-    path: 'testcase/场景/保存接口/tc_save_inmemory.py'
-  },
-  {
-    id: 'script-query',
-    name: 'tc_query_checkpoint',
-    filename: 'tc_query_checkpoint.py',
-    extension: '.py',
-    product: '高码java',
-    scene: '场景',
-    feature: '查询接口',
-    level: 'L0',
-    size: 1840,
-    uploaded_at: '2026-07-10T11:00:00',
-    uploaded_by: 'asset-admin',
-    path: 'testcase/场景/查询接口/tc_query_checkpoint.py'
-  },
-  {
-    id: 'script-perf',
-    name: 'tc_perf_baseline',
-    filename: 'tc_perf_baseline.py',
-    extension: '.py',
-    product: '高码java',
-    scene: '场景',
-    feature: '基线性能',
+    feature: 'API 密钥管理',
     level: 'L1',
-    size: 3120,
-    uploaded_at: '2026-07-10T12:00:00',
-    uploaded_by: 'perf-owner',
-    path: 'testcase/场景/基线性能/tc_perf_baseline.py'
+    size: 1948,
+    uploaded_at: '2026-07-14T10:36:00+08:00',
+    uploaded_by: 'huihui',
+    path: 'api/keys/list.py'
+  },
+  {
+    id: 'script-ak007',
+    name: 'test_ak007_create_key',
+    filename: 'test_ak007_create_key.py',
+    extension: '.py',
+    product: '高码java',
+    scene: '场景',
+    feature: 'API 密钥管理',
+    level: 'L1',
+    size: 2076,
+    uploaded_at: '2026-07-14T10:31:00+08:00',
+    uploaded_by: 'huihui',
+    path: 'api/keys/create.py'
+  },
+  {
+    id: 'script-auth021',
+    name: 'test_auth021_role_scope',
+    filename: 'test_auth021_role_scope.py',
+    extension: '.py',
+    product: '高码java',
+    scene: '场景',
+    feature: '用户权限',
+    level: 'L2',
+    size: 1812,
+    uploaded_at: '2026-07-13T16:22:00+08:00',
+    uploaded_by: 'liuming',
+    path: 'auth/role/scope.py'
+  },
+  {
+    id: 'script-session013',
+    name: 'test_session013_expire',
+    filename: 'test_session013_expire.py',
+    extension: '.py',
+    product: '高码java',
+    scene: '场景',
+    feature: '会话管理',
+    level: 'L1',
+    size: 1634,
+    uploaded_at: '2026-07-12T14:09:00+08:00',
+    uploaded_by: 'wangqi',
+    path: 'session/expire.py'
+  },
+  {
+    id: 'script-web088',
+    name: 'test_web088_save_flow',
+    filename: 'test_web088_save_flow.py',
+    extension: '.py',
+    product: '高码java',
+    scene: '场景',
+    feature: '场景自动化',
+    level: 'L3',
+    size: 2840,
+    uploaded_at: '2026-07-11T11:45:00+08:00',
+    uploaded_by: 'chenyu',
+    path: 'web/save/flow.py'
   }
 ];
 

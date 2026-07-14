@@ -1,0 +1,383 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { existsSync, readFileSync } from 'node:fs';
+import { MemoryRouter, useLocation } from 'react-router-dom';
+import { afterEach, describe, expect, test, vi } from 'vitest';
+import { resolveRuntimeConfig } from '../config/runtime';
+import { mockScripts } from '../data/mockData';
+import type { RuntimeConfig, Script, SutTarget } from '../types';
+import { Scripts } from './Scripts';
+
+const mockRuntimeConfig = resolveRuntimeConfig({
+  defaultLanguage: 'zh',
+  enableMockFallback: true
+});
+
+const expectedMockRows = [
+  ['test_ak006_list_api_keys', 'api/keys/list.py', 'API 密钥管理', 'L1', 'Passed', 'huihui', '10:36'],
+  ['test_ak007_create_key', 'api/keys/create.py', 'API 密钥管理', 'L1', 'Passed', 'huihui', '10:31'],
+  ['test_auth021_role_scope', 'auth/role/scope.py', '用户权限', 'L2', 'Failed', 'liuming', 'Yesterday'],
+  ['test_session013_expire', 'session/expire.py', '会话管理', 'L1', 'Passed', 'wangqi', 'Jul 12'],
+  ['test_web088_save_flow', 'web/save/flow.py', '场景自动化', 'L3', 'Flaky', 'chenyu', 'Jul 11']
+] as const;
+
+function LocationProbe() {
+  return <span data-testid="location-path">{useLocation().pathname}</span>;
+}
+
+function renderScripts({
+  runtimeConfig = mockRuntimeConfig,
+  selectedSut = runtimeConfig.sutTargets[0]
+}: {
+  runtimeConfig?: RuntimeConfig;
+  selectedSut?: SutTarget;
+} = {}) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } }
+  });
+
+  return render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={['/scripts']}>
+        <Scripts
+          language="zh"
+          selectedSut={selectedSut}
+          runtimeConfig={runtimeConfig}
+        />
+        <LocationProbe />
+      </MemoryRouter>
+    </QueryClientProvider>
+  );
+}
+
+function json(body: unknown) {
+  return Promise.resolve({
+    ok: true,
+    status: 200,
+    json: () => Promise.resolve(body)
+  } as Response);
+}
+
+function mockLiveScriptsApi(scripts: Script[]) {
+  return vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+    const url = new URL(String(input), 'http://local.test');
+    if (!url.pathname.endsWith('/scripts')) {
+      throw new Error(`unexpected request: ${url.toString()}`);
+    }
+
+    return json({
+      success: true,
+      scripts,
+      total: scripts.length,
+      filters: {
+        product: url.searchParams.get('product'),
+        scene: url.searchParams.get('scene'),
+        feature: url.searchParams.get('feature'),
+        level: url.searchParams.get('level')
+      }
+    });
+  });
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe('approved Scripts frame', () => {
+  test('keeps exactly five target-scoped API-shaped fallback rows for the approved table', () => {
+    const selectedSut = mockRuntimeConfig.sutTargets[0];
+
+    expect(mockScripts).toHaveLength(5);
+    expect(mockScripts.map((script) => [
+      script.name,
+      script.path,
+      script.feature,
+      script.level,
+      script.uploaded_by
+    ])).toEqual(expectedMockRows.map(([name, path, feature, level, , owner]) => (
+      [name, path, feature, level, owner]
+    )));
+
+    for (const script of mockScripts) {
+      expect(script).toMatchObject({
+        extension: '.py',
+        product: selectedSut.product,
+        scene: selectedSut.scene
+      });
+      expect(script.id).not.toBe('');
+      expect(script.filename.endsWith('.py')).toBe(true);
+      expect(script.size).toBeGreaterThan(0);
+      expect(Number.isNaN(Date.parse(script.uploaded_at ?? ''))).toBe(false);
+    }
+  });
+
+  test('renders the exact approved mock summaries, controls, columns, rows, and result order', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('offline'));
+    renderScripts();
+
+    expect(screen.getByRole('heading', { level: 1, name: '脚本资产' })).toBeInTheDocument();
+    expect(screen.getByText('按对象、Feature 与级别管理可执行脚本，保持范围清晰且可追溯。')).toBeInTheDocument();
+
+    const summary = screen.getByRole('region', { name: '脚本概览' });
+    await waitFor(() => expect(
+      within(summary).getAllByTestId('script-summary-value').map((value) => value.textContent)
+    ).toEqual(['286', '84', '126', '76']));
+    expect(within(summary).getAllByRole('article')).toHaveLength(4);
+
+    const filters = screen.getByRole('region', { name: '脚本筛选' });
+    expect(filters.querySelectorAll('input, select, button')).toHaveLength(4);
+    expect(within(filters).getByRole('searchbox', { name: '搜索脚本' })).toHaveAttribute(
+      'placeholder',
+      '搜索脚本、路径或标签'
+    );
+    expect(within(filters).getByRole('textbox', { name: 'Object' })).toHaveAttribute('readonly');
+    expect(within(filters).getByRole('textbox', { name: 'Object' })).toHaveValue(
+      `Object · ${mockRuntimeConfig.sutTargets[0].product}`
+    );
+    expect(within(filters).getByRole('combobox', { name: 'Level' })).toHaveValue('All');
+    expect(within(filters).getByRole('combobox', { name: 'Feature' })).toHaveValue('All');
+    expect(within(filters).queryByRole('button')).not.toBeInTheDocument();
+
+    const table = await screen.findByRole('table', { name: '脚本资产' });
+    expect(within(table).getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
+      'Script',
+      'Feature',
+      'Level',
+      'Last result',
+      'Owner',
+      'Updated'
+    ]);
+    const rows = within(table).getAllByRole('row').slice(1);
+    expect(rows).toHaveLength(5);
+    expect(rows.map((row) => within(row).getAllByRole('cell').map((cell) => cell.textContent))).toEqual(
+      expectedMockRows.map(([name, path, feature, level, result, owner, updated]) => [
+        `${name}${path}`,
+        feature,
+        level,
+        result,
+        owner,
+        updated
+      ])
+    );
+    expect(rows.map((row) => within(row).getAllByRole('cell')[3].textContent)).toEqual([
+      'Passed',
+      'Passed',
+      'Failed',
+      'Passed',
+      'Flaky'
+    ]);
+  });
+
+  test('keeps the import affordance focusable and inert without upload, feedback, or navigation', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('offline'));
+    const user = userEvent.setup();
+    renderScripts();
+
+    const importButton = screen.getByRole('button', { name: /导入脚本/ });
+    expect(importButton).toHaveAttribute('aria-disabled', 'true');
+    expect(importButton).not.toBeDisabled();
+    importButton.focus();
+    expect(importButton).toHaveFocus();
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    const requestCount = fetchSpy.mock.calls.length;
+
+    await user.click(importButton);
+    await user.keyboard('{Enter}');
+
+    expect(fetchSpy).toHaveBeenCalledTimes(requestCount);
+    expect(screen.getByTestId('location-path')).toHaveTextContent('/scripts');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(document.querySelector('input[type="file"]')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button')).toEqual([importButton]);
+  });
+
+  test('uses the selected Object API base and target in one unfiltered getScripts request', async () => {
+    const runtimeConfig = resolveRuntimeConfig({
+      defaultLanguage: 'zh',
+      enableMockFallback: false,
+      apiBaseUrl: '/runtime-api',
+      sutTargets: [{
+        id: 'live-object',
+        name: '合一版本 API · Live',
+        product: '合一版本',
+        scene: 'API',
+        version: 'v-live',
+        apiBaseUrl: '/object-api',
+        status: 'healthy'
+      }]
+    });
+    const liveScript: Script = {
+      id: 'live-one',
+      name: 'live_script',
+      filename: 'live_script.py',
+      extension: '.py',
+      product: '合一版本',
+      scene: 'API',
+      feature: 'Live feature',
+      level: 'L1',
+      size: 64,
+      uploaded_at: '2026-07-14T09:00:00+08:00',
+      uploaded_by: 'live-owner',
+      path: 'api/live_script.py'
+    };
+    const fetchSpy = mockLiveScriptsApi([liveScript]);
+
+    renderScripts({ runtimeConfig, selectedSut: runtimeConfig.sutTargets[0] });
+
+    expect(await screen.findByText('live_script')).toBeInTheDocument();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const request = new URL(String(fetchSpy.mock.calls[0][0]), 'http://local.test');
+    expect(request.pathname).toBe('/object-api/scripts');
+    expect(request.searchParams.get('product')).toBe('合一版本');
+    expect(request.searchParams.get('scene')).toBe('API');
+    expect(request.searchParams.has('feature')).toBe(false);
+    expect(request.searchParams.has('level')).toBe(false);
+  });
+
+  test('keeps fallback rows target-scoped instead of leaking them to another Object', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('offline'));
+    const otherObject = mockRuntimeConfig.sutTargets[1];
+
+    renderScripts({ selectedSut: otherObject });
+
+    const table = await screen.findByRole('table', { name: '脚本资产' });
+    await waitFor(() => expect(within(table).getAllByRole('row')).toHaveLength(2));
+    expect(within(table).getByText('没有匹配的脚本')).toBeInTheDocument();
+    for (const [scriptName] of expectedMockRows) {
+      expect(within(table).queryByText(scriptName)).not.toBeInTheDocument();
+    }
+  });
+
+  test('filters fetched rows locally by search, Level, and Feature with a stable request count', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('offline'));
+    const user = userEvent.setup();
+    renderScripts();
+
+    const table = await screen.findByRole('table', { name: '脚本资产' });
+    await waitFor(() => expect(within(table).getAllByRole('row')).toHaveLength(6));
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Feature' }), 'API 密钥管理');
+    expect(within(table).getAllByRole('row')).toHaveLength(3);
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Level' }), 'L1');
+    expect(within(table).getAllByRole('row')).toHaveLength(3);
+    await user.type(screen.getByRole('searchbox', { name: '搜索脚本' }), 'create');
+
+    const filteredRows = within(table).getAllByRole('row');
+    expect(filteredRows).toHaveLength(2);
+    expect(within(table).getByText('test_ak007_create_key')).toBeInTheDocument();
+    expect(within(table).queryByText('test_ak006_list_api_keys')).not.toBeInTheDocument();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('derives live summaries only from fetched rows and never assigns mock Last result values', async () => {
+    const runtimeConfig = resolveRuntimeConfig({
+      defaultLanguage: 'zh',
+      enableMockFallback: false,
+      sutTargets: [{
+        id: 'live-object',
+        name: 'Live Object',
+        product: 'LiveProduct',
+        scene: 'API',
+        version: 'v9',
+        apiBaseUrl: '/live-api',
+        status: 'healthy'
+      }]
+    });
+    const liveRows: Script[] = [
+      {
+        id: 'live-l0',
+        name: 'live_l0',
+        filename: 'live_l0.py',
+        extension: '.py',
+        product: 'LiveProduct',
+        scene: 'API',
+        feature: 'Core API',
+        level: 'L0',
+        size: 10,
+        uploaded_by: 'one',
+        path: 'api/live_l0.py'
+      },
+      {
+        id: 'live-auth',
+        name: 'live_auth',
+        filename: 'live_auth.py',
+        extension: '.py',
+        product: 'LiveProduct',
+        scene: 'API',
+        feature: 'Auth',
+        level: 'L2',
+        size: 20,
+        uploaded_by: 'two',
+        path: 'auth/live_auth.py'
+      },
+      {
+        id: 'live-web',
+        name: 'live_web',
+        filename: 'live_web.py',
+        extension: '.py',
+        product: 'LiveProduct',
+        scene: 'API',
+        feature: '场景自动化',
+        level: 'L3',
+        size: 30,
+        uploaded_by: 'three',
+        path: 'web/live_web.py'
+      }
+    ];
+    mockLiveScriptsApi(liveRows);
+
+    renderScripts({ runtimeConfig, selectedSut: runtimeConfig.sutTargets[0] });
+
+    const summary = screen.getByRole('region', { name: '脚本概览' });
+    await waitFor(() => expect(
+      within(summary).getAllByTestId('script-summary-value').map((value) => value.textContent)
+    ).toEqual(['3', '1', '3', '1']));
+    expect(summary).toHaveTextContent('1 个测试对象');
+    expect(summary).toHaveTextContent('最近同步 —');
+    expect(summary).toHaveTextContent('3 个 Feature');
+    expect(summary).toHaveTextContent('1 个脚本');
+    for (const mockOnlyValue of [
+      '286',
+      '84',
+      '126',
+      '76',
+      '第 4 个测试对象',
+      '最近同步 10:36',
+      '9 个 Feature',
+      '3 个端到端套件'
+    ]) {
+      expect(within(summary).queryByText(mockOnlyValue)).not.toBeInTheDocument();
+    }
+
+    const table = screen.getByRole('table', { name: '脚本资产' });
+    const resultCells = within(table).getAllByRole('row').slice(1).map((row) => (
+      within(row).getAllByRole('cell')[3].textContent
+    ));
+    expect(resultCells).toEqual(['—', '—', '—']);
+    expect(within(table).queryByText(/Passed|Failed|Flaky/)).not.toBeInTheDocument();
+  });
+
+  test('imports only the Scripts route stylesheet and encodes the approved geometry and responsive safeguards', () => {
+    expect(existsSync('src/styles/routes/scripts.css')).toBe(true);
+    const stylesIndex = readFileSync('src/styles.css', 'utf8');
+    const scriptsCss = readFileSync('src/styles/routes/scripts.css', 'utf8');
+    const scriptsSource = readFileSync('src/pages/Scripts.tsx', 'utf8');
+
+    expect(stylesIndex).toContain("@import './styles/routes/scripts.css';");
+    expect(scriptsSource.match(/\buseQuery\s*\(/g)).toHaveLength(1);
+    expect(scriptsSource).not.toMatch(/useMutation|type=["']file["']|FormData|uploadScripts|\/upload/i);
+    expect(scriptsCss).toMatch(
+      /\.scripts-summary\s*\{[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\);[^}]*gap:\s*18px;/
+    );
+    expect(scriptsCss).toMatch(/\.scripts-summary-card\s*\{[^}]*height:\s*174px;/);
+    expect(scriptsCss).toMatch(/\.scripts-table-card\s*\{[^}]*height:\s*323px;/);
+    expect(scriptsCss).toMatch(/\.scripts-table-scroll\s*\{[^}]*overflow-x:\s*auto;/);
+    expect(scriptsCss).toMatch(
+      /@media \(max-width:\s*680px\)[\s\S]*\.scripts-filter-control[^}]*min-height:\s*44px;/
+    );
+  });
+});
