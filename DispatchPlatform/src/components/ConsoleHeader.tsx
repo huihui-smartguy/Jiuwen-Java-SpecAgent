@@ -1,5 +1,5 @@
 import { ChevronDown, Menu, X } from 'lucide-react';
-import { useEffect, useRef, type Ref } from 'react';
+import { useEffect, useId, useRef, type Ref } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { getCopy } from '../i18n';
 import type { AuthConfig, Language, SutTarget } from '../types';
@@ -46,6 +46,7 @@ function ObjectControl({
   onObjectChange
 }: ObjectControlProps) {
   const t = getCopy(language);
+  const statusDescriptionId = useId();
 
   return (
     <label className="object-control" data-testid={testId}>
@@ -61,10 +62,14 @@ function ObjectControl({
         </span>
         <ChevronDown aria-hidden="true" />
       </span>
+      <span className="sr-only" id={statusDescriptionId}>
+        {t.status}: {t[selectedObject.status]}
+      </span>
       <select
         ref={selectRef}
         className="object-control__select"
         aria-label="Object"
+        aria-describedby={statusDescriptionId}
         value={selectedObject.id}
         onChange={(event) => onObjectChange(event.target.value)}
       >

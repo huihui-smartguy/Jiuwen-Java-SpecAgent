@@ -523,6 +523,7 @@
 
 .mobile-nav-link.is-active,
 .mobile-nav-link[aria-current="page"] {
+  border-radius: 9px;
   color: var(--color-accent-strong);
   background: var(--color-accent-surface);
   font-weight: 700;
@@ -545,10 +546,6 @@
 }
 
 @media (max-width: 1179px) {
-  .app-header__inner {
-    padding-inline: 20px;
-  }
-
   .desktop-navigation,
   .desktop-object-control,
   .header-language,
@@ -564,10 +561,6 @@
 }
 
 @media (max-width: 480px) {
-  .app-header__inner {
-    padding-inline: 14px;
-  }
-
   .mobile-drawer {
     width: 100%;
     padding-inline: 16px;

@@ -56,6 +56,7 @@ describe('AppShell', () => {
     expect(objectControl).toHaveTextContent('营销系统 Java SUT');
     expect(objectControl).toHaveTextContent('v2.4.1');
     expect(objectControl).toHaveTextContent('健康');
+    expect(screen.getByLabelText('Object')).toHaveAccessibleDescription(/健康/);
     expect(screen.getByRole('button', { name: /english/i })).toHaveTextContent(/^EN$/);
     expect(screen.getByRole('button', { name: /登录|sign in/i })).toHaveTextContent(/^TW$/);
 
@@ -147,6 +148,22 @@ describe('AppShell', () => {
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog', { name: /导航|navigation/i })).not.toBeInTheDocument();
     expect(openButton).toHaveFocus();
+  });
+
+  test('closes the drawer account menu when another drawer control is pressed', async () => {
+    const user = userEvent.setup();
+    renderShell('/', { defaultLanguage: 'zh' });
+
+    await user.click(screen.getByRole('button', { name: /打开导航|open navigation/i }));
+    const drawer = screen.getByRole('dialog', { name: /导航|navigation/i });
+    await user.click(within(drawer).getByRole('button', { name: /登录|sign in/i }));
+    expect(within(drawer).getByRole('menu')).toBeInTheDocument();
+
+    await user.click(within(drawer).getByRole('button', { name: /english/i }));
+
+    expect(within(drawer).queryByRole('menu')).not.toBeInTheDocument();
+    expect(drawer).toBeInTheDocument();
+    expect(screen.getByRole('main', { hidden: true })).toHaveAttribute('inert');
   });
 
   test('closes the drawer after navigation and restores the shell', async () => {

@@ -41,10 +41,10 @@ export function AccountMenu({ auth, language }: { auth?: AuthConfig; language: L
       }
     };
 
-    document.addEventListener('pointerdown', closeOnOutsidePress);
+    document.addEventListener('pointerdown', closeOnOutsidePress, true);
     document.addEventListener('keydown', closeOnEscape);
     return () => {
-      document.removeEventListener('pointerdown', closeOnOutsidePress);
+      document.removeEventListener('pointerdown', closeOnOutsidePress, true);
       document.removeEventListener('keydown', closeOnEscape);
     };
   }, [open]);
