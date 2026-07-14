@@ -1,9 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { activeTask } from '../data/mockData';
-import type { NormalizedTaskStatus } from '../types';
+import { activeTask, mockObservationEvents } from '../data/mockData';
+import type { NormalizedTaskStatus, TaskLogEntry } from '../types';
 import { LiveLogConsole } from './LiveLogConsole';
 
 function mockJson(body: unknown, ok = true, status = 200) {
@@ -14,7 +13,13 @@ function mockJson(body: unknown, ok = true, status = 200) {
   } as Response);
 }
 
-function renderConsole(task: NormalizedTaskStatus = activeTask) {
+function renderConsole({
+  task = activeTask,
+  mockEntries
+}: {
+  task?: NormalizedTaskStatus;
+  mockEntries?: readonly TaskLogEntry[];
+} = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } }
   });
@@ -24,6 +29,7 @@ function renderConsole(task: NormalizedTaskStatus = activeTask) {
         language="en"
         api={{ apiBaseUrl: '/api' }}
         task={nextTask}
+        mockEntries={mockEntries}
       />
     </QueryClientProvider>
   );
@@ -43,7 +49,7 @@ afterEach(() => {
 });
 
 describe('LiveLogConsole', () => {
-  test('renders backend log lines and filters without mutating the fetched snapshot', async () => {
+  test('renders the real backend snapshot, announces its line count, and removes legacy controls', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(await mockJson({
       success: true,
       total: 3,
@@ -53,25 +59,30 @@ describe('LiveLogConsole', () => {
         { timestamp: '2026-07-13 10:00:02', level: 'ERROR', message: 'Assertion failed' }
       ]
     }));
-    const user = userEvent.setup();
 
-    renderConsole();
+    const { client } = renderConsole();
 
     expect(await screen.findByText('Worker started')).toBeInTheDocument();
     expect(screen.getByText('Request payload accepted')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /errors/i }));
-    expect(screen.queryByText('Worker started')).not.toBeInTheDocument();
     expect(screen.getByText('Assertion failed')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /all levels/i }));
-    expect(screen.getByText('Worker started')).toBeInTheDocument();
+    expect(screen.getByText('3 log lines are currently visible.')).toHaveAttribute('aria-live', 'polite');
+    expect(client.getQueryData(['task-logs', '/api', activeTask.task_id])).toEqual(
+      expect.objectContaining({ cursor: '3' })
+    );
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `/api/tasks/${activeTask.task_id}/logs`,
+      { headers: { Accept: 'application/json' } }
+    );
+    expect(screen.queryByRole('button', { name: /pause|resume|clear|all levels|errors|warnings/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/live connection|connecting|log stream complete/i)).not.toBeInTheDocument();
   });
 
-  test('pause stops two-second log polling without clearing the current viewport', async () => {
+  test('polls active log snapshots at exactly two seconds', async () => {
     vi.useFakeTimers();
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(await mockJson({
       success: true,
-      total: 1,
-      logs: [{ timestamp: '2026-07-13 10:00:00', level: 'INFO', message: 'Still visible' }]
+      total: 0,
+      logs: []
     }));
 
     renderConsole();
@@ -80,73 +91,64 @@ describe('LiveLogConsole', () => {
       await Promise.resolve();
     });
     expect(fetchSpy).toHaveBeenCalledTimes(1);
-    act(() => screen.getByRole('button', { name: /pause logs/i }).click());
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(6000);
+      await vi.advanceTimersByTimeAsync(1999);
     });
-
     expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(screen.getByText('Still visible')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /resume logs/i })).toBeInTheDocument();
-  });
 
-  test('clear is local and newly fetched lines appear after its boundary', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(await mockJson({
-        success: true,
-        total: 1,
-        logs: [{ timestamp: '2026-07-13 10:00:00', level: 'INFO', message: 'Before clear' }]
-      }))
-      .mockResolvedValueOnce(await mockJson({
-        success: true,
-        total: 2,
-        logs: [
-          { timestamp: '2026-07-13 10:00:00', level: 'INFO', message: 'Before clear' },
-          { timestamp: '2026-07-13 10:00:02', level: 'INFO', message: 'After clear' }
-        ]
-      }));
-
-    const { client } = renderConsole();
-    expect(await screen.findByText('Before clear')).toBeInTheDocument();
-    act(() => screen.getByRole('button', { name: /clear viewport/i }).click());
-    expect(screen.queryByText('Before clear')).not.toBeInTheDocument();
-
-    await client.refetchQueries({ queryKey: ['task-logs'] });
-
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
     expect(fetchSpy).toHaveBeenCalledTimes(2);
-    expect(screen.queryByText('Before clear')).not.toBeInTheDocument();
-    expect(await screen.findByText('After clear')).toBeInTheDocument();
   });
 
-  test('performs one final log fetch when a running task becomes terminal', async () => {
+  test('performs one final log refresh when a running task becomes terminal and does not keep polling', async () => {
+    vi.useFakeTimers();
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(await mockJson({
       success: true,
       total: 0,
       logs: []
     }));
     const runningTask = { ...activeTask, status: 'running' as const, isTerminal: false };
-    const { rerenderTask } = renderConsole(runningTask);
+    const { rerenderTask } = renderConsole({ task: runningTask });
 
-    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
     rerenderTask({ ...runningTask, status: 'success', uiStatus: 'success', isTerminal: true });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
 
-    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6000);
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 
-  test('shows an explicit unavailable state and never fabricates fallback lines', async () => {
+  test('auto-scrolls the execution-event viewport when a real snapshot arrives', async () => {
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(320);
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(await mockJson({
-      success: false,
-      message: 'Log endpoint unavailable'
-    }, false, 503));
+      success: true,
+      total: 1,
+      logs: [{ timestamp: '2026-07-13 10:00:00', level: 'INFO', message: 'Newest output' }]
+    }));
 
-    renderConsole();
+    const { container } = renderConsole();
 
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/logs unavailable/i));
-    expect(screen.queryByRole('listitem')).not.toBeInTheDocument();
+    expect(await screen.findByText('Newest output')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(container.querySelector<HTMLElement>('.live-log-viewport')?.scrollTop).toBe(320);
+    });
   });
 
-  test('rejects a non-incremental snapshot instead of replacing previously fetched logs', async () => {
+  test('rejects a non-incremental snapshot while retaining the last successful real lines', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(await mockJson({
         success: true,
@@ -159,13 +161,58 @@ describe('LiveLogConsole', () => {
         logs: [{ timestamp: '2026-07-13 10:00:00', level: 'INFO', message: 'Rewritten line' }]
       }));
 
-    const { client } = renderConsole();
+    const { client } = renderConsole({ mockEntries: mockObservationEvents });
     expect(await screen.findByText('Original line')).toBeInTheDocument();
 
     await client.refetchQueries({ queryKey: ['task-logs'] });
 
     expect(fetchSpy).toHaveBeenCalledTimes(2);
-    expect(await screen.findByRole('status')).toHaveTextContent(/logs unavailable/i);
+    expect(screen.getByText('Original line')).toBeInTheDocument();
     expect(screen.queryByText('Rewritten line')).not.toBeInTheDocument();
+    expect(screen.queryByText(mockObservationEvents[0].message)).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent(/logs unavailable/i);
+    });
+  });
+
+  test('always prefers a successful real snapshot over explicitly supplied mock entries', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(await mockJson({
+      success: true,
+      total: 1,
+      logs: [{ timestamp: '2026-07-13 10:00:00', level: 'INFO', message: 'Backend truth' }]
+    }));
+
+    renderConsole({ mockEntries: mockObservationEvents });
+
+    expect(await screen.findByText('Backend truth')).toBeInTheDocument();
+    expect(screen.queryByText(mockObservationEvents[0].message)).not.toBeInTheDocument();
+    expect(screen.queryByText('LIVE STATUS · NOT LIVE LOGS')).not.toBeInTheDocument();
+  });
+
+  test('shows approved mock events only after a request failure when they are explicitly supplied', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(await mockJson({
+      success: false,
+      message: 'Log endpoint unavailable'
+    }, false, 503));
+
+    renderConsole({ mockEntries: mockObservationEvents });
+
+    expect(await screen.findByText(mockObservationEvents[0].message)).toBeInTheDocument();
+    expect(screen.getByText('LIVE STATUS · NOT LIVE LOGS')).toBeInTheDocument();
+    expect(screen.getByText(`${mockObservationEvents.length} log lines are currently visible.`)).toBeInTheDocument();
+  });
+
+  test('shows a truthful unavailable state and no mock line when the prop is absent', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(await mockJson({
+      success: false,
+      message: 'Log endpoint unavailable'
+    }, false, 503));
+
+    renderConsole();
+
+    expect(await screen.findByText('Logs unavailable')).toBeInTheDocument();
+    expect(screen.queryByText(mockObservationEvents[0].message)).not.toBeInTheDocument();
+    expect(screen.queryByText('LIVE STATUS · NOT LIVE LOGS')).not.toBeInTheDocument();
+    expect(screen.queryByRole('listitem')).not.toBeInTheDocument();
   });
 });

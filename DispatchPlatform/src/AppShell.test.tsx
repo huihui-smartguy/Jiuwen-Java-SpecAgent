@@ -251,15 +251,27 @@ describe('AppShell', () => {
     expect(within(drawer).getByLabelText('Object')).toHaveFocus();
   });
 
-  test('keeps the observation route and existing task behavior unchanged', () => {
+  test('renders the approved Observe hierarchy while preserving its active-task behavior', () => {
     renderShell('/observation');
 
-    expect(screen.getByRole('heading', { name: /运行详情/i })).toBeInTheDocument();
-    expect(screen.getByText(/pytest testcase\/save/i)).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /实时日志/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /执行观测/i })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /观测指标/i })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /执行路径/i })).toBeInTheDocument();
+    expect(screen.getAllByText(/pytest testcase\/save/i)).toHaveLength(2);
+    expect(screen.getByRole('heading', { name: /Execution events/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /任务控制/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /导出日志/i })).toHaveAttribute(
       'aria-disabled',
       'true'
     );
+    expect(screen.queryByRole('button', { name: /暂停|继续|清空|全部日志级别/i })).not.toBeInTheDocument();
+  });
+
+  test('keeps live mode free of a fabricated active task on the Observe route', () => {
+    renderShell('/observation', { enableMockFallback: false });
+
+    expect(screen.getByRole('heading', { name: /任务调度/i })).toBeInTheDocument();
+    expect(screen.queryByText(mockActiveTask.task_id)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Environment validation passed/i)).not.toBeInTheDocument();
   });
 });

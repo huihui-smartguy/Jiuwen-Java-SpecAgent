@@ -1,15 +1,16 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { activeTask } from '../data/mockData';
 import { resolveRuntimeConfig } from '../config/runtime';
+import { activeTask, mockObservationEvents } from '../data/mockData';
+import type { Language, NormalizedTaskStatus, RuntimeConfig } from '../types';
 import { Observation } from './Observation';
 
-function mockJson(body: unknown) {
+function mockJson(body: unknown, ok = true, status = 200) {
   return Promise.resolve({
-    ok: true,
-    status: 200,
+    ok,
+    status,
     json: () => Promise.resolve(body)
   } as Response);
 }
@@ -43,36 +44,40 @@ function countStatusRequests(fetchSpy: ReturnType<typeof vi.spyOn>, taskId: stri
 }
 
 type ObservationOverrides = {
-  task?: typeof activeTask;
+  task?: NormalizedTaskStatus;
+  language?: Language;
+  runtimeOverrides?: Partial<RuntimeConfig>;
   onTaskStatusChange?: ReturnType<typeof vi.fn>;
 };
 
-function renderObservation(overrides?: ObservationOverrides) {
+function renderObservation(overrides: ObservationOverrides = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } }
   });
-  const renderPage = (nextOverrides?: ObservationOverrides) => {
-    const runtimeConfig = resolveRuntimeConfig();
-    const task = nextOverrides?.task ?? activeTask;
+  const renderPage = (nextOverrides: ObservationOverrides = {}) => {
+    const merged = { ...overrides, ...nextOverrides };
+    const runtimeConfig = resolveRuntimeConfig(merged.runtimeOverrides);
+    const task = merged.task ?? activeTask;
 
     return (
       <QueryClientProvider client={client}>
         <Observation
-          language="en"
+          language={merged.language ?? 'en'}
           selectedSut={runtimeConfig.sutTargets[0]}
           activeTask={task}
           runtimeConfig={runtimeConfig}
-          onTaskStatusChange={nextOverrides?.onTaskStatusChange ?? vi.fn()}
+          onTaskStatusChange={merged.onTaskStatusChange ?? vi.fn()}
         />
       </QueryClientProvider>
     );
   };
-  const result = render(renderPage(overrides));
+  const result = render(renderPage());
 
   return {
     ...result,
-    rerenderObservation: (nextOverrides?: ObservationOverrides) => {
-      result.rerender(renderPage({ ...overrides, ...nextOverrides }));
+    client,
+    rerenderObservation: (nextOverrides: ObservationOverrides = {}) => {
+      result.rerender(renderPage(nextOverrides));
     }
   };
 }
@@ -83,34 +88,57 @@ afterEach(() => {
 });
 
 describe('Observation', () => {
-  test('shows the current command, live backend console, and terminal-only export', async () => {
-    mockTaskApi([
-      {
-        ...activeTask,
-        status: 'running',
-        uiStatus: undefined,
-        isTerminal: undefined,
-        canExportLogs: undefined
-      }
-    ]);
+  test('matches the approved Observe composition and source order without legacy log controls', async () => {
+    mockTaskApi([activeTask]);
 
-    renderObservation();
+    const { container } = renderObservation({ language: 'zh' });
 
-    expect(screen.getByRole('heading', { name: /execution details/i })).toBeInTheDocument();
-    expect(screen.getByText(/pytest testcase\/save/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /export logs/i })).toHaveAttribute(
+    const title = screen.getByRole('heading', { name: '执行观测' });
+    const titleRow = title.closest('.page-header');
+    expect(titleRow).not.toBeNull();
+    expect(screen.getByText('以任务状态为准，清晰分离轮询进度、当前命令与最终日志。')).toBeInTheDocument();
+    expect(within(titleRow as HTMLElement).getByText('执行中')).toBeInTheDocument();
+    expect(within(titleRow as HTMLElement).getByRole('link', { name: '导出日志' })).toHaveAttribute(
       'aria-disabled',
       'true'
     );
-    expect(screen.getByRole('heading', { name: /live logs/i })).toBeInTheDocument();
 
+    const metrics = screen.getByRole('region', { name: '观测指标' });
+    expect(within(metrics).getAllByRole('article').map((card) => card.getAttribute('aria-label'))).toEqual([
+      '任务状态',
+      '命令进度',
+      '已用时间',
+      'Object'
+    ]);
+    expect(within(metrics).getByText(activeTask.task_id)).toBeInTheDocument();
+    expect(within(metrics).getByText('2 / 5')).toBeInTheDocument();
+    expect(within(metrics).getByText(/pytest testcase\/save/i)).toBeInTheDocument();
+
+    const path = screen.getByRole('region', { name: '执行路径' });
+    expect(within(path).getByText('状态每 5 秒刷新一次')).toBeInTheDocument();
+    expect(within(path).getAllByRole('listitem')).toHaveLength(5);
+    expect(within(path).getByText('环境检查')).toBeInTheDocument();
+    expect(within(path).getByText('脚本准备')).toBeInTheDocument();
+    expect(within(path).getByText('保存接口')).toBeInTheDocument();
+    expect(within(path).getByText('查询接口')).toBeInTheDocument();
+    expect(within(path).getByText('汇总')).toBeInTheDocument();
+
+    expect(screen.getByRole('heading', { name: 'Execution events' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '任务控制' })).toBeInTheDocument();
+    const lowerGrid = container.querySelector('[data-testid="observation-lower-grid"]');
+    expect(lowerGrid?.children).toHaveLength(2);
+    expect(lowerGrid?.children[0]).toHaveClass('live-log-panel');
+    expect(lowerGrid?.children[1]).toHaveClass('observation-control-card');
+
+    expect(screen.queryByRole('button', { name: /暂停|继续|清空|全部日志级别|警告|错误/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/实时连接|正在连接|日志已完成/i)).not.toBeInTheDocument();
     await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledWith(
       `/api/tasks/${activeTask.task_id}`,
       expect.any(Object)
     ));
   });
 
-  test('uses the terminal task response to enable the backend-provided log export', async () => {
+  test('uses a terminal task response for backend log export and propagates normalized status', async () => {
     const onTaskStatusChange = vi.fn();
     mockTaskApi([
       {
@@ -135,72 +163,76 @@ describe('Observation', () => {
         '/api/tasks/task_20260710/logs/download'
       );
     });
-    expect(screen.getAllByText(/success/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: /cancel task/i })).toBeDisabled();
     expect(onTaskStatusChange).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'success', canExportLogs: true })
     );
   });
 
-  test('renders a live nested terminal task without inventing a current command', async () => {
-    mockTaskApi([
-      {
-        success: true,
-        task: {
-          id: activeTask.task_id,
-          status: 'completed',
-          progress: 100,
-          total_scripts: 2,
-          executed_scripts: 2,
-          failed_scripts: 0,
-          queue_position: -1,
-          log_dir: 'task_live',
-          download_url: 'http://testwise.local/api/download/task_live/execution.log'
-        }
-      }
-    ]);
-
-    renderObservation();
-
-    await waitFor(() => {
-      expect(screen.getByRole('link', { name: /export logs/i })).toHaveAttribute(
-        'href',
-        'http://testwise.local/api/download/task_live/execution.log'
-      );
-    });
-    expect(screen.getByText(/no current command has been returned/i)).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /live logs/i })).toBeInTheDocument();
-  });
-
-  test('shows the live queue position for a queued task', async () => {
-    mockTaskApi([
-      {
-        success: true,
-        task: {
-          id: activeTask.task_id,
-          status: 'queued',
-          progress: 0,
-          total_scripts: 2,
-          executed_scripts: 0,
-          failed_scripts: 0,
-          queue_position: 3
-        }
-      }
-    ]);
-
-    renderObservation();
-
-    expect(await screen.findByText(/queue position: 3/i)).toBeInTheDocument();
-  });
-
-  test('requests live cancellation and continues showing the polling task state', async () => {
+  test('polls active status at exactly five seconds and stops after a terminal response', async () => {
+    vi.useFakeTimers();
     const runningEnvelope = {
       success: true,
       task: {
         id: activeTask.task_id,
         status: 'running',
-        progress: 0,
-        total_scripts: 2,
-        executed_scripts: 0,
+        progress: 40,
+        total_scripts: 5,
+        executed_scripts: 2,
+        failed_scripts: 0,
+        queue_position: -1
+      }
+    };
+    const terminalEnvelope = {
+      success: true,
+      task: {
+        ...runningEnvelope.task,
+        status: 'completed',
+        progress: 100,
+        executed_scripts: 5,
+        log_dir: 'task_done',
+        download_url: '/api/download/task_done/execution.log'
+      }
+    };
+    const fetchSpy = mockTaskApi([runningEnvelope, terminalEnvelope]);
+
+    const { client } = renderObservation();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(countStatusRequests(fetchSpy, activeTask.task_id)).toBe(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4999);
+    });
+    expect(countStatusRequests(fetchSpy, activeTask.task_id)).toBe(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(countStatusRequests(fetchSpy, activeTask.task_id)).toBe(2);
+    expect(client.getQueryData(['task-status', '/api', activeTask.task_id])).toEqual(
+      expect.objectContaining({
+        source: 'live',
+        task: expect.objectContaining({ status: 'success', canExportLogs: true })
+      })
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10000);
+    });
+    expect(countStatusRequests(fetchSpy, activeTask.task_id)).toBe(2);
+  });
+
+  test('requests cancellation, refetches, acknowledges it, and keeps status polling active', async () => {
+    const runningEnvelope = {
+      success: true,
+      task: {
+        id: activeTask.task_id,
+        status: 'running',
+        progress: 40,
+        total_scripts: 5,
+        executed_scripts: 2,
         failed_scripts: 0,
         queue_position: -1
       }
@@ -208,35 +240,32 @@ describe('Observation', () => {
     const fetchSpy = mockTaskApi(
       [runningEnvelope, runningEnvelope],
       [{
-          success: true,
-          task_id: activeTask.task_id,
-          previous_status: 'running',
-          message: 'Cancellation signal sent'
+        success: true,
+        task_id: activeTask.task_id,
+        previous_status: 'running',
+        message: 'Cancellation signal sent'
       }]
     );
     const user = userEvent.setup();
 
     renderObservation();
 
-    const button = await screen.findByRole('button', { name: /request cancellation/i });
-    await user.click(button);
+    await user.click(await screen.findByRole('button', { name: /cancel task/i }));
 
     await waitFor(() => {
       expect(fetchSpy).toHaveBeenCalledWith(`/api/tasks/${activeTask.task_id}`, {
         method: 'DELETE',
         headers: { Accept: 'application/json' }
       });
+      expect(countStatusRequests(fetchSpy, activeTask.task_id)).toBe(2);
     });
-    expect(await screen.findByText(/cancellation requested/i)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /request cancellation/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/cancellation requested/i)).toHaveAttribute('role', 'status');
+    expect(screen.getByRole('button', { name: /cancel task/i })).toBeDisabled();
     expect(screen.getAllByText(/running/i).length).toBeGreaterThan(0);
   });
 
-  test('scopes a cancellation acknowledgement to the task that requested it', async () => {
-    const earlierTask = {
-      ...activeTask,
-      task_id: 'task_earlier_session'
-    };
+  test('scopes cancellation acknowledgement to the task that requested it', async () => {
+    const earlierTask = { ...activeTask, task_id: 'task_earlier_session' };
     const runningEnvelope = (taskId: string) => ({
       success: true,
       task: {
@@ -252,84 +281,136 @@ describe('Observation', () => {
     mockTaskApi(
       [runningEnvelope(activeTask.task_id), runningEnvelope(activeTask.task_id), runningEnvelope(earlierTask.task_id)],
       [{
-          success: true,
-          task_id: activeTask.task_id,
-          previous_status: 'running',
-          message: 'Cancellation signal sent'
+        success: true,
+        task_id: activeTask.task_id,
+        previous_status: 'running',
+        message: 'Cancellation signal sent'
       }]
     );
     const user = userEvent.setup();
     const { rerenderObservation } = renderObservation();
 
-    await user.click(await screen.findByRole('button', { name: /request cancellation/i }));
-    expect(await screen.findByText(/cancellation requested/i)).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: /cancel task/i }));
+    expect(screen.getByText(/cancellation requested/i)).toHaveAttribute('role', 'status');
 
     rerenderObservation({ task: earlierTask });
 
-    expect(await screen.findByRole('button', { name: /request cancellation/i })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: /cancel task/i })).toBeEnabled();
   });
 
-  test('continues five-second polling after acknowledgement until cancellation reaches a terminal log export', async () => {
-    vi.useFakeTimers();
-    const runningEnvelope = {
-      success: true,
-      task: {
-        id: activeTask.task_id,
-        status: 'running',
-        progress: 0,
-        total_scripts: 1,
-        executed_scripts: 0,
-        failed_scripts: 0,
-        queue_position: -1
+  test('keeps an unknown future task state neutral in the five visible path stages', async () => {
+    const futureTask = {
+      ...activeTask,
+      status: 'future_stage',
+      uiStatus: 'future_stage'
+    } as unknown as NormalizedTaskStatus;
+    mockTaskApi([futureTask]);
+
+    renderObservation({ task: futureTask });
+
+    const path = screen.getByRole('region', { name: 'Execution path' });
+    expect(within(path).getAllByRole('listitem').map((stage) => stage.getAttribute('data-stage-state'))).toEqual([
+      'neutral',
+      'neutral',
+      'neutral',
+      'neutral',
+      'neutral'
+    ]);
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
+  });
+
+  test('does not claim status connectivity before the first request succeeds', async () => {
+    let resolveStatus!: (response: Response) => void;
+    const pendingStatus = new Promise<Response>((resolve) => {
+      resolveStatus = resolve;
+    });
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      if (String(input).endsWith('/logs')) {
+        return mockJson({ success: true, total: 0, logs: [] });
       }
-    };
-    const cancelledEnvelope = {
-      success: true,
-      task: {
-        id: activeTask.task_id,
-        status: 'cancelled',
-        progress: 100,
-        total_scripts: 1,
-        executed_scripts: 1,
-        failed_scripts: 0,
-        queue_position: -1,
-        log_dir: 'task_cancelled',
-        download_url: '/api/download/task_cancelled/execution.log'
-      }
-    };
-    const fetchSpy = mockTaskApi(
-      [runningEnvelope, runningEnvelope, cancelledEnvelope],
-      [{
-          success: true,
-          task_id: activeTask.task_id,
-          previous_status: 'running',
-          message: 'Cancellation signal sent'
-      }]
-    );
+      return pendingStatus;
+    });
+
     renderObservation();
 
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    fireEvent.click(screen.getByRole('button', { name: /request cancellation/i }));
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(screen.getByText(/cancellation requested/i)).toBeInTheDocument();
-    expect(countStatusRequests(fetchSpy, activeTask.task_id)).toBe(2);
+    const control = screen.getByRole('region', { name: 'Task control' });
+    const connection = within(control).getByRole('status');
+    expect(connection).toHaveAttribute('aria-live', 'polite');
+    expect(connection).toHaveTextContent('Refreshing');
+    expect(connection).not.toHaveTextContent('Connected');
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5000);
-      await vi.runOnlyPendingTimersAsync();
+    resolveStatus(await mockJson(activeTask));
+
+    await waitFor(() => expect(connection).toHaveTextContent('Connected'));
+  });
+
+  test('reactively discloses a status fallback after a successful live refresh', async () => {
+    let statusRequestCount = 0;
+    let resolveFallback!: (response: Response) => void;
+    const pendingFallback = new Promise<Response>((resolve) => {
+      resolveFallback = resolve;
+    });
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      if (String(input).endsWith('/logs')) {
+        return mockJson({ success: true, total: 0, logs: [] });
+      }
+      statusRequestCount += 1;
+      return statusRequestCount === 1
+        ? mockJson(activeTask)
+        : pendingFallback;
     });
 
-    expect(countStatusRequests(fetchSpy, activeTask.task_id)).toBe(3);
-    expect(screen.getByRole('link', { name: /export logs/i })).toHaveAttribute(
-      'href',
-      '/api/download/task_cancelled/execution.log'
-    );
-    expect(screen.getAllByText(/cancelled/i).length).toBeGreaterThan(0);
+    const { client } = renderObservation({ runtimeOverrides: { enableMockFallback: true } });
+    const control = screen.getByRole('region', { name: 'Task control' });
+    const connection = within(control).getByRole('status');
+    await waitFor(() => expect(connection).toHaveTextContent('Connected'));
+
+    const refetch = client.refetchQueries({ queryKey: ['task-status'] });
+    await waitFor(() => expect(connection).toHaveTextContent('Refreshing'));
+    resolveFallback(await mockJson({ success: false, message: 'Unavailable' }, false, 503));
+    await refetch;
+
+    await waitFor(() => expect(connection).toHaveTextContent('Demo data'));
+    expect(connection).not.toHaveTextContent('Connected');
+  });
+
+  test('supplies approved sample events only when mock fallback is explicitly enabled', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      if (String(input).endsWith('/logs')) {
+        return mockJson({ success: false, message: 'Unavailable' }, false, 503);
+      }
+      return mockJson(activeTask);
+    });
+
+    const fallbackView = renderObservation({ runtimeOverrides: { enableMockFallback: true } });
+    expect(await screen.findByText(mockObservationEvents[0].message)).toBeInTheDocument();
+    expect(screen.getByText('LIVE STATUS · NOT LIVE LOGS')).toBeInTheDocument();
+    fallbackView.unmount();
+
+    renderObservation({ runtimeOverrides: { enableMockFallback: false } });
+    expect(await screen.findByText('Logs unavailable')).toBeInTheDocument();
+    expect(screen.queryByText(mockObservationEvents[0].message)).not.toBeInTheDocument();
+    expect(screen.queryByText('LIVE STATUS · NOT LIVE LOGS')).not.toBeInTheDocument();
+  });
+
+  test('renders a queued position without adding another title-row control', async () => {
+    mockTaskApi([{
+      success: true,
+      task: {
+        id: activeTask.task_id,
+        status: 'queued',
+        progress: 0,
+        total_scripts: 2,
+        executed_scripts: 0,
+        failed_scripts: 0,
+        queue_position: 3
+      }
+    }]);
+
+    renderObservation();
+
+    const metrics = screen.getByRole('region', { name: 'Observation metrics' });
+    expect(await within(metrics).findByText(/queue position: 3/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Observe' }).closest('.page-header')).not.toHaveTextContent(/queue position/i);
   });
 });

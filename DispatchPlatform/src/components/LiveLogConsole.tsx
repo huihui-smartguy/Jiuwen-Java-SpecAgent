@@ -1,13 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
-import { ArrowDownToLine, Pause, Play, Trash2 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowDownToLine } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import { ApiError, getTaskLogs } from '../api/client';
 import { getCopy } from '../i18n';
 import type {
   ApiContext,
   Language,
   NormalizedTaskStatus,
-  TaskLogLevel,
+  TaskLogEntry,
   TaskLogSnapshot
 } from '../types';
 
@@ -15,16 +15,10 @@ interface LiveLogConsoleProps {
   language: Language;
   api: ApiContext;
   task: NormalizedTaskStatus;
+  mockEntries?: readonly TaskLogEntry[];
 }
 
-const levelFilters: Array<TaskLogLevel | 'all'> = [
-  'all',
-  'debug',
-  'info',
-  'warn',
-  'error',
-  'log'
-];
+const noEntries: readonly TaskLogEntry[] = [];
 
 function isPollingTask(task: NormalizedTaskStatus) {
   return task.status === 'pending' || task.status === 'running';
@@ -59,11 +53,13 @@ function isIncrementalSnapshot(previous: TaskLogSnapshot, next: TaskLogSnapshot)
   return true;
 }
 
-export function LiveLogConsole({ language, api, task }: LiveLogConsoleProps) {
+export function LiveLogConsole({
+  language,
+  api,
+  task,
+  mockEntries
+}: LiveLogConsoleProps) {
   const t = getCopy(language);
-  const [paused, setPaused] = useState(false);
-  const [activeLevel, setActiveLevel] = useState<TaskLogLevel | 'all'>('all');
-  const [clearBoundary, setClearBoundary] = useState<string>();
   const scrollViewportRef = useRef<HTMLDivElement>(null);
   const previousStatusRef = useRef(task.status);
   const snapshotRef = useRef<{ taskKey: string; snapshot?: TaskLogSnapshot } | undefined>(undefined);
@@ -85,7 +81,7 @@ export function LiveLogConsole({ language, api, task }: LiveLogConsoleProps) {
       snapshotRef.current = { taskKey, snapshot: nextSnapshot };
       return nextSnapshot;
     },
-    refetchInterval: paused || !isPollingTask(task) ? false : 2000,
+    refetchInterval: isPollingTask(task) ? 2000 : false,
     refetchIntervalInBackground: true,
     retry: false
   });
@@ -99,96 +95,49 @@ export function LiveLogConsole({ language, api, task }: LiveLogConsoleProps) {
     previousStatusRef.current = task.status;
   }, [logQuery.refetch, task.isTerminal, task.status]);
 
-  const fetchedEntries = logQuery.data?.entries ?? [];
-  const viewportEntries = useMemo(() => {
-    if (!clearBoundary) {
-      return fetchedEntries;
-    }
-    const boundaryIndex = fetchedEntries.findIndex((entry) => entry.id === clearBoundary);
-    return boundaryIndex >= 0 ? fetchedEntries.slice(boundaryIndex + 1) : fetchedEntries;
-  }, [clearBoundary, fetchedEntries]);
-  const filteredEntries = activeLevel === 'all'
-    ? viewportEntries
-    : viewportEntries.filter((entry) => entry.level === activeLevel);
+  const hasRealSnapshot = logQuery.data !== undefined;
+  const showMockEntries = !hasRealSnapshot
+    && logQuery.isError
+    && Boolean(mockEntries?.length);
+  const visibleEntries = hasRealSnapshot
+    ? logQuery.data.entries
+    : showMockEntries
+      ? mockEntries ?? noEntries
+      : noEntries;
+  const showUnavailable = logQuery.isError && !hasRealSnapshot && !showMockEntries;
 
   useEffect(() => {
-    if (!paused && scrollViewportRef.current) {
+    if (scrollViewportRef.current) {
       scrollViewportRef.current.scrollTop = scrollViewportRef.current.scrollHeight;
     }
-  }, [filteredEntries, paused]);
-
-  const connectionLabel = logQuery.isError
-    ? t.logsUnavailable
-    : paused
-      ? t.logsPaused
-      : task.isTerminal
-        ? t.logsComplete
-        : logQuery.isFetching
-          ? t.logsConnecting
-          : t.logsConnected;
+  }, [visibleEntries]);
 
   return (
-    <section className="panel live-log-panel" aria-labelledby="live-log-title">
-      <div className="panel-heading live-log-heading">
-        <div>
-          <p className="eyebrow">{t.backendStream}</p>
-          <h2 id="live-log-title">{t.liveLogs}</h2>
-        </div>
-        <div className="live-log-connection" role="status" aria-live="polite">
-          <span className="live-log-connection__dot" aria-hidden="true" />
-          {connectionLabel}
-        </div>
-      </div>
+    <section className="live-log-panel" aria-labelledby="execution-events-title">
+      <header className="live-log-heading">
+        <h2 id="execution-events-title">{t.executionEvents}</h2>
+        {showMockEntries ? (
+          <span className="live-log-disclosure">LIVE STATUS · NOT LIVE LOGS</span>
+        ) : null}
+      </header>
 
-      <div className="live-log-toolbar">
-        <div className="live-log-filters" aria-label={t.logLevelFilters}>
-          {levelFilters.map((level) => (
-            <button
-              key={level}
-              type="button"
-              className={`log-filter ${activeLevel === level ? 'is-active' : ''}`}
-              aria-pressed={activeLevel === level}
-              aria-label={level === 'all' ? t.allLevels : undefined}
-              onClick={() => setActiveLevel(level)}
-            >
-              {level === 'all' ? t.all : level === 'warn' ? t.warnings : level === 'error' ? t.errors : level}
-            </button>
-          ))}
-        </div>
-        <div className="live-log-actions">
-          <button
-            type="button"
-            className="icon-text-button"
-            aria-label={paused ? t.resumeLogs : t.pauseLogs}
-            onClick={() => setPaused((value) => !value)}
-          >
-            {paused ? <Play aria-hidden="true" /> : <Pause aria-hidden="true" />}
-            <span>{paused ? t.resume : t.pause}</span>
-          </button>
-          <button
-            type="button"
-            className="icon-text-button"
-            aria-label={t.clearViewport}
-            onClick={() => setClearBoundary(fetchedEntries.at(-1)?.id ?? '__empty__')}
-          >
-            <Trash2 aria-hidden="true" />
-            <span>{t.clear}</span>
-          </button>
-        </div>
-      </div>
-
-      <div className="live-log-viewport" ref={scrollViewportRef} tabIndex={0}>
-        {logQuery.isError ? (
-          <div className="live-log-empty">
+      <div
+        className="live-log-viewport"
+        ref={scrollViewportRef}
+        tabIndex={0}
+        aria-label={t.executionEvents}
+      >
+        {showUnavailable ? (
+          <div className="live-log-empty" role="status">
             <strong>{t.logsUnavailable}</strong>
             <span>{t.logsUnavailableHint}</span>
           </div>
-        ) : filteredEntries.length > 0 ? (
-          <ol className="live-log-lines" aria-label={t.liveLogs}>
-            {filteredEntries.map((entry) => (
+        ) : visibleEntries.length > 0 ? (
+          <ol className="live-log-lines" aria-label={t.executionEvents}>
+            {visibleEntries.map((entry) => (
               <li key={entry.id} className={`log-line log-line--${entry.level}`}>
-                <time>{entry.timestamp ?? '—'}</time>
-                <span className="log-line__level">{entry.level}</span>
+                <time>{entry.timestamp ?? ''}</time>
+                <span className="sr-only">{entry.level}</span>
                 <span className="log-line__message">{entry.message}</span>
               </li>
             ))}
@@ -196,13 +145,17 @@ export function LiveLogConsole({ language, api, task }: LiveLogConsoleProps) {
         ) : (
           <div className="live-log-empty">
             <ArrowDownToLine aria-hidden="true" />
-            <strong>{activeLevel === 'all' ? t.waitingForLogs : t.noMatchingLogs}</strong>
-            <span>{activeLevel === 'all' ? t.waitingForLogsHint : t.noMatchingLogsHint}</span>
+            <strong>{t.waitingForLogs}</strong>
+            <span>{t.waitingForLogsHint}</span>
           </div>
         )}
       </div>
+
+      {logQuery.isError && hasRealSnapshot ? (
+        <p className="sr-only" role="status">{t.logsUnavailable}</p>
+      ) : null}
       <p className="sr-only" aria-live="polite">
-        {t.logLineCount.replace('{count}', String(filteredEntries.length))}
+        {t.logLineCount.replace('{count}', String(visibleEntries.length))}
       </p>
     </section>
   );

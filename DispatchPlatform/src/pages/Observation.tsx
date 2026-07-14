@@ -1,12 +1,20 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Check, CircleDot, CircleX, Clock3, FileTerminal, TimerReset } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { Box, CircleDot, CircleX, Clock3, Command } from 'lucide-react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ApiError, cancelTask, getTaskStatus, normalizeTaskStatus } from '../api/client';
-import { LogExportPanel } from '../components/LogExportPanel';
 import { LiveLogConsole } from '../components/LiveLogConsole';
+import { LogExportAction } from '../components/LogExportAction';
+import { PageHeader } from '../components/PageHeader';
 import { StatusBadge } from '../components/StatusBadge';
+import { mockObservationEvents } from '../data/mockData';
 import { getCopy } from '../i18n';
-import type { Language, NormalizedTaskStatus, RuntimeConfig, SutTarget } from '../types';
+import type {
+  Language,
+  NormalizedTaskStatus,
+  RuntimeConfig,
+  SutTarget,
+  UiTaskStatus
+} from '../types';
 
 interface PageProps {
   language: Language;
@@ -14,6 +22,13 @@ interface PageProps {
   activeTask: NormalizedTaskStatus;
   runtimeConfig: RuntimeConfig;
   onTaskStatusChange: (task: NormalizedTaskStatus) => void;
+}
+
+type StageState = 'complete' | 'current' | 'error' | 'upcoming' | 'neutral';
+
+interface TaskStatusQueryResult {
+  task: NormalizedTaskStatus;
+  source: 'live' | 'fallback';
 }
 
 function isPollingTask(task: NormalizedTaskStatus) {
@@ -30,6 +45,76 @@ function asPollingError(task: NormalizedTaskStatus): NormalizedTaskStatus {
   };
 }
 
+function stageStateFor(
+  task: NormalizedTaskStatus,
+  completedCommands: number,
+  index: number,
+  stageCount: number
+): StageState {
+  if (task.status === 'success') {
+    return 'complete';
+  }
+  if (task.status === 'pending') {
+    return index === 0 ? 'current' : 'upcoming';
+  }
+  if (task.status === 'running') {
+    const currentIndex = Math.min(Math.max(completedCommands, 0), stageCount - 1);
+    return index < currentIndex ? 'complete' : index === currentIndex ? 'current' : 'upcoming';
+  }
+  if (task.status === 'failed' || task.status === 'cancelled') {
+    const errorIndex = Math.min(Math.max(completedCommands, 0), stageCount - 1);
+    return index < errorIndex ? 'complete' : index === errorIndex ? 'error' : 'upcoming';
+  }
+  return 'neutral';
+}
+
+function stripCommandPrefix(command: string | undefined, fallback: string) {
+  return command?.replace(/^(?:执行命令|running command)\s*:\s*/iu, '') || fallback;
+}
+
+function compactTaskId(taskId: string) {
+  return taskId.length > 6 ? `…${taskId.slice(-6)}` : taskId;
+}
+
+function displayTime(value: string | undefined, fallback: string) {
+  if (!value) {
+    return fallback;
+  }
+  return value.match(/T(\d{2}:\d{2}:\d{2})/)?.[1] ?? value;
+}
+
+function isKnownUiStatus(status: string): status is UiTaskStatus {
+  return status === 'pending'
+    || status === 'running'
+    || status === 'success'
+    || status === 'failed'
+    || status === 'cancelled'
+    || status === 'polling_error';
+}
+
+function ObservationMetric({
+  label,
+  value,
+  detail,
+  icon
+}: {
+  label: string;
+  value: ReactNode;
+  detail: ReactNode;
+  icon: ReactNode;
+}) {
+  return (
+    <article className="observation-metric-card" aria-label={label}>
+      <header>
+        <h2>{label}</h2>
+        {icon}
+      </header>
+      <strong className="observation-metric-card__value">{value}</strong>
+      <p>{detail}</p>
+    </article>
+  );
+}
+
 export function Observation({
   language,
   selectedSut,
@@ -43,20 +128,23 @@ export function Observation({
     () => ({ apiBaseUrl: selectedSut.apiBaseUrl || runtimeConfig.apiBaseUrl }),
     [runtimeConfig.apiBaseUrl, selectedSut.apiBaseUrl]
   );
-  const taskQuery = useQuery({
+  const taskQuery = useQuery<TaskStatusQueryResult>({
     queryKey: ['task-status', api.apiBaseUrl, activeTask.task_id],
     queryFn: async () => {
       try {
-        return normalizeTaskStatus(await getTaskStatus(api, activeTask.task_id, activeTask.trigger_type));
+        const task = normalizeTaskStatus(
+          await getTaskStatus(api, activeTask.task_id, activeTask.trigger_type)
+        );
+        return { task, source: 'live' };
       } catch (error) {
         if (runtimeConfig.enableMockFallback) {
-          return activeTask;
+          return { task: activeTask, source: 'fallback' };
         }
         throw error;
       }
     },
     refetchInterval: (query) => {
-      const latestTask = query.state.data ?? activeTask;
+      const latestTask = query.state.data?.task ?? activeTask;
       return isPollingTask(latestTask) ? 5000 : false;
     },
     refetchIntervalInBackground: true
@@ -68,13 +156,11 @@ export function Observation({
       void taskQuery.refetch();
     }
   });
-  const task = taskQuery.isError ? asPollingError(activeTask) : taskQuery.data ?? activeTask;
+  const task = taskQuery.isError ? asPollingError(activeTask) : taskQuery.data?.task ?? activeTask;
   const progress = task.progress;
   const completedCommands = progress?.completed ?? task.result?.success_count ?? 0;
   const totalCommands = progress?.total_commands ?? task.result?.total_commands ?? 0;
-  const failedCommands = progress?.failed ?? task.result?.failed_count ?? 0;
-  const terminalStage = task.status === 'failed' || task.status === 'cancelled' ? task.status : 'success';
-  const terminalHasError = task.status === 'failed' || task.status === 'cancelled';
+  const currentCommand = stripCommandPrefix(progress?.current_command, t.noCurrentCommand);
   const cancellationAcknowledged = cancellationRequestedTaskId === task.task_id;
   const cancellationPending = cancellation.isPending && cancellation.variables === task.task_id;
   const cancellationFailed = cancellation.isError && cancellation.variables === task.task_id;
@@ -82,139 +168,174 @@ export function Observation({
   const cancellationError = cancellation.error instanceof ApiError
     ? cancellation.error.message
     : t.cancellationFailed;
-  const currentStage = task.status === 'pending' ? 0 : task.status === 'running' ? 1 : 2;
-  const stages = [
-    { key: 'pending', label: t.pending },
-    { key: 'running', label: t.running },
-    { key: terminalStage, label: t[terminalStage] }
+  const statusLabel = isKnownUiStatus(String(task.uiStatus))
+    ? t[task.uiStatus]
+    : String(task.uiStatus);
+  const badgeStatus = isKnownUiStatus(String(task.uiStatus)) ? task.uiStatus : 'cancelled';
+  const stageLabels = [
+    t.environmentCheck,
+    t.scriptPreparation,
+    t.saveApi,
+    t.queryApi,
+    t.summary
   ];
+  const connectionLabel = taskQuery.isFetching
+    ? t.polling
+    : taskQuery.isError
+      ? t.statusUnavailable
+      : taskQuery.data?.source === 'fallback'
+        ? t.mockMode
+        : taskQuery.data?.source === 'live'
+          ? t.connected
+          : t.polling;
+  const connectionTone = taskQuery.isFetching
+    ? 'is-pending'
+    : taskQuery.isError
+      ? 'is-unavailable'
+      : taskQuery.data?.source === 'fallback'
+        ? 'is-fallback'
+        : taskQuery.data?.source === 'live'
+          ? 'is-connected'
+          : 'is-pending';
 
   useEffect(() => {
     if (taskQuery.data) {
-      onTaskStatusChange(taskQuery.data);
+      onTaskStatusChange(taskQuery.data.task);
     }
   }, [onTaskStatusChange, taskQuery.data]);
 
   return (
-    <div className="page-stack">
-      <div className="page-title-row">
-        <div>
-          <p className="eyebrow">
-            {selectedSut.name} · {selectedSut.version}
-          </p>
-          <h1>{t.observation}</h1>
-          <p className="page-subtitle">{t.observationSubtitle}</p>
-        </div>
-        <div className="observation-title-status">
-          <span>{t.pollingEveryFiveSeconds}</span>
-          {task.backend_status === 'queued' && (task.queue_position ?? -1) > 0 && (
-            <span className="queue-position" aria-live="polite">
-              {t.queuePosition}: {task.queue_position}
+    <div className="page-stack observation-page">
+      <PageHeader
+        title={t.observation}
+        subtitle={t.observationSubtitle}
+        action={(
+          <div className="observation-header-actions">
+            <StatusBadge status={badgeStatus} language={language} label={statusLabel} />
+            <LogExportAction task={task} language={language} />
+          </div>
+        )}
+      />
+
+      <section className="observation-metrics" aria-label={t.observationMetrics}>
+        <ObservationMetric
+          label={t.taskStatus}
+          value={statusLabel}
+          detail={task.backend_status === 'queued' && (task.queue_position ?? -1) > 0
+            ? `${t.queuePosition}: ${task.queue_position}`
+            : task.task_id}
+          icon={<CircleDot aria-hidden="true" />}
+        />
+        <ObservationMetric
+          label={t.commandProgress}
+          value={`${completedCommands} / ${totalCommands}`}
+          detail={`${t.current}: ${currentCommand}`}
+          icon={<Command aria-hidden="true" />}
+        />
+        <ObservationMetric
+          label={t.elapsedTime}
+          value={task.elapsed_time ?? t.notAvailable}
+          detail={`${t.estimatedRemaining}: ${task.estimated_remaining ?? t.notAvailable}`}
+          icon={<Clock3 aria-hidden="true" />}
+        />
+        <ObservationMetric
+          label="Object"
+          value={selectedSut.name}
+          detail={`${selectedSut.version} · ${t[selectedSut.status]}`}
+          icon={<Box aria-hidden="true" />}
+        />
+      </section>
+
+      <section className="observation-path-card" aria-labelledby="observation-path-title">
+        <header className="observation-path-card__heading">
+          <div>
+            <h2 id="observation-path-title">{t.executionPath}</h2>
+            <p>{t.statusRefreshEveryFiveSeconds}</p>
+          </div>
+          <span>{t.autoRefreshEnabled}</span>
+        </header>
+        <ol className="observation-path-list">
+          {stageLabels.map((label, index) => {
+            const state = stageStateFor(task, completedCommands, index, stageLabels.length);
+            const detail = state === 'complete'
+              ? t.stageComplete
+              : state === 'current'
+                ? index === 0 && task.status === 'pending' ? t.taskQueued : currentCommand
+                : state === 'error'
+                  ? statusLabel
+                  : state === 'upcoming'
+                    ? t.stagePending
+                    : t.notAvailable;
+            return (
+              <li key={label} data-stage-state={state}>
+                <span className="observation-path-list__track" aria-hidden="true" />
+                <strong>{label}</strong>
+                <small>{detail}</small>
+              </li>
+            );
+          })}
+        </ol>
+      </section>
+
+      <div className="observation-lower-grid" data-testid="observation-lower-grid">
+        <LiveLogConsole
+          language={language}
+          api={api}
+          task={task}
+          mockEntries={runtimeConfig.enableMockFallback ? mockObservationEvents : undefined}
+        />
+
+        <section className="observation-control-card" aria-labelledby="task-control-title">
+          <header>
+            <h2 id="task-control-title">{t.taskControl}</h2>
+            <span
+              className={`observation-connection ${connectionTone}`}
+              role="status"
+              aria-live="polite"
+            >
+              <span aria-hidden="true" />
+              {connectionLabel}
             </span>
-          )}
-          <StatusBadge status={task.uiStatus} language={language} />
-          {canRequestCancellation && (
+          </header>
+
+          <dl className="observation-task-metadata">
+            <div>
+              <dt>{t.taskId}</dt>
+              <dd title={task.task_id}>{compactTaskId(task.task_id)}</dd>
+            </div>
+            <div>
+              <dt>{t.createdBy}</dt>
+              <dd>{t.notAvailable}</dd>
+            </div>
+            <div>
+              <dt>{t.started}</dt>
+              <dd>{displayTime(task.started_at, t.notAvailable)}</dd>
+            </div>
+            <div>
+              <dt>{t.result}</dt>
+              <dd>{statusLabel}</dd>
+            </div>
+          </dl>
+
+          <div className="observation-control-card__actions">
             <button
               type="button"
-              className="button button--danger observation-cancel"
+              className="observation-cancel"
               onClick={() => cancellation.mutate(task.task_id)}
-              disabled={cancellationPending}
+              disabled={!canRequestCancellation || cancellationPending}
             >
               <CircleX aria-hidden="true" />
               {cancellationPending ? t.requestingCancellation : t.requestCancellation}
             </button>
-          )}
-          {isPollingTask(task) && cancellationAcknowledged && (
-            <span className="cancellation-status" role="status">
-              {t.cancellationRequested}
-            </span>
-          )}
-        </div>
-      </div>
-
-      <section className="observation-workbench" aria-label={t.observation}>
-        <aside className="panel observation-stages" aria-labelledby="stage-timeline-title">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">{t.progress}</p>
-              <h2 id="stage-timeline-title">{t.stageTimeline}</h2>
-            </div>
-            <Clock3 aria-hidden="true" className="panel-icon" />
+            {cancellationAcknowledged ? (
+              <p className="cancellation-status" role="status">{t.cancellationRequested}</p>
+            ) : null}
+            {taskQuery.isError ? <p className="polling-error">{t.pollingErrorHint}</p> : null}
+            {cancellationFailed ? <p className="polling-error">{cancellationError}</p> : null}
+            <p className="observation-cancel-note">{t.cancellationRetentionHint}</p>
           </div>
-          <ol className="stage-list">
-            {stages.map((stage, index) => {
-              const state = index < currentStage ? 'complete' : index === currentStage ? 'current' : 'upcoming';
-              return (
-                <li className={`stage-list__item ${state}`} key={stage.key}>
-                  <span className="stage-list__marker" aria-hidden="true">
-                    {state === 'complete' ? <Check /> : <CircleDot />}
-                  </span>
-                  <div>
-                    <strong>{stage.label}</strong>
-                    <span>{index === 0 ? t.taskQueued : index === 1 ? t.executionInProgress : t.terminalState}</span>
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-          <div className="stage-task-id">
-            <span>{t.taskReference}</span>
-            <code>{task.task_id}</code>
-          </div>
-          </aside>
-
-        <section className="panel observation-details" aria-labelledby="execution-details-title">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">{t.activeRun}</p>
-              <h2 id="execution-details-title">{t.executionDetails}</h2>
-            </div>
-            {taskQuery.isFetching && <span className="polling-indicator"><TimerReset aria-hidden="true" /> {t.polling}</span>}
-          </div>
-
-          <dl className="observation-metrics">
-            <div>
-              <dt>{t.progress}</dt>
-              <dd>{completedCommands}/{totalCommands}</dd>
-            </div>
-            <div>
-              <dt>{t.failedCommands}</dt>
-              <dd>{failedCommands}</dd>
-            </div>
-            <div>
-              <dt>{t.elapsedTime}</dt>
-              <dd>{task.elapsed_time ?? t.notAvailable}</dd>
-            </div>
-            <div>
-              <dt>{t.estimatedRemaining}</dt>
-              <dd>{task.estimated_remaining ?? t.notAvailable}</dd>
-            </div>
-          </dl>
-
-          <div className="observation-command" aria-label={t.currentCommand}>
-            <FileTerminal aria-hidden="true" />
-            <div>
-              <span>{t.currentCommand}</span>
-              <code>{progress?.current_command ?? t.noCurrentCommand}</code>
-            </div>
-          </div>
-
-          {task.result && (
-            <div className={`observation-result ${terminalHasError ? 'has-error' : ''}`}>
-              {terminalHasError ? <AlertTriangle aria-hidden="true" /> : <Check aria-hidden="true" />}
-              <div>
-                <strong>{task.status === 'failed' ? t.failed : task.status === 'cancelled' ? t.cancelled : t.success}</strong>
-                {task.result.error_message && <span>{task.result.error_message}</span>}
-              </div>
-            </div>
-          )}
-          {taskQuery.isError && <p className="polling-error">{t.pollingErrorHint}</p>}
-          {cancellationFailed && <p className="polling-error">{cancellationError}</p>}
         </section>
-
-        <LogExportPanel task={task} language={language} />
-        <LiveLogConsole language={language} api={api} task={task} />
-      </section>
+      </div>
     </div>
   );
 }

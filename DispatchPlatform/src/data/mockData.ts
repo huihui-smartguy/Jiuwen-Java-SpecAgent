@@ -1,5 +1,11 @@
 import { normalizeTaskStatus } from '../api/client';
-import type { Feature, NormalizedTaskStatus, Script, TaskStatusResponse } from '../types';
+import type {
+  Feature,
+  NormalizedTaskStatus,
+  Script,
+  TaskLogEntry,
+  TaskStatusResponse
+} from '../types';
 
 export const mockFeatures: Feature[] = [
   { id: 'feature-save', name: '保存接口', type: 'L0' },
@@ -88,6 +94,39 @@ export const completedTask: NormalizedTaskStatus = normalizeTaskStatus({
   completed_at: '2026-07-10T14:35:30',
   elapsed_time: '5分29秒'
 });
+
+export const mockObservationEvents: readonly TaskLogEntry[] = [
+  {
+    id: 'observe-sample-environment',
+    timestamp: '14:30:02',
+    level: 'info',
+    message: '✓ Environment validation passed'
+  },
+  {
+    id: 'observe-sample-scripts',
+    timestamp: '14:30:14',
+    level: 'info',
+    message: '✓ 18 scripts resolved from feature scope'
+  },
+  {
+    id: 'observe-sample-command',
+    timestamp: '14:30:42',
+    level: 'info',
+    message: '› Running command 2 of 5'
+  },
+  {
+    id: 'observe-sample-command-detail',
+    timestamp: undefined,
+    level: 'debug',
+    message: 'pytest testcase/save'
+  },
+  {
+    id: 'observe-sample-transition',
+    timestamp: '14:31:58',
+    level: 'log',
+    message: '• Waiting for backend task transition'
+  }
+];
 
 export const activity = [
   'EXEC-2041 created from 保存接口 feature',
