@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -7,7 +8,7 @@ import { AppShell } from './AppShell';
 import { resolveRuntimeConfig } from './config/runtime';
 import { activeTask as mockActiveTask } from './data/mockData';
 
-const expectedNavigation = [
+const englishNavigation = [
   ['Overview', '/'],
   ['Tasks', '/tasks'],
   ['Observe', '/observation'],
@@ -17,15 +18,27 @@ const expectedNavigation = [
   ['Settings', '/settings']
 ] as const;
 
-const navigationDestinations = [
-  ['Overview', '/', '测试看板'],
-  ['Tasks', '/tasks', '任务调度'],
-  ['Observe', '/observation', '执行观测'],
-  ['Results', '/results', '结果与报告'],
-  ['Scripts', '/scripts', '脚本资产'],
-  ['Knowledge', '/knowledge', '知识库'],
-  ['Settings', '/settings', '系统设置']
+const chineseNavigation = [
+  ['总览', '/'],
+  ['任务', '/tasks'],
+  ['观测', '/observation'],
+  ['结果', '/results'],
+  ['脚本', '/scripts'],
+  ['知识', '/knowledge'],
+  ['设置', '/settings']
 ] as const;
+
+const navigationDestinations = [
+  ['总览', '/', '测试看板'],
+  ['任务', '/tasks', '任务调度'],
+  ['观测', '/observation', '执行观测'],
+  ['结果', '/results', '结果与报告'],
+  ['脚本', '/scripts', '脚本资产'],
+  ['知识', '/knowledge', '知识库'],
+  ['设置', '/settings', '设置']
+] as const;
+
+const shellStyles = readFileSync('src/styles/shell.css', 'utf8');
 
 function renderShell(initialPath = '/', runtimeOverrides = {}) {
   const client = new QueryClient({
@@ -73,23 +86,24 @@ describe('AppShell', () => {
 
     expect(screen.getAllByText('Console')).toHaveLength(1);
     expect(screen.getByRole('banner')).toHaveClass('app-header');
-    expect(screen.getByRole('img', { name: 'Fairy spark' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'TestWise ghost' })).toBeInTheDocument();
 
     const navigation = screen.getByRole('navigation', { name: 'Primary navigation' });
     expect(within(navigation).getAllByRole('link').map((link) => [
       link.textContent,
       link.getAttribute('href')
-    ])).toEqual(expectedNavigation);
+    ])).toEqual(chineseNavigation);
     expect(within(navigation).getAllByRole('link').filter(
       (link) => link.getAttribute('aria-current') === 'page'
     )).toHaveLength(1);
 
     const objectControl = screen.getByTestId('object-control');
     expect(objectControl).toHaveTextContent('Object');
-    expect(objectControl).toHaveTextContent('营销系统 Java SUT');
-    expect(objectControl).toHaveTextContent('v2.4.1');
-    expect(objectControl).toHaveTextContent('健康');
-    expect(screen.getByLabelText('Object')).toHaveAccessibleDescription(/健康/);
+    expect(objectControl).toHaveTextContent('高码java 场景');
+    expect(objectControl).not.toHaveTextContent('营销系统 Java SUT');
+    expect(objectControl).not.toHaveTextContent('v2.4.1');
+    expect(objectControl).not.toHaveTextContent('健康');
+    expect(screen.getByLabelText('Object')).not.toHaveAttribute('aria-describedby');
     expect(screen.getByRole('button', { name: /english/i })).toHaveTextContent(/^EN$/);
     expect(screen.getByRole('button', { name: /登录|sign in/i })).toHaveTextContent(/^TW$/);
 
@@ -106,6 +120,18 @@ describe('AppShell', () => {
     expect(screen.queryByRole('button', { name: /overview|execute|analysis|assets|system/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
     expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();
+  });
+
+  test('encodes the approved 72px centered desktop header contract', () => {
+    expect(shellStyles).toMatch(/\.app-header\s*\{[^}]*height:\s*72px;[^}]*background:\s*#fff;/s);
+    expect(shellStyles).toMatch(/\.app-header__inner\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+496px\s+minmax\(0,\s*1fr\);[^}]*max-width:\s*1440px;[^}]*height:\s*72px;[^}]*padding:\s*0 40px;/s);
+    expect(shellStyles).toMatch(/\.desktop-navigation\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*repeat\(7,\s*64px\);[^}]*gap:\s*8px;/s);
+    expect(shellStyles).toMatch(/\.desktop-nav-link\s*\{[^}]*width:\s*64px;[^}]*height:\s*40px;[^}]*border-radius:\s*16px;[^}]*font-size:\s*15px;/s);
+    expect(shellStyles).toMatch(/\.gradient-ghost-logo\s*\{[^}]*width:\s*32px;[^}]*height:\s*32px;/s);
+    expect(shellStyles).toMatch(/\.desktop-object-control\s*\{[^}]*width:\s*216px;/s);
+    expect(shellStyles).toMatch(/\.object-control\s*\{[^}]*height:\s*44px;[^}]*border-radius:\s*16px;/s);
+    expect(shellStyles).toMatch(/\.language-button,[\s\S]*?\.account-menu__trigger\s*\{[^}]*width:\s*44px;[^}]*height:\s*44px;/s);
+    expect(shellStyles).toMatch(/@media \(max-width:\s*1319px\)/);
   });
 
   test('clicks through every direct destination without exposing legacy or extra UI', async () => {
@@ -142,7 +168,7 @@ describe('AppShell', () => {
       expect(screen.queryByRole('menu')).not.toBeInTheDocument();
       expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();
 
-      if (label === 'Overview') {
+      if (label === '总览') {
         for (const extraText of [
           '执行焦点',
           'L0 质量摘要',
@@ -153,28 +179,28 @@ describe('AppShell', () => {
           expect(screen.queryByText(extraText, { exact: true })).not.toBeInTheDocument();
         }
       }
-      if (label === 'Tasks') {
+      if (label === '任务') {
         expect(screen.queryByText(/任务队列|本次会话/)).not.toBeInTheDocument();
         expect(screen.queryByRole('tab')).not.toBeInTheDocument();
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /上一步|下一步/ })).not.toBeInTheDocument();
       }
-      if (label === 'Observe') {
+      if (label === '观测') {
         expect(screen.queryByRole('button', {
           name: /暂停|继续|清空|全部日志级别|警告|错误/
         })).not.toBeInTheDocument();
         expect(screen.queryByText(/实时连接|正在连接|日志已完成/)).not.toBeInTheDocument();
       }
-      if (label === 'Results') {
+      if (label === '结果') {
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         expect(screen.queryByRole('alert')).not.toBeInTheDocument();
       }
-      if (label === 'Scripts') {
+      if (label === '脚本') {
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         expect(screen.queryByRole('alert')).not.toBeInTheDocument();
         expect(container.querySelector('input[type="file"]')).not.toBeInTheDocument();
       }
-      if (label === 'Knowledge') {
+      if (label === '知识') {
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         expect(screen.queryByRole('alert')).not.toBeInTheDocument();
         expect(container.querySelector('form')).not.toBeInTheDocument();
@@ -182,7 +208,7 @@ describe('AppShell', () => {
         expect(container.querySelector('[contenteditable="true"]')).not.toBeInTheDocument();
         expect(container.querySelector('[aria-label*="pagination" i]')).not.toBeInTheDocument();
       }
-      if (label === 'Settings') {
+      if (label === '设置') {
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         expect(screen.queryByRole('alert')).not.toBeInTheDocument();
         expect(container.querySelector('form')).not.toBeInTheDocument();
@@ -234,7 +260,7 @@ describe('AppShell', () => {
     )).toHaveLength(1);
   });
 
-  test('switches the product shell between Chinese and English without translating navigation', async () => {
+  test('switches the product shell and navigation between Chinese and English', async () => {
     const user = userEvent.setup();
     renderShell();
 
@@ -245,7 +271,7 @@ describe('AppShell', () => {
     expect(screen.getByRole('heading', { name: /dashboard/i })).toBeInTheDocument();
     const navigation = screen.getByRole('navigation', { name: 'Primary navigation' });
     expect(within(navigation).getAllByRole('link').map((link) => link.textContent)).toEqual(
-      expectedNavigation.map(([label]) => label)
+      englishNavigation.map(([label]) => label)
     );
   });
 
@@ -266,12 +292,13 @@ describe('AppShell', () => {
     expect(within(navigation).getAllByRole('link').map((link) => [
       link.textContent,
       link.getAttribute('href')
-    ])).toEqual(expectedNavigation);
+    ])).toEqual(chineseNavigation);
     const objectControl = within(drawer).getByTestId('drawer-object-control');
     expect(within(objectControl).getByLabelText('Object')).toHaveValue('java-sut');
-    expect(objectControl).toHaveTextContent('营销系统 Java SUT');
-    expect(objectControl).toHaveTextContent('v2.4.1');
-    expect(objectControl).toHaveTextContent('健康');
+    expect(objectControl).toHaveTextContent('高码java 场景');
+    expect(objectControl).not.toHaveTextContent('营销系统 Java SUT');
+    expect(objectControl).not.toHaveTextContent('v2.4.1');
+    expect(objectControl).not.toHaveTextContent('健康');
     expect(within(drawer).getByRole('button', { name: /english/i })).toHaveTextContent(/^EN$/);
     const accountButton = within(drawer).getByRole('button', { name: /登录|sign in/i });
     expect(accountButton).toHaveTextContent(/^TW$/);
@@ -380,7 +407,7 @@ describe('AppShell', () => {
     const user = userEvent.setup();
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
       matches: false,
-      media: '(max-width: 1179px)',
+      media: '(max-width: 1319px)',
       onchange: null,
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
@@ -395,11 +422,11 @@ describe('AppShell', () => {
     expect(within(screen.getByTestId('object-control')).getByLabelText('Object')).toHaveFocus();
   });
 
-  test('the Tasks change-Object affordance opens the drawer and focuses its Object selector below 1180px', async () => {
+  test('the Tasks change-Object affordance opens the drawer and focuses its Object selector below 1320px', async () => {
     const user = userEvent.setup();
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
       matches: true,
-      media: '(max-width: 1179px)',
+      media: '(max-width: 1319px)',
       onchange: null,
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
@@ -520,7 +547,7 @@ describe('AppShell', () => {
     await user.click(screen.getByRole('button', { name: '启动执行' }));
     expect(await screen.findByRole('heading', { name: '执行观测' })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('link', { name: 'Results' }));
+    await user.click(screen.getByRole('link', { name: '结果' }));
 
     const reports = await screen.findByRole('region', { name: '最近报告' });
     expect(within(reports).getByText('task_from_app_shell')).toBeInTheDocument();

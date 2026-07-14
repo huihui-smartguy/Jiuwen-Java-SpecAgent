@@ -1,19 +1,19 @@
 import { ChevronDown, Menu, X } from 'lucide-react';
-import { useEffect, useId, useRef, type Ref } from 'react';
+import { useEffect, useRef, type Ref } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { getCopy } from '../i18n';
 import type { AuthConfig, Language, SutTarget } from '../types';
 import { AccountMenu } from './AccountMenu';
-import { FairySparkLogo } from './FairySparkLogo';
+import { GradientGhostLogo } from './GradientGhostLogo';
 
 export const navigationItems = [
-  { label: 'Overview', to: '/', end: true },
-  { label: 'Tasks', to: '/tasks' },
-  { label: 'Observe', to: '/observation' },
-  { label: 'Results', to: '/results' },
-  { label: 'Scripts', to: '/scripts' },
-  { label: 'Knowledge', to: '/knowledge' },
-  { label: 'Settings', to: '/settings' }
+  { labels: { en: 'Overview', zh: '总览' }, to: '/', end: true },
+  { labels: { en: 'Tasks', zh: '任务' }, to: '/tasks' },
+  { labels: { en: 'Observe', zh: '观测' }, to: '/observation' },
+  { labels: { en: 'Results', zh: '结果' }, to: '/results' },
+  { labels: { en: 'Scripts', zh: '脚本' }, to: '/scripts' },
+  { labels: { en: 'Knowledge', zh: '知识' }, to: '/knowledge' },
+  { labels: { en: 'Settings', zh: '设置' }, to: '/settings' }
 ] as const;
 
 export interface ConsoleHeaderProps {
@@ -29,7 +29,6 @@ export interface ConsoleHeaderProps {
 }
 
 interface ObjectControlProps {
-  language: Language;
   selectedObject: SutTarget;
   objects: readonly SutTarget[];
   testId: string;
@@ -38,44 +37,31 @@ interface ObjectControlProps {
 }
 
 function ObjectControl({
-  language,
   selectedObject,
   objects,
   testId,
   selectRef,
   onObjectChange
 }: ObjectControlProps) {
-  const t = getCopy(language);
-  const statusDescriptionId = useId();
-
   return (
     <label className="object-control" data-testid={testId}>
       <span className="object-control__label">Object</span>
       <span className="object-control__summary" aria-hidden="true">
         <span className="object-control__identity">
-          <strong>{selectedObject.name}</strong>
-          <span>{selectedObject.version}</span>
-        </span>
-        <span className={`object-control__status object-control__status--${selectedObject.status}`}>
-          <span aria-hidden="true" />
-          {t[selectedObject.status]}
+          <strong>{selectedObject.product} {selectedObject.scene}</strong>
         </span>
         <ChevronDown aria-hidden="true" />
-      </span>
-      <span className="sr-only" id={statusDescriptionId}>
-        {t.status}: {t[selectedObject.status]}
       </span>
       <select
         ref={selectRef}
         className="object-control__select"
         aria-label="Object"
-        aria-describedby={statusDescriptionId}
         value={selectedObject.id}
         onChange={(event) => onObjectChange(event.target.value)}
       >
         {objects.map((object) => (
           <option key={object.id} value={object.id}>
-            {object.name} · {object.version}
+            {object.product} {object.scene}
           </option>
         ))}
       </select>
@@ -167,7 +153,7 @@ export function ConsoleHeader({
     }
     lastObjectFocusRequestRef.current = objectFocusRequest;
 
-    const isDrawerLayout = window.matchMedia?.('(max-width: 1179px)').matches ?? false;
+    const isDrawerLayout = window.matchMedia?.('(max-width: 1319px)').matches ?? false;
     if (!isDrawerLayout) {
       desktopObjectRef.current?.focus();
       return;
@@ -196,7 +182,7 @@ export function ConsoleHeader({
           className={({ isActive }) => `${closeDrawer ? 'mobile-nav-link' : 'desktop-nav-link'} ${isActive ? 'is-active' : ''}`}
           onClick={closeDrawer ? () => onDrawerOpenChange(false) : undefined}
         >
-          {item.label}
+          {item.labels[language]}
         </NavLink>
       ))}
     </nav>
@@ -212,7 +198,7 @@ export function ConsoleHeader({
       >
         <div className="app-header__inner">
           <NavLink className="brand-link" to="/" aria-label="Console home">
-            <FairySparkLogo />
+            <GradientGhostLogo />
             <span>Console</span>
           </NavLink>
 
@@ -221,7 +207,6 @@ export function ConsoleHeader({
           <div className="app-header__actions">
             <div className="desktop-object-control">
               <ObjectControl
-                language={language}
                 selectedObject={selectedObject}
                 objects={objects}
                 testId="object-control"
@@ -279,7 +264,6 @@ export function ConsoleHeader({
             </div>
 
             <ObjectControl
-              language={language}
               selectedObject={selectedObject}
               objects={objects}
               testId="drawer-object-control"

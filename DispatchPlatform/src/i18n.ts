@@ -10,7 +10,7 @@ export const copy = {
     results: '结果与报告',
     scripts: '脚本资产',
     knowledge: '知识库',
-    settings: '系统设置',
+    settings: '设置',
     navOverview: '总览',
     navExecution: '执行',
     navAnalysis: '分析',

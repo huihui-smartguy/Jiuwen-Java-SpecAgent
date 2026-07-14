@@ -108,7 +108,7 @@ describe('approved Settings frame', () => {
   test('renders the exact approved four-card composition, selected Object, and read-only runtime values', () => {
     const { container } = renderSettings();
 
-    const title = screen.getByRole('heading', { level: 1, name: '系统设置' });
+    const title = screen.getByRole('heading', { level: 1, name: '设置' });
     const header = title.closest('.page-header');
     expect(header).not.toBeNull();
     expect(within(header as HTMLElement).getByText(
