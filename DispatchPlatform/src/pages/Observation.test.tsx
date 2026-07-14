@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -88,6 +89,26 @@ afterEach(() => {
 });
 
 describe('Observation', () => {
+  test('owns the exact 24px PageHeader separation before metrics while retaining 18px internal gaps', async () => {
+    mockTaskApi([activeTask]);
+
+    const { container } = renderObservation();
+    const page = container.querySelector('.observation-page');
+    const header = container.querySelector('.page-header');
+    const metrics = container.querySelector('.observation-metrics');
+    const observeCss = readFileSync('src/styles/routes/observe.css', 'utf8');
+
+    expect(page?.firstElementChild).toBe(header);
+    expect(header?.nextElementSibling).toBe(metrics);
+    expect(observeCss).toMatch(
+      /\.observation-page\s*>\s*\.page-header\s*\{[^}]*margin-bottom:\s*24px;/
+    );
+    expect(observeCss).toMatch(
+      /\.observation-metrics\s*\{[^}]*gap:\s*18px;[^}]*margin-bottom:\s*18px;/
+    );
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
+  });
+
   test('matches the approved Observe composition and source order without legacy log controls', async () => {
     mockTaskApi([activeTask]);
 

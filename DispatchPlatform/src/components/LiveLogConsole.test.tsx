@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
@@ -49,6 +50,38 @@ afterEach(() => {
 });
 
 describe('LiveLogConsole', () => {
+  test('contains many real lines in the 338px desktop row and releases the row height responsively', async () => {
+    const logs = Array.from({ length: 80 }, (_, index) => ({
+      timestamp: `2026-07-13 10:00:${String(index).padStart(2, '0')}`,
+      level: 'INFO',
+      message: `Real log line ${index}`
+    }));
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(await mockJson({
+      success: true,
+      total: logs.length,
+      logs
+    }));
+
+    const { container } = renderConsole();
+
+    expect(await screen.findByText('Real log line 79')).toBeInTheDocument();
+    const panel = container.querySelector('.live-log-panel');
+    const viewport = container.querySelector('.live-log-viewport');
+    expect(panel).toContainElement(viewport);
+    expect(viewport?.querySelectorAll('.log-line')).toHaveLength(80);
+
+    const observeCss = readFileSync('src/styles/routes/observe.css', 'utf8');
+    expect(observeCss).toMatch(
+      /\.observation-lower-grid\s*\{[^}]*height:\s*338px;/
+    );
+    expect(observeCss).toMatch(
+      /\.live-log-viewport\s*\{[^}]*min-height:\s*0;/
+    );
+    expect(observeCss).toMatch(
+      /@media \(max-width: 980px\)\s*\{[\s\S]*?\.observation-lower-grid\s*\{[^}]*height:\s*auto;/
+    );
+  });
+
   test('renders the real backend snapshot, announces its line count, and removes legacy controls', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(await mockJson({
       success: true,
