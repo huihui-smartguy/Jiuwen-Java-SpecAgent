@@ -1,6 +1,6 @@
 # TestWise Antigravity Console R2 Design Specification
 
-**Status:** Approved visual direction; implementation pending written-spec review
+**Status:** Approved by the user; implementation authorized
 
 **Date:** 2026-07-14
 
@@ -243,7 +243,10 @@ Populate values from existing runtime configuration and local preferences. Do no
 - Keep authentication and account-menu behavior behind the `TW` trigger.
 - Keep `/testwise/` basename handling, runtime config loading, API proxying, download URL rebasing, and deployment files.
 - Do not copy the stale workspace-level `DispatchPlatform` over the cloned repository. The clone contains newer auth, live-log, deployment, and test work.
-- The following approved controls have no baseline backend contract and are presentation-only in this revision: Results `筛选` and `导出报告`, Scripts `导入脚本`, Knowledge `新建条目`, and Settings `保存更改`. Render them in the approved position and appearance with `aria-disabled="true"`; activation performs no mutation, opens no overlay, and displays no fabricated success. All other visible actions retain the existing behavior described in this specification.
+- The following approved controls have no baseline backend contract and are presentation-only in this revision: Overview `查看全部` and `查看交互说明`; Results `筛选`, `导出报告`, and `查看用例`; Scripts `导入脚本`; Knowledge `新建条目`, `查看全部`, and each `补充`; and Settings `保存更改`. Render them in the approved position and appearance with `aria-disabled="true"`; activation performs no mutation, opens no overlay, and displays no fabricated success.
+- Tasks `更换对象` focuses the existing shell Object selector. Tasks script search, Results recent-report search, Scripts search/Level/Feature filters, and Knowledge search filter already-rendered local data only; they do not create backend requests or persistence.
+- The Observe path label must truthfully state that status refreshes every five seconds even though the static Figma sample says three seconds. Preserve the approved geometry while honoring the real polling contract.
+- When mock fallback is enabled and the log request is unavailable, the approved sample event lines may be shown only with the frame's `LIVE STATUS · NOT LIVE LOGS` disclosure. A successful real snapshot always takes precedence, and live mode never receives or renders sample entries.
 
 ## 8. Component Boundaries
 
