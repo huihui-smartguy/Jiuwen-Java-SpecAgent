@@ -33,6 +33,7 @@ function renderShell(initialPath = '/', runtimeOverrides = {}) {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('AppShell', () => {
@@ -200,12 +201,54 @@ describe('AppShell', () => {
     const user = userEvent.setup();
     renderShell('/tasks');
 
-    await user.click(screen.getByRole('tab', { name: /新建任务|new task/i }));
     await user.selectOptions(screen.getByLabelText('Object'), 'python-sut');
 
     const summary = screen.getByTestId('task-context-summary');
     expect(within(summary).getByText(/高码python/i)).toBeInTheDocument();
     expect(within(summary).getByText(/API/i)).toBeInTheDocument();
+  });
+
+  test('the Tasks change-Object affordance focuses the desktop Object selector', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
+      matches: false,
+      media: '(max-width: 1179px)',
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn()
+    }));
+    renderShell('/tasks');
+
+    await user.click(screen.getByRole('button', { name: '更换对象' }));
+
+    expect(within(screen.getByTestId('object-control')).getByLabelText('Object')).toHaveFocus();
+  });
+
+  test('the Tasks change-Object affordance opens the drawer and focuses its Object selector below 1180px', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
+      matches: true,
+      media: '(max-width: 1179px)',
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn()
+    }));
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    renderShell('/tasks');
+
+    await user.click(screen.getByRole('button', { name: '更换对象' }));
+
+    const drawer = await screen.findByRole('dialog', { name: /导航|navigation/i });
+    expect(within(drawer).getByLabelText('Object')).toHaveFocus();
   });
 
   test('keeps the observation route and existing task behavior unchanged', () => {

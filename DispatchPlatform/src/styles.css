@@ -2,3 +2,4 @@
 @import './styles/shell.css';
 @import './styles/primitives.css';
 @import './styles/routes/overview.css';
+@import './styles/routes/tasks.css';

@@ -102,6 +102,7 @@ export function ConsoleHeader({
   const desktopObjectRef = useRef<HTMLSelectElement>(null);
   const drawerObjectRef = useRef<HTMLSelectElement>(null);
   const lastObjectFocusRequestRef = useRef(0);
+  const pendingDrawerObjectFocusRef = useRef(false);
   const languageLabel = language === 'zh' ? t.switchToEnglish : t.switchToChinese;
   const languageText = language === 'zh' ? 'EN' : '中';
 
@@ -172,9 +173,18 @@ export function ConsoleHeader({
       return;
     }
 
+    pendingDrawerObjectFocusRef.current = true;
     onDrawerOpenChange(true);
-    window.requestAnimationFrame(() => drawerObjectRef.current?.focus());
   }, [objectFocusRequest, onDrawerOpenChange]);
+
+  useEffect(() => {
+    if (!drawerOpen || !pendingDrawerObjectFocusRef.current) {
+      return;
+    }
+
+    pendingDrawerObjectFocusRef.current = false;
+    window.requestAnimationFrame(() => drawerObjectRef.current?.focus());
+  }, [drawerOpen]);
 
   const navigation = (closeDrawer = false) => (
     <nav className={closeDrawer ? 'mobile-navigation' : 'desktop-navigation'} aria-label="Primary navigation">

@@ -1,15 +1,14 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ArrowRight, ChevronLeft, Play, Plus, Search } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { ArrowRight, Search, Sparkles } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ApiError, createTask, getFeatures, getScripts } from '../api/client';
-import { getCopy } from '../i18n';
+import { PageHeader } from '../components/PageHeader';
 import { mockFeatures, mockScripts } from '../data/mockData';
-import { StatusBadge } from '../components/StatusBadge';
+import { getCopy } from '../i18n';
 import type {
   Feature,
   Language,
-  NormalizedTaskStatus,
   RuntimeConfig,
   Script,
   SutTarget,
@@ -18,20 +17,17 @@ import type {
   TriggerType
 } from '../types';
 
-interface PageProps {
+interface TasksProps {
   language: Language;
   selectedSut: SutTarget;
-  activeTask: NormalizedTaskStatus | null;
   runtimeConfig: RuntimeConfig;
-  sessionTasks: NormalizedTaskStatus[];
   onTaskCreated: (task: TaskCreateResponse) => void;
-  onTaskSelected: (task: NormalizedTaskStatus) => void;
+  onRequestObjectChange: () => void;
 }
 
-type WorkspaceTab = 'queue' | 'new';
-type BuilderStep = 1 | 2;
 const emptyFeatures: Feature[] = [];
 const emptyScripts: Script[] = [];
+const levels = ['L0', 'L1', 'L2', 'L3', 'L4'] as const;
 
 function fallbackScripts(sut: SutTarget): Script[] {
   return mockScripts.filter((script) => script.product === sut.product && script.scene === sut.scene);
@@ -59,19 +55,21 @@ export function Tasks({
   language,
   selectedSut,
   runtimeConfig,
-  sessionTasks,
   onTaskCreated,
-  onTaskSelected
-}: PageProps) {
+  onRequestObjectChange
+}: TasksProps) {
   const t = getCopy(language);
   const navigate = useNavigate();
-  const [tab, setTab] = useState<WorkspaceTab>('queue');
-  const [step, setStep] = useState<BuilderStep>(1);
+  const firstConfigurationControlRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<TriggerType>('feature');
   const [selectedFeature, setSelectedFeature] = useState('');
-  const [selectedLevel, setSelectedLevel] = useState('L0');
+  const [selectedLevel, setSelectedLevel] = useState('L1');
   const [selectedScriptNames, setSelectedScriptNames] = useState<string[]>([]);
-  const api = useMemo(() => ({ apiBaseUrl: selectedSut.apiBaseUrl || runtimeConfig.apiBaseUrl }), [selectedSut.apiBaseUrl, runtimeConfig.apiBaseUrl]);
+  const [scriptSearch, setScriptSearch] = useState('');
+  const api = useMemo(
+    () => ({ apiBaseUrl: selectedSut.apiBaseUrl || runtimeConfig.apiBaseUrl }),
+    [selectedSut.apiBaseUrl, runtimeConfig.apiBaseUrl]
+  );
   const requiresFeature = mode === 'feature' || mode === 'scripts';
 
   const featuresQuery = useQuery({
@@ -114,6 +112,16 @@ export function Tasks({
   });
 
   const scripts = scriptQuery.data ?? emptyScripts;
+  const filteredScripts = useMemo(() => {
+    const normalizedSearch = scriptSearch.trim().toLocaleLowerCase();
+    if (!normalizedSearch) {
+      return scripts;
+    }
+    return scripts.filter((script) => (
+      [script.name, script.feature, script.level, script.path]
+        .some((value) => value.toLocaleLowerCase().includes(normalizedSearch))
+    ));
+  }, [scriptSearch, scripts]);
 
   useEffect(() => {
     if (!selectedFeature || !features.some((feature) => feature.name === selectedFeature)) {
@@ -122,9 +130,9 @@ export function Tasks({
   }, [features, selectedFeature]);
 
   useEffect(() => {
-    setStep(1);
     setSelectedFeature('');
     setSelectedScriptNames([]);
+    setScriptSearch('');
   }, [selectedSut.id]);
 
   useEffect(() => {
@@ -166,246 +174,286 @@ export function Tasks({
     return { product: selectedSut.product, scene: selectedSut.scene, feature: selectedFeature };
   }, [mode, selectedFeature, selectedLevel, selectedScriptNames, selectedSut.product, selectedSut.scene]);
 
-  const canAdvance = !requiresFeature || Boolean(selectedFeature);
   const canCreate =
     !creation.isPending &&
     (mode !== 'scripts' || selectedScriptNames.length > 0) &&
     (!requiresFeature || Boolean(selectedFeature));
-  const modeLabel = (value: TriggerType) =>
-    value === 'feature' ? t.byFeature : value === 'level' ? t.byLevel : t.byScripts;
+  const objectPassed = selectedSut.status === 'healthy';
+  const scriptsPassed = scriptQuery.isSuccess && scripts.length > 0;
+  const credentialsPassed = runtimeConfig.enableMockFallback;
+  const guardrailsPassed = [objectPassed, scriptsPassed, credentialsPassed].filter(Boolean).length;
+  const modeSummary = mode === 'feature' ? 'Feature' : mode === 'level' ? 'Level' : 'Scripts';
 
-  const openNewTask = () => {
-    setTab('new');
-    setStep(1);
-  };
   const toggleScript = (name: string) => {
-    setSelectedScriptNames((current) =>
+    setSelectedScriptNames((current) => (
       current.includes(name) ? current.filter((item) => item !== name) : [...current, name]
-    );
+    ));
   };
+  const handleScriptRowKeyDown = (event: KeyboardEvent<HTMLTableRowElement>, name: string) => {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+    event.preventDefault();
+    toggleScript(name);
+  };
+  const handleScriptRowClick = (event: MouseEvent<HTMLTableRowElement>, name: string) => {
+    if ((event.target as HTMLElement).tagName !== 'INPUT') {
+      toggleScript(name);
+    }
+  };
+
+  const objectGuardrailLabel = selectedSut.status === 'healthy'
+    ? t.guardrailPassed
+    : selectedSut.status === 'degraded'
+      ? t.guardrailAttention
+      : t.guardrailUnavailable;
+  const scriptsGuardrailLabel = scriptQuery.isLoading
+    ? t.guardrailChecking
+    : scriptsPassed
+      ? t.guardrailPassed
+      : t.guardrailUnavailable;
 
   return (
-    <div className="page-stack">
-      <div className="page-title-row">
-        <div>
-          <p className="eyebrow">{selectedSut.name} · {selectedSut.version}</p>
-          <h1>{t.tasks}</h1>
-          <p className="page-subtitle">{t.tasksSubtitle}</p>
-        </div>
-        <button className="button button--primary" type="button" onClick={openNewTask}>
-          <Plus aria-hidden="true" />
-          {t.newTaskTab}
-        </button>
-      </div>
+    <div className="page-stack tasks-page">
+      <PageHeader
+        title={t.tasks}
+        subtitle={t.tasksSubtitle}
+        action={(
+          <button
+            className="button button--primary tasks-create-task"
+            type="button"
+            onClick={() => firstConfigurationControlRef.current?.focus()}
+          >
+            {t.tasksPageAction}
+            <ArrowRight aria-hidden="true" />
+          </button>
+        )}
+      />
 
-      <div className="task-tabs" role="tablist" aria-label={t.tasks}>
-        <button
-          className={`task-tab ${tab === 'queue' ? 'active' : ''}`}
-          type="button"
-          role="tab"
-          aria-selected={tab === 'queue'}
-          onClick={() => setTab('queue')}
-        >
-          {t.taskQueue}
-        </button>
-        <button
-          className={`task-tab ${tab === 'new' ? 'active' : ''}`}
-          type="button"
-          role="tab"
-          aria-selected={tab === 'new'}
-          onClick={openNewTask}
-        >
-          {t.newTaskTab}
-        </button>
-      </div>
-
-      {tab === 'queue' ? (
-        <section className="panel task-queue-panel" role="tabpanel">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">{t.thisSession}</p>
-              <h2>{t.taskQueue}</h2>
-            </div>
-            <span className="session-note">{t.sessionTaskNote}</span>
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t.taskId}</th>
-                  <th>{t.triggerMode}</th>
-                  <th>{t.status}</th>
-                  <th>{t.progress}</th>
-                  <th>{t.action}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sessionTasks.map((task) => (
-                  <tr key={task.task_id}>
-                    <td className="mono-cell">{task.task_id}</td>
-                    <td>{modeLabel(task.trigger_type)}</td>
-                    <td>
-                      <div className="queue-status">
-                        <StatusBadge status={task.uiStatus} language={language} />
-                        {task.backend_status === 'queued' && (task.queue_position ?? -1) > 0 && (
-                          <span className="queue-position">{t.queuePosition}: {task.queue_position}</span>
-                        )}
-                      </div>
-                    </td>
-                    <td>
-                      {task.progress?.completed ?? 0}/{task.progress?.total_commands ?? task.result?.total_commands ?? 0}
-                    </td>
-                    <td>
-                      <Link className="table-link" to="/observation" onClick={() => onTaskSelected(task)}>
-                        {t.openObservation}
-                        <ArrowRight aria-hidden="true" />
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ) : (
-        <section className="task-builder" role="tabpanel">
-          <div className="task-stepper" aria-label={t.newTaskTab}>
-            <div className={`task-step ${step === 1 ? 'active' : ''}`}>
-              <span>1</span>
-              {t.taskStepContext}
-            </div>
-            <div className={`task-step ${step === 2 ? 'active' : ''}`}>
-              <span>2</span>
-              {t.taskStepSnapshot}
-            </div>
-          </div>
-
-          {step === 1 ? (
-            <section className="panel task-builder__panel">
-              <div className="panel-heading">
-                <div>
-                  <p className="eyebrow">{t.selectedContext}</p>
-                  <h2>{t.taskStepContext}</h2>
-                </div>
+      <div className="tasks-layout">
+        <div className="tasks-left-column">
+          <section className="tasks-card tasks-config-card" aria-labelledby="tasks-config-title">
+            <div className="tasks-card-heading tasks-config-heading">
+              <div>
+                <h2 id="tasks-config-title">{t.configureTask}</h2>
+                <p>{t.configureTaskSubtitle}</p>
               </div>
-              <div className="form-grid">
-                <div data-testid="task-context-summary" className="context-card">
-                  <span>{selectedSut.name}</span>
-                  <strong>{selectedSut.product} · {selectedSut.scene} · {selectedSut.version}</strong>
-                </div>
-                <label className="field">
-                  <span>{t.triggerMode}</span>
-                  <select value={mode} onChange={(event) => setMode(event.target.value as TriggerType)}>
-                    <option value="feature">{t.byFeature}</option>
-                    <option value="level">{t.byLevel}</option>
-                    <option value="scripts">{t.byScripts}</option>
+              <span className={`tasks-ready-pill ${canCreate ? 'is-ready' : ''}`}>
+                <span aria-hidden="true" />
+                {canCreate ? t.ready : t.guardrailChecking}
+              </span>
+            </div>
+
+            <ol className="tasks-steps" aria-label={t.taskStepsLabel}>
+              <li>
+                <span className="tasks-step-number">1</span>
+                <span><strong>Object</strong><small>{t.objectStepDescription}</small></span>
+              </li>
+              <li>
+                <span className="tasks-step-number">2</span>
+                <span><strong>Trigger</strong><small>{t.triggerStepDescription}</small></span>
+              </li>
+              <li>
+                <span className="tasks-step-number">3</span>
+                <span><strong>Scope</strong><small>{t.scopeStepDescription}</small></span>
+              </li>
+            </ol>
+
+            <div className="tasks-object-summary" data-testid="task-context-summary">
+              <div>
+                <span>{t.selectedObject}</span>
+                <strong>{selectedSut.product} · {selectedSut.scene} · {selectedSut.version}</strong>
+              </div>
+              <button type="button" onClick={onRequestObjectChange}>
+                {t.changeObject}
+                <ArrowRight aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="tasks-mode-row">
+              <fieldset className="tasks-segmented" role="radiogroup" aria-label={t.taskModeLabel}>
+                <legend className="sr-only">{t.taskModeLabel}</legend>
+                {([
+                  ['feature', t.byFeature],
+                  ['level', t.byLevel],
+                  ['scripts', t.byScripts]
+                ] as const).map(([value, label]) => (
+                  <label key={value}>
+                    <input
+                      ref={value === 'feature' ? firstConfigurationControlRef : undefined}
+                      className="sr-only"
+                      type="radio"
+                      name="task-trigger-mode"
+                      value={value}
+                      checked={mode === value}
+                      onChange={() => setMode(value)}
+                    />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </fieldset>
+              <span className="tasks-match-count">{scripts.length} {t.scriptsMatched}</span>
+            </div>
+
+            <div className="tasks-fields">
+              {requiresFeature ? (
+                <label className="tasks-field">
+                  <span>Feature</span>
+                  <select value={selectedFeature} onChange={(event) => setSelectedFeature(event.target.value)}>
+                    {features.map((feature) => (
+                      <option key={feature.id} value={feature.name}>{feature.name}</option>
+                    ))}
                   </select>
                 </label>
-                <div className="task-builder__api-note">{selectedSut.product} · {selectedSut.scene}</div>
-              </div>
-              <div className="task-builder__actions">
-                <button className="button button--primary" type="button" disabled={!canAdvance} onClick={() => setStep(2)}>
-                  {t.next}
-                  <ArrowRight aria-hidden="true" />
-                </button>
-              </div>
-            </section>
-          ) : (
-            <section className="panel task-builder__panel">
-              <div className="panel-heading">
-                <div>
-                  <p className="eyebrow">{modeLabel(mode)}</p>
-                  <h2>{t.taskStepSnapshot}</h2>
-                </div>
-                <span className="readonly-tag">{t.readOnlySnapshot}</span>
-              </div>
-              <div className="task-builder-grid">
-                <div className="task-selector-panel">
-                  {requiresFeature && (
-                    <label className="field">
-                      <span>{t.feature}</span>
-                      <select value={selectedFeature} onChange={(event) => setSelectedFeature(event.target.value)}>
-                        {features.map((feature) => <option key={feature.id} value={feature.name}>{feature.name} · {feature.type}</option>)}
-                      </select>
-                    </label>
-                  )}
-                  {mode === 'level' && (
-                    <label className="field">
-                      <span>{t.level}</span>
-                      <select value={selectedLevel} onChange={(event) => setSelectedLevel(event.target.value)}>
-                        {['L0', 'L1', 'L2', 'L3', 'L4'].map((level) => <option key={level}>{level}</option>)}
-                      </select>
-                    </label>
-                  )}
-                  {mode === 'scripts' && (
-                    <fieldset className="script-select-list">
-                      <legend>{t.selectScripts}</legend>
-                      {scripts.map((script) => (
-                        <label key={script.id}>
-                          <input
-                            type="checkbox"
-                            checked={selectedScriptNames.includes(script.name)}
-                            onChange={() => toggleScript(script.name)}
-                          />
-                          <span>{script.name}</span>
-                        </label>
-                      ))}
-                    </fieldset>
-                  )}
-                  {(featuresQuery.isError || scriptQuery.isError) && (
-                    <p className="helper-text">
-                      {getRequestErrorMessage(featuresQuery.error ?? scriptQuery.error, t.contextLoadFailed)}
-                    </p>
-                  )}
-                </div>
-                <div className="task-snapshot-panel">
-                  <div className="table-search">
-                    <Search aria-hidden="true" />
-                    <span>{scripts.length} {t.scriptsCount}</span>
-                  </div>
-                  <div className="table-wrap">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>{t.script}</th>
-                          <th>{t.feature}</th>
-                          <th>{t.level}</th>
-                          <th>{t.path}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {scripts.map((script) => (
-                          <tr key={script.id}>
-                            <td>{script.name}</td>
-                            <td>{script.feature}</td>
-                            <td>{script.level}</td>
-                            <td className="mono-cell">{script.path}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-              {creation.isError && (
-                <p className="helper-text task-error">
-                  {getRequestErrorMessage(creation.error, t.taskCreateFailed)}
-                </p>
+              ) : (
+                <label className="tasks-field">
+                  <span>Level</span>
+                  <select value={selectedLevel} onChange={(event) => setSelectedLevel(event.target.value)}>
+                    {levels.map((level) => <option key={level} value={level}>{level}</option>)}
+                  </select>
+                </label>
               )}
-              <div className="task-builder__actions">
-                <button className="button button--secondary" type="button" onClick={() => setStep(1)}>
-                  <ChevronLeft aria-hidden="true" />
-                  {t.back}
-                </button>
-                <button className="button button--primary" type="button" disabled={!canCreate} onClick={() => creation.mutate(payload)}>
-                  <Play aria-hidden="true" />
-                  {creation.isPending ? t.creatingTask : t.createTask}
-                </button>
+              <label className="tasks-field">
+                <span>{t.executionProfile}</span>
+                <select value="live-standard" onChange={() => undefined}>
+                  <option value="live-standard">{t.liveStandard}</option>
+                </select>
+              </label>
+            </div>
+
+            {(featuresQuery.isError || scriptQuery.isError) && (
+              <p className="tasks-inline-error" role="alert">
+                {getRequestErrorMessage(featuresQuery.error ?? scriptQuery.error, t.contextLoadFailed)}
+              </p>
+            )}
+          </section>
+
+          <section className="tasks-card tasks-snapshot-card" aria-labelledby="script-snapshot-title">
+            <div className="tasks-snapshot-heading">
+              <div>
+                <h2 id="script-snapshot-title">{t.scriptSnapshot}</h2>
+                <p>{t.readOnlySelection}</p>
               </div>
-            </section>
-          )}
-        </section>
-      )}
+              <label className="tasks-script-search">
+                <Search aria-hidden="true" />
+                <span className="sr-only">{t.searchScripts}</span>
+                <input
+                  type="search"
+                  value={scriptSearch}
+                  aria-label={t.searchScripts}
+                  placeholder={t.searchScripts}
+                  onChange={(event) => setScriptSearch(event.target.value)}
+                />
+              </label>
+            </div>
+            <div className="tasks-table-scroll">
+              <table aria-label={t.scriptSnapshot}>
+                <thead>
+                  <tr>
+                    <th>Script</th>
+                    <th>Feature</th>
+                    <th>Level</th>
+                    <th>Path</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredScripts.map((script) => {
+                    const selected = selectedScriptNames.includes(script.name);
+                    const explicitlySelectable = mode === 'scripts';
+                    return (
+                      <tr
+                        key={script.id}
+                        className={selected ? 'is-selected' : undefined}
+                        tabIndex={explicitlySelectable ? 0 : undefined}
+                        aria-selected={explicitlySelectable ? selected : undefined}
+                        onClick={explicitlySelectable ? (event) => handleScriptRowClick(event, script.name) : undefined}
+                        onKeyDown={explicitlySelectable ? (event) => handleScriptRowKeyDown(event, script.name) : undefined}
+                      >
+                        <td>
+                          {explicitlySelectable && (
+                            <input
+                              className="sr-only"
+                              type="checkbox"
+                              tabIndex={-1}
+                              aria-label={`${t.selectScript} ${script.name}`}
+                              checked={selected}
+                              onChange={() => toggleScript(script.name)}
+                            />
+                          )}
+                          <strong>{script.name}</strong>
+                        </td>
+                        <td>{script.feature}</td>
+                        <td><span className={`tasks-level-pill tasks-level-pill--${script.level.toLowerCase()}`}>{script.level}</span></td>
+                        <td className="mono-cell">{script.path}</td>
+                      </tr>
+                    );
+                  })}
+                  {!filteredScripts.length && (
+                    <tr>
+                      <td className="tasks-empty-row" colSpan={4}>{t.noMatchingScripts}</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+
+        <aside className="tasks-right-rail" aria-label={t.launchControls}>
+          <section className="tasks-card tasks-launch-card" aria-labelledby="launch-summary-title">
+            <div className="tasks-card-heading">
+              <h2 id="launch-summary-title">Launch summary</h2>
+              <Sparkles aria-hidden="true" />
+            </div>
+            <dl className="tasks-launch-list">
+              <div><dt>Object</dt><dd>{selectedSut.product} · {selectedSut.scene}</dd></div>
+              <div><dt>Mode</dt><dd>{modeSummary}</dd></div>
+              <div><dt>Scripts</dt><dd>{scripts.length}</dd></div>
+              <div><dt>Estimated</dt><dd data-testid="launch-estimate">{runtimeConfig.enableMockFallback ? '~ 6 min' : '—'}</dd></div>
+            </dl>
+            {creation.isError && (
+              <p className="tasks-inline-error tasks-creation-error" role="alert">
+                {getRequestErrorMessage(creation.error, t.taskCreateFailed)}
+              </p>
+            )}
+            <button
+              className="button button--primary tasks-launch-button"
+              type="button"
+              disabled={!canCreate}
+              onClick={() => creation.mutate(payload)}
+            >
+              {creation.isPending ? t.launchingExecution : t.launchExecution}
+              <ArrowRight aria-hidden="true" />
+            </button>
+          </section>
+
+          <section className="tasks-card tasks-guardrail-card" aria-labelledby="guardrail-title">
+            <div className="tasks-card-heading">
+              <h2 id="guardrail-title">{t.guardrails}</h2>
+              <span className={`tasks-guardrail-count ${guardrailsPassed === 3 ? 'is-complete' : ''}`}>
+                <span aria-hidden="true" />
+                {guardrailsPassed} / 3
+              </span>
+            </div>
+            <dl className="tasks-guardrail-list">
+              <div>
+                <dt>{t.objectOnline}</dt>
+                <dd className={`is-${selectedSut.status === 'healthy' ? 'passed' : selectedSut.status}`}>{objectGuardrailLabel}</dd>
+              </div>
+              <div>
+                <dt>{t.scriptsAvailable}</dt>
+                <dd className={scriptsPassed ? 'is-passed' : undefined}>{scriptsGuardrailLabel}</dd>
+              </div>
+              <div data-testid="guardrail-credentials">
+                <dt>{t.credentialsValid}</dt>
+                <dd className={credentialsPassed ? 'is-passed' : undefined}>
+                  {credentialsPassed ? t.guardrailPassed : t.notVerified}
+                </dd>
+              </div>
+            </dl>
+          </section>
+        </aside>
+      </div>
     </div>
   );
 }

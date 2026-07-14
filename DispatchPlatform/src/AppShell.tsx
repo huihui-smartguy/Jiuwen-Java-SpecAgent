@@ -28,6 +28,7 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
     runtimeConfig.enableMockFallback ? [initialActiveTask] : []
   ));
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [objectFocusRequest, setObjectFocusRequest] = useState(0);
   const selectedSut = useMemo<SutTarget>(
     () => runtimeConfig.sutTargets.find((sut) => sut.id === selectedSutId) ?? runtimeConfig.sutTargets[0],
     [runtimeConfig.sutTargets, selectedSutId]
@@ -59,6 +60,9 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
       return hasTask ? nextTasks : [task, ...nextTasks];
     });
   }, []);
+  const handleRequestObjectChange = useCallback(() => {
+    setObjectFocusRequest((current) => current + 1);
+  }, []);
 
   return (
     <div className="app-shell">
@@ -69,7 +73,7 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
         objects={runtimeConfig.sutTargets}
         auth={runtimeConfig.auth}
         drawerOpen={drawerOpen}
-        objectFocusRequest={0}
+        objectFocusRequest={objectFocusRequest}
         onObjectChange={setSelectedSutId}
         onLanguageToggle={() => setLanguage((current) => (current === 'zh' ? 'en' : 'zh'))}
         onDrawerOpenChange={setDrawerOpen}
@@ -87,10 +91,11 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
             path="/tasks"
             element={(
               <Tasks
-                {...sharedProps}
-                sessionTasks={sessionTasks}
+                language={language}
+                selectedSut={selectedSut}
+                runtimeConfig={runtimeConfig}
                 onTaskCreated={handleTaskCreated}
-                onTaskSelected={setActiveTask}
+                onRequestObjectChange={handleRequestObjectChange}
               />
             )}
           />
