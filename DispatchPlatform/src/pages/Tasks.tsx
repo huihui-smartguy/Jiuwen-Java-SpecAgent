@@ -1,5 +1,4 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ArrowRight, Search, Sparkles } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ApiError, createTask, getFeatures, getScripts } from '../api/client';
@@ -182,7 +181,11 @@ export function Tasks({
   const scriptsPassed = scriptQuery.isSuccess && scripts.length > 0;
   const credentialsPassed = runtimeConfig.enableMockFallback;
   const guardrailsPassed = [objectPassed, scriptsPassed, credentialsPassed].filter(Boolean).length;
-  const modeSummary = mode === 'feature' ? 'Feature' : mode === 'level' ? 'Level' : 'Scripts';
+  const modeSummary = mode === 'feature'
+    ? `Feature · ${selectedFeature || '—'}`
+    : mode === 'level'
+      ? `Level · ${selectedLevel}`
+      : `Scripts · ${selectedScriptNames.length}`;
 
   const toggleScript = (name: string) => {
     setSelectedScriptNames((current) => (
@@ -225,7 +228,7 @@ export function Tasks({
             onClick={() => firstConfigurationControlRef.current?.focus()}
           >
             {t.tasksPageAction}
-            <ArrowRight aria-hidden="true" />
+            <span aria-hidden="true">→</span>
           </button>
         )}
       />
@@ -234,12 +237,8 @@ export function Tasks({
         <div className="tasks-left-column">
           <section className="tasks-card tasks-config-card" aria-labelledby="tasks-config-title">
             <div className="tasks-card-heading tasks-config-heading">
-              <div>
-                <h2 id="tasks-config-title">{t.configureTask}</h2>
-                <p>{t.configureTaskSubtitle}</p>
-              </div>
+              <h2 id="tasks-config-title">{t.configureTask}</h2>
               <span className={`tasks-ready-pill ${canCreate ? 'is-ready' : ''}`}>
-                <span aria-hidden="true" />
                 {canCreate ? t.ready : t.guardrailChecking}
               </span>
             </div>
@@ -262,11 +261,11 @@ export function Tasks({
             <div className="tasks-object-summary" data-testid="task-context-summary">
               <div>
                 <span>{t.selectedObject}</span>
-                <strong>{selectedSut.product} · {selectedSut.scene} · {selectedSut.version}</strong>
+                <strong>{selectedSut.product} {selectedSut.scene}</strong>
               </div>
               <button type="button" onClick={onRequestObjectChange}>
                 {t.changeObject}
-                <ArrowRight aria-hidden="true" />
+                <span aria-hidden="true">→</span>
               </button>
             </div>
 
@@ -274,10 +273,10 @@ export function Tasks({
               <fieldset className="tasks-segmented" role="radiogroup" aria-label={t.taskModeLabel}>
                 <legend className="sr-only">{t.taskModeLabel}</legend>
                 {([
-                  ['feature', t.byFeature],
-                  ['level', t.byLevel],
-                  ['scripts', t.byScripts]
-                ] as const).map(([value, label]) => (
+                  ['feature', t.byFeature, 'Feature'],
+                  ['level', t.byLevel, 'Level'],
+                  ['scripts', t.byScripts, 'Scripts']
+                ] as const).map(([value, label, visibleLabel]) => (
                   <label key={value}>
                     <input
                       ref={value === 'feature' ? firstConfigurationControlRef : undefined}
@@ -285,10 +284,11 @@ export function Tasks({
                       type="radio"
                       name="task-trigger-mode"
                       value={value}
+                      aria-label={label}
                       checked={mode === value}
                       onChange={() => setMode(value)}
                     />
-                    <span>{label}</span>
+                    <span>{visibleLabel}</span>
                   </label>
                 ))}
               </fieldset>
@@ -330,12 +330,8 @@ export function Tasks({
 
           <section className="tasks-card tasks-snapshot-card" aria-labelledby="script-snapshot-title">
             <div className="tasks-snapshot-heading">
-              <div>
-                <h2 id="script-snapshot-title">{t.scriptSnapshot}</h2>
-                <p>{t.readOnlySelection}</p>
-              </div>
+              <h2 id="script-snapshot-title">{t.scriptSnapshot} · {t.readOnlySelection}</h2>
               <label className="tasks-script-search">
-                <Search aria-hidden="true" />
                 <span className="sr-only">{t.searchScripts}</span>
                 <input
                   type="search"
@@ -350,10 +346,10 @@ export function Tasks({
               <table aria-label={t.scriptSnapshot}>
                 <thead>
                   <tr>
-                    <th>Script</th>
+                    <th>{language === 'zh' ? '脚本' : 'Script'}</th>
                     <th>Feature</th>
-                    <th>Level</th>
-                    <th>Path</th>
+                    <th>{language === 'zh' ? '级别' : 'Level'}</th>
+                    <th>{language === 'zh' ? '路径' : 'Path'}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -383,7 +379,7 @@ export function Tasks({
                           <strong>{script.name}</strong>
                         </td>
                         <td>{script.feature}</td>
-                        <td><span className={`tasks-level-pill tasks-level-pill--${script.level.toLowerCase()}`}>{script.level}</span></td>
+                        <td><strong className="tasks-level-text">{script.level}</strong></td>
                         <td className="mono-cell">{script.path}</td>
                       </tr>
                     );
@@ -403,10 +399,9 @@ export function Tasks({
           <section className="tasks-card tasks-launch-card" aria-labelledby="launch-summary-title">
             <div className="tasks-card-heading">
               <h2 id="launch-summary-title">Launch summary</h2>
-              <Sparkles aria-hidden="true" />
             </div>
             <dl className="tasks-launch-list">
-              <div><dt>Object</dt><dd>{selectedSut.product} · {selectedSut.scene}</dd></div>
+              <div><dt>Object</dt><dd>{selectedSut.product} {selectedSut.scene}</dd></div>
               <div><dt>Mode</dt><dd>{modeSummary}</dd></div>
               <div><dt>Scripts</dt><dd>{scripts.length}</dd></div>
               <div><dt>Estimated</dt><dd data-testid="launch-estimate">{runtimeConfig.enableMockFallback ? '~ 6 min' : '—'}</dd></div>
@@ -423,7 +418,7 @@ export function Tasks({
               onClick={() => creation.mutate(payload)}
             >
               {creation.isPending ? t.launchingExecution : t.launchExecution}
-              <ArrowRight aria-hidden="true" />
+              <span aria-hidden="true">→</span>
             </button>
           </section>
 
@@ -431,7 +426,6 @@ export function Tasks({
             <div className="tasks-card-heading">
               <h2 id="guardrail-title">{t.guardrails}</h2>
               <span className={`tasks-guardrail-count ${guardrailsPassed === 3 ? 'is-complete' : ''}`}>
-                <span aria-hidden="true" />
                 {guardrailsPassed} / 3
               </span>
             </div>

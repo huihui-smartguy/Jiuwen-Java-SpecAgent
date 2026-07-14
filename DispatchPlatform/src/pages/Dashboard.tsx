@@ -1,11 +1,4 @@
-import {
-  ArrowRight,
-  ChartNoAxesCombined,
-  Check,
-  CircleDot,
-  SquareActivity,
-  Target
-} from 'lucide-react';
+import { Check } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { ExecutionFocus } from '../components/ExecutionFocus';
 import { MetricCard } from '../components/MetricCard';
@@ -83,7 +76,7 @@ export function Dashboard({
         action={(
           <Link className="button button--primary overview-create-task" to="/tasks">
             {t.newTask}
-            <ArrowRight aria-hidden="true" />
+            <span aria-hidden="true">→</span>
           </Link>
         )}
       />
@@ -168,7 +161,6 @@ export function Dashboard({
               change={showPresentationFallback ? '+12.5%' : undefined}
               changeTone="positive"
               note={showPresentationFallback ? t.completedTasksToday : t.notAvailable}
-              icon={<SquareActivity aria-hidden="true" />}
             />
             <MetricCard
               label={t.passRate}
@@ -176,7 +168,6 @@ export function Dashboard({
               change={showPresentationFallback ? '+2.1%' : undefined}
               changeTone="positive"
               note={showPresentationFallback ? t.pastSevenDaysImproved : t.notAvailable}
-              icon={<ChartNoAxesCombined aria-hidden="true" />}
             />
             <MetricCard
               label={t.overviewActiveIssues}
@@ -184,7 +175,6 @@ export function Dashboard({
               change={showPresentationFallback ? t.threeNeedAttention : undefined}
               changeTone="warning"
               note={showPresentationFallback ? t.unclaimedIssues : t.notAvailable}
-              icon={<Target aria-hidden="true" />}
             />
           </div>
 
@@ -235,7 +225,7 @@ export function Dashboard({
                 <h2 id="overview-activity-title">{t.recentActivity}</h2>
                 <PresentationOnlyButton>
                   {t.viewAll}
-                  <ArrowRight aria-hidden="true" />
+                  <span aria-hidden="true">→</span>
                 </PresentationOnlyButton>
               </div>
               {showPresentationFallback ? (
@@ -261,12 +251,11 @@ export function Dashboard({
             <aside className="overview-attention-card" aria-labelledby="overview-attention-title">
               <div className="overview-attention-card__heading">
                 <h2 id="overview-attention-title">{t.attention}</h2>
-                <CircleDot aria-hidden="true" />
               </div>
               <p>{t.attentionDetail}</p>
               <PresentationOnlyButton className="overview-attention-card__action">
                 {t.viewInteractionGuide}
-                <ArrowRight aria-hidden="true" />
+                <span aria-hidden="true">→</span>
               </PresentationOnlyButton>
             </aside>
           </div>

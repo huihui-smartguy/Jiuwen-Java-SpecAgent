@@ -1,9 +1,9 @@
 .main-content {
   width: 100%;
-  max-width: 1320px;
+  max-width: 1440px;
   min-width: 0;
   margin: 0 auto;
-  padding: 48px 44px 80px;
+  padding: 48px 72px 80px;
 }
 
 .page-stack {
@@ -27,17 +27,18 @@
 
 .page-title-row h1 {
   color: var(--color-text-primary);
-  font-size: 38px;
+  font-size: 44px;
   font-weight: 700;
-  letter-spacing: -0.045em;
-  line-height: 1.14;
+  letter-spacing: -1.2px;
+  line-height: 56px;
 }
 
 .page-subtitle {
   max-width: 680px;
   margin-top: 8px;
   color: var(--color-text-secondary);
-  font-size: 13px;
+  font-size: 16px;
+  line-height: 26px;
 }
 
 .eyebrow {

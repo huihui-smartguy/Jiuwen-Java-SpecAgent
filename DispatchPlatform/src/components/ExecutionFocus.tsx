@@ -1,4 +1,4 @@
-import { ArrowRight, Flag } from 'lucide-react';
+import { Flag } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getCopy } from '../i18n';
 import type { Language, NormalizedTaskStatus, SutTarget } from '../types';
@@ -67,12 +67,12 @@ export function ExecutionFocus({
       {task ? (
         <Link className="focus-link" to="/observation">
           {t.openObserveConsole}
-          <ArrowRight aria-hidden="true" />
+          <span aria-hidden="true">→</span>
         </Link>
       ) : (
         <span className="focus-link" aria-disabled="true">
           {t.openObserveConsole}
-          <ArrowRight aria-hidden="true" />
+          <span aria-hidden="true">→</span>
         </span>
       )}
     </section>

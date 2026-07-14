@@ -544,7 +544,7 @@ describe('AppShell', () => {
     });
     renderShell('/tasks', { enableMockFallback: false });
 
-    await waitFor(() => expect(screen.getByLabelText('Feature')).toHaveValue('Shell feature'));
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Feature' })).toHaveValue('Shell feature'));
     await waitFor(() => expect(screen.getByRole('button', { name: '启动执行' })).toBeEnabled());
     await user.click(screen.getByRole('button', { name: '启动执行' }));
     expect(await screen.findByRole('heading', { name: '执行观测' })).toBeInTheDocument();

@@ -11,6 +11,7 @@ import { Tasks } from './Tasks';
 const liveRuntimeConfig = resolveRuntimeConfig({ defaultLanguage: 'zh', enableMockFallback: false });
 const mockRuntimeConfig = resolveRuntimeConfig({ defaultLanguage: 'zh', enableMockFallback: true });
 const selectedSut = liveRuntimeConfig.sutTargets[0];
+const tasksStyles = readFileSync('src/styles/routes/tasks.css', 'utf8');
 
 const scripts: Script[] = [
   {
@@ -146,7 +147,7 @@ afterEach(() => {
 describe('approved Tasks composition', () => {
   test('renders the permanent one-page hierarchy and removes the queue, tabs, and wizard UI', async () => {
     mockTaskApi();
-    renderTasks();
+    const { container } = renderTasks();
 
     expect(screen.getByRole('heading', { level: 1, name: '任务调度' })).toBeInTheDocument();
     expect(screen.getByText('从测试对象到脚本范围，用清晰的三步流程发起可靠执行。')).toBeInTheDocument();
@@ -161,22 +162,37 @@ describe('approved Tasks composition', () => {
     const objectSummary = screen.getByTestId('task-context-summary');
     expect(objectSummary).toHaveTextContent(selectedSut.product);
     expect(objectSummary).toHaveTextContent(selectedSut.scene);
-    expect(objectSummary).toHaveTextContent(selectedSut.version);
+    expect(objectSummary).not.toHaveTextContent(selectedSut.version);
     expect(within(objectSummary).getByRole('button', { name: '更换对象' })).toBeInTheDocument();
 
     const modeSelector = screen.getByRole('radiogroup', { name: '触发方式' });
     expect(within(modeSelector).getByRole('radio', { name: '按 Feature' })).toBeChecked();
     expect(within(modeSelector).getByRole('radio', { name: '按 Level' })).toBeInTheDocument();
     expect(within(modeSelector).getByRole('radio', { name: '选择脚本' })).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByLabelText('Feature')).toHaveValue('Save API'));
+    expect(Array.from(modeSelector.querySelectorAll('label > span')).map((item) => item.textContent)).toEqual([
+      'Feature',
+      'Level',
+      'Scripts',
+    ]);
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Feature' })).toHaveValue('Save API'));
     expect(screen.getByLabelText('Execution profile')).toHaveValue('live-standard');
 
-    expect(screen.getByRole('heading', { name: '脚本快照' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '脚本快照 · READ-ONLY SELECTION' })).toBeInTheDocument();
     expect(screen.getByRole('searchbox', { name: '搜索脚本' })).toBeInTheDocument();
     expect(await screen.findByRole('table', { name: '脚本快照' })).toBeInTheDocument();
+    expect(await screen.findByText('save_api_test')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Launch summary' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '启动执行' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '执行护栏' })).toBeInTheDocument();
+    expect(within(screen.getByRole('table', { name: '脚本快照' })).getAllByRole('columnheader').map(
+      (header) => header.textContent
+    )).toEqual(['脚本', 'Feature', '级别', '路径']);
+    expect(container.querySelector('.tasks-config-heading p')).not.toBeInTheDocument();
+    expect(container.querySelector('.tasks-ready-pill > span')).not.toBeInTheDocument();
+    expect(container.querySelector('.tasks-guardrail-count > span')).not.toBeInTheDocument();
+    expect(container.querySelector('.tasks-script-search svg')).not.toBeInTheDocument();
+    expect(container.querySelector('.tasks-launch-card .lucide-sparkles')).not.toBeInTheDocument();
+    expect(container.querySelector('.tasks-level-pill')).not.toBeInTheDocument();
 
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
     expect(screen.queryByText(/任务队列|本次会话/)).not.toBeInTheDocument();
@@ -245,17 +261,51 @@ describe('approved Tasks composition', () => {
   });
 
   test('keeps responsive segmented choices and selectable rows at least 44px tall', () => {
-    const tasksCss = readFileSync('src/styles/routes/tasks.css', 'utf8');
-
-    expect(tasksCss).toMatch(
+    expect(tasksStyles).toMatch(
       /@media \(max-width: 680px\)[\s\S]*?\.tasks-segmented\s*\{[^}]*height:\s*52px;/
     );
-    expect(tasksCss).toMatch(
+    expect(tasksStyles).toMatch(
       /@media \(max-width: 680px\)[\s\S]*?\.tasks-segmented label > span\s*\{[^}]*height:\s*44px;/
     );
-    expect(tasksCss).toMatch(
+    expect(tasksStyles).toMatch(
       /@media \(max-width: 680px\)[\s\S]*?\.tasks-table-scroll tbody tr\s*\{[^}]*height:\s*44px;/
     );
+  });
+
+  test('contains the script table scroller inside its card at every stacked breakpoint', () => {
+    const compressedDesktopStart = tasksStyles.indexOf('@media (max-width: 1319px)');
+    const stackedStart = tasksStyles.indexOf('@media (max-width: 1179px)');
+    const tabletStart = tasksStyles.indexOf('@media (max-width: 980px)');
+
+    expect(compressedDesktopStart).toBeGreaterThanOrEqual(0);
+    expect(stackedStart).toBeGreaterThan(compressedDesktopStart);
+    expect(tabletStart).toBeGreaterThan(stackedStart);
+    expect(tasksStyles.slice(compressedDesktopStart, stackedStart)).toMatch(
+      /\.tasks-table-scroll\s*\{[^}]*width:\s*auto;/
+    );
+    expect(tasksStyles.slice(stackedStart, tabletStart)).toMatch(
+      /\.tasks-table-scroll\s*\{[^}]*width:\s*auto;/
+    );
+  });
+
+  test('encodes the exact approved desktop Tasks geometry', () => {
+    expect(tasksStyles).toMatch(/\.tasks-page \.page-header\s*\{[^}]*height:\s*118px;[^}]*min-height:\s*118px;[^}]*margin-bottom:\s*24px;/s);
+    expect(tasksStyles).toMatch(/\.tasks-create-task\s*\{[^}]*width:\s*142px;[^}]*height:\s*52px;/s);
+    expect(tasksStyles).toMatch(/\.tasks-layout\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*856px\) minmax\(0,\s*416px\);[^}]*gap:\s*24px;/s);
+    expect(tasksStyles).toMatch(/\.tasks-left-column\s*\{[^}]*grid-template-rows:\s*340px 356px;[^}]*gap:\s*24px;/s);
+    expect(tasksStyles).toMatch(/\.tasks-right-rail\s*\{[^}]*grid-template-rows:\s*330px 366px;[^}]*gap:\s*24px;/s);
+    expect(tasksStyles).toMatch(/\.tasks-config-card\s*\{[^}]*height:\s*340px;[^}]*padding:\s*24px 28px;/s);
+    expect(tasksStyles).toMatch(/\.tasks-steps\s*\{[^}]*height:\s*52px;[^}]*grid-template-columns:\s*repeat\(3,\s*260px\);[^}]*gap:\s*10px;/s);
+    expect(tasksStyles).toMatch(/\.tasks-object-summary\s*\{[^}]*height:\s*52px;[^}]*border:\s*0;[^}]*background:\s*transparent;/s);
+    expect(tasksStyles).toMatch(/\.tasks-segmented\s*\{[^}]*width:\s*330px;[^}]*height:\s*44px;[^}]*border-radius:\s*14px;/s);
+    expect(tasksStyles).toMatch(/\.tasks-fields\s*\{[^}]*height:\s*48px;[^}]*gap:\s*12px;/s);
+    expect(tasksStyles).toMatch(/\.tasks-snapshot-card\s*\{[^}]*height:\s*356px;/s);
+    expect(tasksStyles).toMatch(/\.tasks-script-search\s*\{[^}]*width:\s*330px;[^}]*height:\s*44px;/s);
+    expect(tasksStyles).toMatch(/\.tasks-table-scroll th\s*\{[^}]*height:\s*44px;/s);
+    expect(tasksStyles).toMatch(/\.tasks-table-scroll td\s*\{[^}]*height:\s*68px;/s);
+    expect(tasksStyles).toMatch(/\.tasks-launch-card\s*\{[^}]*height:\s*330px;/s);
+    expect(tasksStyles).toMatch(/\.tasks-guardrail-card\s*\{[^}]*height:\s*366px;/s);
+    expect(tasksStyles).toMatch(/\.tasks-guardrail-list > div\s*\{[^}]*height:\s*80px;/s);
   });
 });
 
@@ -274,7 +324,7 @@ describe('task creation contracts', () => {
       scene: selectedSut.scene,
       feature: 'Save API'
     });
-    expect(screen.getByTestId('location-path')).toHaveTextContent('/observation');
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/observation'));
     expect(fetchSpy.mock.calls.some(([input]) => {
       const url = new URL(String(input), 'http://local.test');
       return url.pathname.endsWith('/features') &&
@@ -290,7 +340,7 @@ describe('task creation contracts', () => {
     renderTasks({ onTaskCreated });
 
     await user.click(screen.getByRole('radio', { name: '按 Level' }));
-    await user.selectOptions(screen.getByLabelText('Level'), 'L1');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Level' }), 'L1');
     await user.click(screen.getByRole('button', { name: '启动执行' }));
 
     await waitFor(() => expect(onTaskCreated).toHaveBeenCalledTimes(1));

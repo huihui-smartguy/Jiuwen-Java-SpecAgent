@@ -9,6 +9,8 @@ import type { NormalizedTaskStatus, RuntimeConfig, SutTarget } from '../types';
 import { Dashboard } from './Dashboard';
 
 const overviewStyles = readFileSync('src/styles/routes/overview.css', 'utf8');
+const foundationStyles = readFileSync('src/styles/foundations.css', 'utf8');
+const primitiveStyles = readFileSync('src/styles/primitives.css', 'utf8');
 
 function renderDashboard({
   task = activeTask,
@@ -32,6 +34,42 @@ function renderDashboard({
 }
 
 describe('Overview dashboard', () => {
+  test('encodes the exact approved 1440px Overview geometry and type scale', () => {
+    expect(foundationStyles).toMatch(/--radius-card:\s*24px;/);
+    expect(foundationStyles).toMatch(
+      /--shadow-major:\s*0 6px 18px rgba\(10,\s*20,\s*41,\s*0\.05\);/
+    );
+    expect(primitiveStyles).toMatch(/\.main-content\s*\{[^}]*max-width:\s*1440px;[^}]*padding:\s*48px 72px 80px;/s);
+    expect(primitiveStyles).toMatch(/\.page-title-row h1\s*\{[^}]*font-size:\s*44px;[^}]*line-height:\s*56px;/s);
+    expect(primitiveStyles).toMatch(/\.page-subtitle\s*\{[^}]*font-size:\s*16px;[^}]*line-height:\s*26px;/s);
+    expect(overviewStyles).toMatch(/\.page-header\s*\{[^}]*height:\s*130px;[^}]*min-height:\s*130px;[^}]*margin-bottom:\s*24px;/s);
+    expect(overviewStyles).toMatch(/\.overview-create-task\s*\{[^}]*width:\s*90px;[^}]*height:\s*52px;[^}]*border-radius:\s*16px;/s);
+    expect(overviewStyles).toMatch(/\.overview-current-run\s*\{[^}]*height:\s*96px;[^}]*min-height:\s*96px;[^}]*margin-bottom:\s*24px;[^}]*padding:\s*18px 24px;/s);
+    expect(overviewStyles).toMatch(/\.overview-current-run\s*\{[^}]*box-shadow:\s*0 6px 9px rgba\(10,\s*20,\s*41,\s*0\.06\);/s);
+    expect(overviewStyles).toMatch(/\.overview-grid\s*\{[^}]*grid-template-columns:\s*404px minmax\(0,\s*1fr\);[^}]*gap:\s*24px;/s);
+    expect(overviewStyles).toMatch(/\.overview-quality-card\s*\{[^}]*height:\s*440px;[^}]*padding:\s*26px 28px;/s);
+    expect(overviewStyles).toMatch(/\.overview-right-column\s*\{[^}]*grid-template-rows:\s*128px 132px 156px;[^}]*gap:\s*12px;/s);
+    expect(overviewStyles).toMatch(/\.overview-metrics\s*\{[^}]*gap:\s*16px;/s);
+    expect(overviewStyles).toMatch(/\.overview-lower-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*566px\) minmax\(0,\s*286px\);[^}]*gap:\s*16px;/s);
+    expect(overviewStyles).toMatch(/\.overview-activity-card\s*\{[^}]*padding:\s*22px 28px;/s);
+    expect(overviewStyles).toMatch(/\.presentation-only-button\s*\{[^}]*min-height:\s*26px;/s);
+    expect(overviewStyles).toMatch(/\.overview-activity-list\s*\{[^}]*margin-top:\s*6px;/s);
+    expect(overviewStyles).toMatch(/\.overview-activity-list li\s*\{[^}]*min-height:\s*26px;/s);
+    expect(overviewStyles).toMatch(/\.overview-activity-list strong\s*\{[^}]*line-height:\s*13px;/s);
+    expect(overviewStyles).toMatch(/\.overview-activity-list li > div > span,\s*\.overview-activity-list time\s*\{[^}]*line-height:\s*11px;/s);
+  });
+
+  test('releases the fixed quality height when the Overview columns stack', () => {
+    const stackedRulesStart = overviewStyles.indexOf('@media (max-width: 980px)');
+    const stackedRulesEnd = overviewStyles.indexOf('@media (max-width: 680px)', stackedRulesStart);
+
+    expect(stackedRulesStart).toBeGreaterThanOrEqual(0);
+    expect(stackedRulesEnd).toBeGreaterThan(stackedRulesStart);
+    expect(overviewStyles.slice(stackedRulesStart, stackedRulesEnd)).toMatch(
+      /\.overview-quality-card\s*\{[^}]*height:\s*auto;/
+    );
+  });
+
   test('keeps focusable presentation controls touch-sized below the drawer breakpoint', () => {
     const responsiveRulesStart = overviewStyles.indexOf('@media (max-width: 1179px)');
     const responsiveRulesEnd = overviewStyles.indexOf(
@@ -46,6 +84,9 @@ describe('Overview dashboard', () => {
 
     expect(responsiveRules).toMatch(
       /\.overview-page \.presentation-only-button\s*\{[^}]*min-height:\s*44px;/
+    );
+    expect(responsiveRules).toMatch(
+      /\.overview-right-column\s*\{[^}]*grid-template-rows:\s*128px 132px auto;/
     );
   });
 
@@ -159,6 +200,8 @@ describe('Overview dashboard', () => {
 
     const metrics = container.querySelectorAll('.overview-metric-card');
     expect(metrics).toHaveLength(3);
+    expect(container.querySelector('.overview-metrics svg')).not.toBeInTheDocument();
+    expect(container.querySelector('.overview-attention-card__heading svg')).not.toBeInTheDocument();
     expect(Array.from(metrics).map((metric) => within(metric as HTMLElement).getByTestId('metric-value').textContent))
       .toEqual(['24', '93.6%', '7']);
 
