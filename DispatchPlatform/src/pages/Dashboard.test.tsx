@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -6,6 +7,8 @@ import { resolveRuntimeConfig } from '../config/runtime';
 import { activeTask } from '../data/mockData';
 import type { NormalizedTaskStatus, RuntimeConfig, SutTarget } from '../types';
 import { Dashboard } from './Dashboard';
+
+const overviewStyles = readFileSync('src/styles/routes/overview.css', 'utf8');
 
 function renderDashboard({
   task = activeTask,
@@ -29,6 +32,23 @@ function renderDashboard({
 }
 
 describe('Overview dashboard', () => {
+  test('keeps focusable presentation controls touch-sized below the drawer breakpoint', () => {
+    const responsiveRulesStart = overviewStyles.indexOf('@media (max-width: 1179px)');
+    const responsiveRulesEnd = overviewStyles.indexOf(
+      '@media (max-width: 980px)',
+      responsiveRulesStart
+    );
+
+    expect(responsiveRulesStart).toBeGreaterThanOrEqual(0);
+    expect(responsiveRulesEnd).toBeGreaterThan(responsiveRulesStart);
+
+    const responsiveRules = overviewStyles.slice(responsiveRulesStart, responsiveRulesEnd);
+
+    expect(responsiveRules).toMatch(
+      /\.overview-page \.presentation-only-button\s*\{[^}]*min-height:\s*44px;/
+    );
+  });
+
   test('renders the approved Overview composition in source order', () => {
     const { container } = renderDashboard();
 
