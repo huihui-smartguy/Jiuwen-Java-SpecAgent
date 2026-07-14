@@ -91,12 +91,13 @@ describe('approved Knowledge frame', () => {
     expect(within(gaps).getByText('3 open')).toBeInTheDocument();
     const gapRows = within(gaps).getAllByRole('listitem');
     expect(gapRows).toHaveLength(3);
-    expect(gapRows.map((row) => row.textContent)).toEqual([
-      '撤销密钥失败模式补充',
-      'L3 场景重试策略补充',
-      '日志导出权限说明补充'
+    expect(gapRows.map((row) => row.querySelector(':scope > span')?.textContent)).toEqual([
+      '撤销密钥失败模式',
+      'L3 场景重试策略',
+      '日志导出权限说明'
     ]);
-    expect(within(gaps).getAllByRole('button', { name: '补充' })).toHaveLength(3);
+    expect(within(gaps).getAllByRole('button', { name: /^补充/ })).toHaveLength(3);
+    expect(within(gaps).getAllByText('补充', { selector: 'button' })).toHaveLength(3);
 
     expect(screen.getAllByRole('button')).toHaveLength(5);
     expect(container.querySelectorAll('.knowledge-page > section')).toHaveLength(2);
@@ -121,8 +122,9 @@ describe('approved Knowledge frame', () => {
     expect(within(collections).getByRole('heading', { name: '测试策略' })).toBeInTheDocument();
     expect(within(recent).getAllByRole('listitem')).toHaveLength(1);
     expect(within(recent).getByText('API 密钥回归测试策略')).toBeInTheDocument();
-    expect(within(gaps).getAllByRole('listitem')).toHaveLength(1);
-    expect(within(gaps).getByText('L3 场景重试策略')).toBeInTheDocument();
+    const filteredGapRows = within(gaps).getAllByRole('listitem');
+    expect(filteredGapRows).toHaveLength(1);
+    expect(filteredGapRows[0].querySelector(':scope > span')).toHaveTextContent('L3 场景重试策略');
     expect(fetchSpy).not.toHaveBeenCalled();
 
     await user.clear(search);
@@ -148,7 +150,7 @@ describe('approved Knowledge frame', () => {
     const actions = [
       screen.getByRole('button', { name: '新建条目' }),
       screen.getByRole('button', { name: '查看全部' }),
-      ...screen.getAllByRole('button', { name: '补充' })
+      ...screen.getAllByRole('button', { name: /^补充/ })
     ];
     expect(actions).toHaveLength(5);
 
@@ -201,9 +203,45 @@ describe('approved Knowledge frame', () => {
     );
     const gaps = screen.getByRole('region', { name: 'Knowledge gaps' });
     expect(within(gaps).getAllByRole('listitem')).toHaveLength(3);
-    expect(within(gaps).getAllByRole('button', { name: 'Add details' })).toHaveLength(3);
+    expect(within(gaps).getAllByRole('button', { name: /^Add details/ })).toHaveLength(3);
+    expect(within(gaps).getAllByText('Add details', { selector: 'button' })).toHaveLength(3);
     expect(screen.getAllByRole('button')).toHaveLength(5);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  test('gives every gap action a unique row-context accessible name in both languages', () => {
+    const chinese = renderKnowledge('zh');
+    const chineseGaps = screen.getByRole('region', { name: '知识缺口' });
+    const chineseActions = within(chineseGaps).getAllByRole('button');
+    const expectedChineseNames = [
+      '补充 撤销密钥失败模式',
+      '补充 L3 场景重试策略',
+      '补充 日志导出权限说明'
+    ];
+
+    expect(chineseActions).toHaveLength(3);
+    expect(new Set(expectedChineseNames).size).toBe(3);
+    chineseActions.forEach((action, index) => {
+      expect(action).toHaveAccessibleName(expectedChineseNames[index]);
+      expect(action).toHaveAttribute('aria-disabled', 'true');
+    });
+
+    chinese.unmount();
+    renderKnowledge('en');
+    const englishGaps = screen.getByRole('region', { name: 'Knowledge gaps' });
+    const englishActions = within(englishGaps).getAllByRole('button');
+    const expectedEnglishNames = [
+      'Add details Key revocation failure mode',
+      'Add details L3 scenario retry strategy',
+      'Add details Log export permission notes'
+    ];
+
+    expect(englishActions).toHaveLength(3);
+    expect(new Set(expectedEnglishNames).size).toBe(3);
+    englishActions.forEach((action, index) => {
+      expect(action).toHaveAccessibleName(expectedEnglishNames[index]);
+      expect(action).toHaveAttribute('aria-disabled', 'true');
+    });
   });
 
   test('imports only the Knowledge stylesheet, encodes the approved geometry, and removes the legacy placeholder', () => {

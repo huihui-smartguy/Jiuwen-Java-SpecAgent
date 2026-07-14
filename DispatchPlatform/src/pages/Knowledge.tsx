@@ -148,7 +148,10 @@ export function Knowledge({ language }: KnowledgeProps) {
             {gaps.map((item) => (
               <li key={item}>
                 <span>{item}</span>
-                <PresentationOnlyButton>{t.addKnowledgeDetails}</PresentationOnlyButton>
+                <PresentationOnlyButton>
+                  {t.addKnowledgeDetails}
+                  <span className="sr-only">{` ${item}`}</span>
+                </PresentationOnlyButton>
               </li>
             ))}
           </ul>
