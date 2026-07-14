@@ -630,6 +630,25 @@
   color: var(--color-danger);
 }
 
+@media (max-width: 1179px) {
+  .tasks-create-task,
+  .tasks-object-summary button,
+  .tasks-segmented label > span,
+  .tasks-script-search,
+  .tasks-launch-button {
+    min-height: 44px;
+  }
+
+  .tasks-mode-row,
+  .tasks-segmented {
+    height: 52px;
+  }
+
+  .tasks-table-scroll td {
+    height: 44px;
+  }
+}
+
 @media (max-width: 980px) {
   .tasks-layout {
     grid-template-columns: minmax(0, 1fr);

@@ -600,6 +600,13 @@
   font-size: 11px;
 }
 
+@media (max-width: 1179px) {
+  .overview-create-task,
+  .overview-current-run .focus-link {
+    min-height: 44px;
+  }
+}
+
 @media (max-width: 980px) {
   .page-header {
     height: 90px;

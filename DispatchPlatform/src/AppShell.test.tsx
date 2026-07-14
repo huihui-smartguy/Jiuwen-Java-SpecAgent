@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { AppShell } from './AppShell';
 import { resolveRuntimeConfig } from './config/runtime';
@@ -17,6 +17,16 @@ const expectedNavigation = [
   ['Settings', '/settings']
 ] as const;
 
+const navigationDestinations = [
+  ['Overview', '/', '测试看板'],
+  ['Tasks', '/tasks', '任务调度'],
+  ['Observe', '/observation', '执行观测'],
+  ['Results', '/results', '结果与报告'],
+  ['Scripts', '/scripts', '脚本资产'],
+  ['Knowledge', '/knowledge', '知识库'],
+  ['Settings', '/settings', '系统设置']
+] as const;
+
 function renderShell(initialPath = '/', runtimeOverrides = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } }
@@ -29,6 +39,27 @@ function renderShell(initialPath = '/', runtimeOverrides = {}) {
       </MemoryRouter>
     </QueryClientProvider>
   );
+}
+
+function renderNavigationShell(initialPath = '/') {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } }
+  });
+  const router = createMemoryRouter([
+    {
+      path: '*',
+      element: (
+        <QueryClientProvider client={client}>
+          <AppShell runtimeConfig={resolveRuntimeConfig({ defaultLanguage: 'zh' })} />
+        </QueryClientProvider>
+      )
+    }
+  ], { initialEntries: [initialPath] });
+
+  return {
+    router,
+    ...render(<RouterProvider router={router} />)
+  };
 }
 
 afterEach(() => {
@@ -75,6 +106,93 @@ describe('AppShell', () => {
     expect(screen.queryByRole('button', { name: /overview|execute|analysis|assets|system/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
     expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();
+  });
+
+  test('clicks through every direct destination without exposing legacy or extra UI', async () => {
+    const user = userEvent.setup();
+    const { router, container } = renderNavigationShell();
+
+    for (const [label, path, heading] of navigationDestinations) {
+      const navigation = screen.getByRole('navigation', { name: 'Primary navigation' });
+      const destination = within(navigation).getByRole('link', { name: label });
+      await user.click(destination);
+
+      expect(router.state.location.pathname).toBe(path);
+      expect(await screen.findByRole('heading', { level: 1, name: heading })).toBeInTheDocument();
+
+      const links = within(navigation).getAllByRole('link');
+      expect(links).toHaveLength(7);
+      expect(links.filter((link) => link.getAttribute('aria-current') === 'page')).toHaveLength(1);
+      expect(links.filter((link) => !link.hasAttribute('aria-current'))).toHaveLength(6);
+      expect(destination).toHaveAttribute('aria-current', 'page');
+
+      for (const removedText of [
+        'TestWise',
+        'Test Agent Console',
+        '测试指挥控制台',
+        'TESTWISE CONTROL PLANE',
+        'Health'
+      ]) {
+        expect(screen.queryByText(removedText, { exact: true })).not.toBeInTheDocument();
+      }
+      expect(container.querySelector('svg.lucide-bell')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', {
+        name: /^(Overview|Execute|Analysis|Assets|System)$/i
+      })).not.toBeInTheDocument();
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+      expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();
+
+      if (label === 'Overview') {
+        for (const extraText of [
+          '执行焦点',
+          'L0 质量摘要',
+          '五分类责任分流',
+          '基本功能质量矩阵',
+          'DFX 维度雷达'
+        ]) {
+          expect(screen.queryByText(extraText, { exact: true })).not.toBeInTheDocument();
+        }
+      }
+      if (label === 'Tasks') {
+        expect(screen.queryByText(/任务队列|本次会话/)).not.toBeInTheDocument();
+        expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /上一步|下一步/ })).not.toBeInTheDocument();
+      }
+      if (label === 'Observe') {
+        expect(screen.queryByRole('button', {
+          name: /暂停|继续|清空|全部日志级别|警告|错误/
+        })).not.toBeInTheDocument();
+        expect(screen.queryByText(/实时连接|正在连接|日志已完成/)).not.toBeInTheDocument();
+      }
+      if (label === 'Results') {
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      }
+      if (label === 'Scripts') {
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        expect(container.querySelector('input[type="file"]')).not.toBeInTheDocument();
+      }
+      if (label === 'Knowledge') {
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        expect(container.querySelector('form')).not.toBeInTheDocument();
+        expect(container.querySelector('footer')).not.toBeInTheDocument();
+        expect(container.querySelector('[contenteditable="true"]')).not.toBeInTheDocument();
+        expect(container.querySelector('[aria-label*="pagination" i]')).not.toBeInTheDocument();
+      }
+      if (label === 'Settings') {
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        expect(container.querySelector('form')).not.toBeInTheDocument();
+        expect(container.querySelector('footer')).not.toBeInTheDocument();
+      }
+
+      if (path !== '/') {
+        await waitFor(() => expect(screen.getByRole('main')).toHaveFocus());
+      }
+    }
   });
 
   test('renders the approved Overview hierarchy inside the shared shell', () => {

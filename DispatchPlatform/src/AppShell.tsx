@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { normalizeCreatedTask } from './api/client';
 import { ConsoleHeader } from './components/ConsoleHeader';
 import { activeTask as initialActiveTask } from './data/mockData';
@@ -19,6 +19,7 @@ import type {
 } from './types';
 
 export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
+  const location = useLocation();
   const [language, setLanguage] = useState<Language>(runtimeConfig.defaultLanguage);
   const [selectedSutId, setSelectedSutId] = useState(runtimeConfig.sutTargets[0].id);
   const [activeTask, setActiveTask] = useState<NormalizedTaskStatus | null>(() => (
@@ -29,6 +30,8 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
   ));
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [objectFocusRequest, setObjectFocusRequest] = useState(0);
+  const mainContentRef = useRef<HTMLElement>(null);
+  const previousPathRef = useRef(location.pathname);
   const selectedSut = useMemo<SutTarget>(
     () => runtimeConfig.sutTargets.find((sut) => sut.id === selectedSutId) ?? runtimeConfig.sutTargets[0],
     [runtimeConfig.sutTargets, selectedSutId]
@@ -45,6 +48,15 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
       }
     };
   }, [language]);
+
+  useEffect(() => {
+    if (previousPathRef.current === location.pathname) {
+      return;
+    }
+
+    previousPathRef.current = location.pathname;
+    mainContentRef.current?.focus({ preventScroll: true });
+  }, [location.pathname]);
 
   const sharedProps = { language, selectedSut, activeTask, runtimeConfig };
   const handleTaskCreated = useCallback((response: TaskCreateResponse) => {
@@ -80,8 +92,10 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
       />
 
       <main
+        ref={mainContentRef}
         id="main-content"
         className="main-content"
+        tabIndex={-1}
         aria-hidden={drawerOpen || undefined}
         inert={drawerOpen}
       >

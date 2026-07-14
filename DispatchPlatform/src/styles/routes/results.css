@@ -410,6 +410,14 @@
   background: var(--color-accent-surface);
 }
 
+@media (max-width: 1179px) {
+  .results-header-action,
+  .results-view-cases,
+  .results-report-search {
+    min-height: 44px;
+  }
+}
+
 @media (max-width: 980px) {
   .results-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));

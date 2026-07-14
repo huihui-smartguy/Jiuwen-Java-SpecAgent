@@ -355,6 +355,19 @@
   text-align: center;
 }
 
+@media (max-width: 1179px) {
+  .scripts-import-action,
+  .scripts-search,
+  .scripts-filter-control {
+    min-height: 44px;
+  }
+
+  .scripts-filter-control input,
+  .scripts-filter-control select {
+    min-height: 42px;
+  }
+}
+
 @media (max-width: 980px) {
   .scripts-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
