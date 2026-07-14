@@ -1,10 +1,20 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { AppShell } from './AppShell';
 import { resolveRuntimeConfig } from './config/runtime';
+
+const expectedNavigation = [
+  ['Overview', '/'],
+  ['Tasks', '/tasks'],
+  ['Observe', '/observation'],
+  ['Results', '/results'],
+  ['Scripts', '/scripts'],
+  ['Knowledge', '/knowledge'],
+  ['Settings', '/settings']
+] as const;
 
 function renderShell(initialPath = '/', runtimeOverrides = {}) {
   const client = new QueryClient({
@@ -25,18 +35,46 @@ afterEach(() => {
 });
 
 describe('AppShell', () => {
-  test('keeps TestWise exclusively in the top navigation and removes the unused search affordance', () => {
-    renderShell('/', { defaultLanguage: 'en' });
+  test('renders the exact Console brand and direct primary navigation', () => {
+    renderShell('/', { defaultLanguage: 'zh' });
 
-    expect(screen.getAllByText('TestWise')).toHaveLength(1);
+    expect(screen.getAllByText('Console')).toHaveLength(1);
     expect(screen.getByRole('banner')).toHaveClass('app-header');
-    expect(screen.getByRole('img', { name: /testwise gourd/i })).toBeInTheDocument();
-    expect(screen.queryByText(/prototype mode/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole('search')).not.toBeInTheDocument();
-    expect(screen.queryByPlaceholderText(/search tasks/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Fairy spark' })).toBeInTheDocument();
+
+    const navigation = screen.getByRole('navigation', { name: 'Primary navigation' });
+    expect(within(navigation).getAllByRole('link').map((link) => [
+      link.textContent,
+      link.getAttribute('href')
+    ])).toEqual(expectedNavigation);
+    expect(within(navigation).getAllByRole('link').filter(
+      (link) => link.getAttribute('aria-current') === 'page'
+    )).toHaveLength(1);
+
+    const objectControl = screen.getByTestId('object-control');
+    expect(objectControl).toHaveTextContent('Object');
+    expect(objectControl).toHaveTextContent('营销系统 Java SUT');
+    expect(objectControl).toHaveTextContent('v2.4.1');
+    expect(objectControl).toHaveTextContent('健康');
+    expect(screen.getByRole('button', { name: /english/i })).toHaveTextContent(/^EN$/);
+    expect(screen.getByRole('button', { name: /登录|sign in/i })).toHaveTextContent(/^TW$/);
+
+    for (const removedText of [
+      'TestWise',
+      'Test Agent Console',
+      '测试指挥控制台',
+      'TESTWISE CONTROL PLANE',
+      'Health'
+    ]) {
+      expect(screen.queryByText(removedText)).not.toBeInTheDocument();
+    }
+    expect(screen.queryByRole('button', { name: /notifications|通知/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /overview|execute|analysis|assets|system/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();
   });
 
-  test('renders the data-first dashboard hierarchy without removed analytics', () => {
+  test('preserves the existing dashboard hierarchy while replacing the shell', () => {
     renderShell();
 
     expect(screen.getByRole('heading', { name: /测试看板/i })).toBeInTheDocument();
@@ -47,16 +85,20 @@ describe('AppShell', () => {
     expect(screen.queryByText(/DFX 维度雷达/i)).not.toBeInTheDocument();
   });
 
-  test('uses the exact lowercase environment label and preserves environment health and selection', () => {
-    renderShell('/', { defaultLanguage: 'en' });
+  test('keeps the direct navigation active state aligned with the current route', () => {
+    renderShell('/observation', { defaultLanguage: 'en' });
 
-    expect(screen.getByTestId('testwise-command-rail')).toBeInTheDocument();
-    expect(screen.getByTestId('sut-command')).toHaveTextContent('environment');
-    expect(screen.getByLabelText('environment')).toHaveValue('java-sut');
-    expect(screen.getByText('Healthy')).toBeInTheDocument();
+    const navigation = screen.getByRole('navigation', { name: 'Primary navigation' });
+    expect(within(navigation).getByRole('link', { name: 'Observe' })).toHaveAttribute(
+      'aria-current',
+      'page'
+    );
+    expect(within(navigation).getAllByRole('link').filter(
+      (link) => link.getAttribute('aria-current') === 'page'
+    )).toHaveLength(1);
   });
 
-  test('switches the product shell between Chinese and English', async () => {
+  test('switches the product shell between Chinese and English without translating navigation', async () => {
     const user = userEvent.setup();
     renderShell();
 
@@ -65,81 +107,75 @@ describe('AppShell', () => {
     expect(document.documentElement).toHaveClass('lang-en');
     expect(document.documentElement).toHaveAttribute('lang', 'en');
     expect(screen.getByRole('heading', { name: /dashboard/i })).toBeInTheDocument();
-    expect(screen.getByText(/execution focus/i)).toBeInTheDocument();
+    const navigation = screen.getByRole('navigation', { name: 'Primary navigation' });
+    expect(within(navigation).getAllByRole('link').map((link) => link.textContent)).toEqual(
+      expectedNavigation.map(([label]) => label)
+    );
   });
 
-  test('hands an open desktop menu directly to a sibling trigger and never shows an Enter glyph', () => {
-    renderShell('/', { defaultLanguage: 'en' });
-    const overview = screen.getByRole('button', { name: 'Overview' });
-    const execute = screen.getByRole('button', { name: 'Execute' });
-
-    fireEvent.pointerEnter(overview);
-    expect(overview).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByRole('menuitem', { name: 'Dashboard' })).toBeInTheDocument();
-
-    fireEvent.pointerEnter(execute);
-    expect(overview).toHaveAttribute('aria-expanded', 'false');
-    expect(execute).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByRole('menuitem', { name: 'Run Details' })).toHaveAttribute('href', '/observation');
-    expect(screen.queryByText(/^Enter$/i)).not.toBeInTheDocument();
-  });
-
-  test('supports click, arrow, Escape, and outside-close behavior for grouped navigation', async () => {
+  test('provides the same seven links and required controls in the accessible drawer', async () => {
     const user = userEvent.setup();
-    renderShell('/', { defaultLanguage: 'en' });
-    const overview = screen.getByRole('button', { name: 'Overview' });
-    const execute = screen.getByRole('button', { name: 'Execute' });
+    renderShell('/', { defaultLanguage: 'zh' });
 
-    await user.click(overview);
-    expect(overview).toHaveAttribute('aria-expanded', 'true');
-    fireEvent.keyDown(overview, { key: 'ArrowRight' });
-    expect(execute).toHaveFocus();
-    expect(execute).toHaveAttribute('aria-expanded', 'true');
-    fireEvent.keyDown(execute, { key: 'Escape' });
-    expect(execute).toHaveAttribute('aria-expanded', 'false');
+    const openButton = screen.getByRole('button', { name: /打开导航|open navigation/i });
+    await user.click(openButton);
 
-    await user.click(execute);
-    await user.click(screen.getByRole('main'));
-    expect(execute).toHaveAttribute('aria-expanded', 'false');
+    const drawer = screen.getByRole('dialog', { name: /导航|navigation/i });
+    const closeButton = within(drawer).getByRole('button', { name: /关闭导航|close navigation/i });
+    expect(closeButton).toHaveFocus();
+    expect(screen.getByRole('banner', { hidden: true })).toHaveAttribute('inert');
+    expect(screen.getByRole('main', { hidden: true })).toHaveAttribute('inert');
+
+    const navigation = within(drawer).getByRole('navigation', { name: 'Primary navigation' });
+    expect(within(navigation).getAllByRole('link').map((link) => [
+      link.textContent,
+      link.getAttribute('href')
+    ])).toEqual(expectedNavigation);
+    const objectControl = within(drawer).getByTestId('drawer-object-control');
+    expect(within(objectControl).getByLabelText('Object')).toHaveValue('java-sut');
+    expect(objectControl).toHaveTextContent('营销系统 Java SUT');
+    expect(objectControl).toHaveTextContent('v2.4.1');
+    expect(objectControl).toHaveTextContent('健康');
+    expect(within(drawer).getByRole('button', { name: /english/i })).toHaveTextContent(/^EN$/);
+    const accountButton = within(drawer).getByRole('button', { name: /登录|sign in/i });
+    expect(accountButton).toHaveTextContent(/^TW$/);
+
+    accountButton.focus();
+    await user.tab();
+    expect(closeButton).toHaveFocus();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: /导航|navigation/i })).not.toBeInTheDocument();
+    expect(openButton).toHaveFocus();
   });
 
-  test('provides an accessible mobile drawer with navigation and environment selection', async () => {
+  test('closes the drawer after navigation and restores the shell', async () => {
     const user = userEvent.setup();
     renderShell('/', { defaultLanguage: 'en' });
 
     await user.click(screen.getByRole('button', { name: /open navigation/i }));
-
     const drawer = screen.getByRole('dialog', { name: /navigation/i });
-    expect(drawer).toBeInTheDocument();
-    const closeButton = within(drawer).getByRole('button', { name: /close navigation/i });
-    expect(closeButton).toHaveFocus();
-    expect(screen.getByRole('main', { hidden: true })).toHaveAttribute('inert');
-    expect(within(drawer).getByRole('link', { name: 'Tasks' })).toHaveAttribute('href', '/tasks');
-    expect(within(drawer).getByRole('link', { name: 'Run Details' })).toHaveAttribute('href', '/observation');
-    expect(within(drawer).getByLabelText(/mobile environment/i)).toHaveValue('java-sut');
-    expect(within(drawer).queryByText('TestWise')).not.toBeInTheDocument();
-    const lastLink = within(drawer).getByRole('link', { name: 'Settings' });
-    lastLink.focus();
-    await user.tab();
-    expect(closeButton).toHaveFocus();
-    await user.keyboard('{Escape}');
+    await user.click(within(drawer).getByRole('link', { name: 'Tasks' }));
+
     expect(screen.queryByRole('dialog', { name: /navigation/i })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /open navigation/i })).toHaveFocus();
+    expect(screen.getByRole('main')).not.toHaveAttribute('inert');
+    expect(screen.getByRole('heading', { name: 'Tasks' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Tasks' })).toHaveAttribute('aria-current', 'page');
   });
 
-  test('SUT selector refreshes task creation context', async () => {
+  test('Object selection refreshes task creation context', async () => {
     const user = userEvent.setup();
     renderShell('/tasks');
 
     await user.click(screen.getByRole('tab', { name: /新建任务|new task/i }));
-    await user.selectOptions(screen.getByLabelText('environment'), 'python-sut');
+    await user.selectOptions(screen.getByLabelText('Object'), 'python-sut');
 
     const summary = screen.getByTestId('task-context-summary');
     expect(within(summary).getByText(/高码python/i)).toBeInTheDocument();
     expect(within(summary).getByText(/API/i)).toBeInTheDocument();
   });
 
-  test('keeps the observation URL while visibly naming it Run Details', () => {
+  test('keeps the observation route and existing task behavior unchanged', () => {
     renderShell('/observation');
 
     expect(screen.getByRole('heading', { name: /运行详情/i })).toBeInTheDocument();

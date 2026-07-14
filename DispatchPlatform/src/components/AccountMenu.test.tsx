@@ -50,7 +50,10 @@ describe('AccountMenu', () => {
 
     renderMenu();
 
-    await user.click(await screen.findByRole('button', { name: /li ming/i }));
+    const trigger = await screen.findByRole('button', { name: /li ming/i });
+    expect(trigger).toHaveTextContent(/^TW$/);
+    expect(screen.queryByText('Li Ming')).not.toBeInTheDocument();
+    await user.click(trigger);
 
     expect(screen.getByText('Quality Engineering')).toBeInTheDocument();
     expect(screen.getByText('Test Commander')).toBeInTheDocument();
@@ -65,7 +68,9 @@ describe('AccountMenu', () => {
 
     renderMenu('zh', { loginUrl: '/identity/login', registerUrl: '/identity/register' });
 
-    await user.click(screen.getByRole('button', { name: /登录/i }));
+    const trigger = screen.getByRole('button', { name: /登录/i });
+    expect(trigger).toHaveTextContent(/^TW$/);
+    await user.click(trigger);
 
     expect(screen.getByRole('menuitem', { name: /登录/i })).toHaveAttribute('href', '/identity/login');
     expect(screen.getByRole('menuitem', { name: /注册/i })).toHaveAttribute(
@@ -80,12 +85,30 @@ describe('AccountMenu', () => {
 
     renderMenu();
 
-    await user.click(screen.getByRole('button', { name: /account/i }));
+    const trigger = screen.getByRole('button', { name: /account/i });
+    expect(trigger).toHaveTextContent(/^TW$/);
+    await user.click(trigger);
 
     expect(await screen.findByText(/identity unavailable/i)).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: /sign in/i })).toHaveAttribute(
       'href',
       '/identity/login'
     );
+  });
+
+  test('closes the account menu with Escape and an outside press', async () => {
+    const user = userEvent.setup();
+    renderMenu('en', { loginUrl: '/identity/login', registerUrl: '/identity/register' });
+    const trigger = screen.getByRole('button', { name: /sign in/i });
+
+    await user.click(trigger);
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+
+    await user.click(trigger);
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+    await user.pointer({ target: document.body, keys: '[MouseLeft]' });
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 });

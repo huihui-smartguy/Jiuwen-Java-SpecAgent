@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Building2, ChevronDown, CircleAlert, LogIn, LogOut, UserPlus } from 'lucide-react';
+import { Building2, CircleAlert, LogIn, LogOut, UserPlus } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { loadSession } from '../auth/session';
 import { getCopy } from '../i18n';
@@ -64,11 +64,7 @@ export function AccountMenu({ auth, language }: { auth?: AuthConfig; language: L
         aria-label={triggerLabel}
         onClick={() => setOpen((current) => !current)}
       >
-        <span className={`account-avatar ${user ? '' : 'account-avatar--anonymous'}`} aria-hidden="true">
-          {initials ?? <LogIn />}
-        </span>
-        <span className="account-menu__trigger-label">{triggerLabel}</span>
-        <ChevronDown aria-hidden="true" />
+        <span className="account-menu__monogram" aria-hidden="true">TW</span>
       </button>
 
       {open && (
