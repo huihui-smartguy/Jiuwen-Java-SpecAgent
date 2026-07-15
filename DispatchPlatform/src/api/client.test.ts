@@ -2,11 +2,19 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
   buildApiUrl,
   cancelTask,
+  createReport,
   createTask,
+  deleteReport,
   getFeatures,
+  getReport,
+  getReportDownloadUrl,
+  getStatisticsSummary,
   getScripts,
   getTaskLogs,
+  getTaskScriptStatus,
   getTaskStatus,
+  getVersions,
+  listReports,
   normalizeCreatedTask,
   normalizeTaskStatus
 } from './client';
@@ -430,6 +438,183 @@ describe('execution API client', () => {
         })
       })
     );
+  });
+
+  test('discovers backend test versions using the live response shape', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      await mockJson({
+        success: true,
+        default_version: 'release1',
+        versions: [
+          {
+            code: 'release1',
+            name: 'Release 1',
+            description: '第一个发布版本',
+            created_at: '2026-07-13',
+            is_default: true
+          }
+        ]
+      })
+    );
+
+    const result = await getVersions(api);
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/versions', {
+      headers: { Accept: 'application/json' }
+    });
+    expect(result.default_version).toBe('release1');
+    expect(result.versions[0]).toMatchObject({ code: 'release1', is_default: true });
+  });
+
+  test('queries Object-scoped statistics and task script status without changing their wire data', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        await mockJson({
+          success: true,
+          message: '统计查询成功',
+          data: {
+            summary: {
+              total_scripts: 10,
+              executed_scripts: 8,
+              unexecuted_scripts: 2,
+              pass_count: 7,
+              failed_count: 1,
+              running_count: 0,
+              pass_rate: '87.50%',
+              execution_rate: '80.00%'
+            },
+            breakdown: [],
+            filters: { product: '合一版本', scene: 'API' }
+          }
+        })
+      )
+      .mockResolvedValueOnce(
+        await mockJson({
+          success: true,
+          task_id: 'task-1',
+          scripts_status: [
+            {
+              script_id: 'script-1',
+              script_name: 'test_api.py',
+              version: 'release1',
+              status: 'pass',
+              started_at: '2026-07-15T10:00:00',
+              completed_at: '2026-07-15T10:00:03',
+              duration_seconds: 3,
+              error_message: null
+            }
+          ],
+          summary: { todo_count: 0, pass_count: 1, failed_count: 0, running_count: 0 }
+        })
+      );
+
+    const statistics = await getStatisticsSummary(api, {
+      product: '合一版本',
+      scene: 'API'
+    });
+    const scriptStatus = await getTaskScriptStatus(api, 'task-1');
+
+    expect(new URL(fetchSpy.mock.calls[0][0] as string, 'http://local.test').searchParams.get('product')).toBe('合一版本');
+    expect(fetchSpy.mock.calls[1][0]).toBe('/api/tasks/task-1/script-status');
+    expect(statistics.data.summary.pass_rate).toBe('87.50%');
+    expect(scriptStatus.scripts_status[0].error_message).toBeNull();
+  });
+
+  test('creates an entire-scene task with its selected test version and preserves the version response', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      await mockJson({
+        success: true,
+        task_id: 'task-scene',
+        status: 'queued',
+        version: 'release1',
+        message: '任务已加入队列'
+      })
+    );
+
+    const result = await createTask(api, {
+      product: '合一版本',
+      scene: 'API',
+      version: 'release1'
+    });
+
+    expect(fetchSpy.mock.calls[0][1]).toEqual(expect.objectContaining({
+      body: JSON.stringify({ product: '合一版本', scene: 'API', version: 'release1' })
+    }));
+    expect(result).toMatchObject({ trigger_type: 'scene', version: 'release1' });
+  });
+
+  test('creates and lists report snapshots with exact build filtering and pagination', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(await mockJson({ success: true, report_id: 'report-1' }))
+      .mockResolvedValueOnce(await mockJson({ success: true, total: 0, reports: [] }));
+
+    const payload = {
+      test_version: 'release1',
+      software_version: 'AgentPlatform build 20260715.1',
+      scope: { product: '合一版本', scenes: ['API'] },
+      time_window: ['2026-07-15T09:00:00', '2026-07-15T10:00:00'] as [string, string]
+    };
+    const created = await createReport(api, payload);
+    const listed = await listReports(api, {
+      software_version: 'AgentPlatform build 20260715.1',
+      test_version: 'release1',
+      limit: 20,
+      offset: 40
+    });
+
+    expect(created.report_id).toBe('report-1');
+    expect(fetchSpy.mock.calls[0][1]).toEqual(expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }));
+    const listUrl = new URL(fetchSpy.mock.calls[1][0] as string, 'http://local.test');
+    expect(listUrl.pathname).toBe('/api/reports');
+    expect(listUrl.searchParams.get('software_version')).toBe('AgentPlatform build 20260715.1');
+    expect(listUrl.searchParams.get('test_version')).toBe('release1');
+    expect(listUrl.searchParams.get('limit')).toBe('20');
+    expect(listUrl.searchParams.get('offset')).toBe('40');
+    expect(listed).toEqual({ success: true, total: 0, reports: [] });
+  });
+
+  test('loads, downloads, and deletes persisted reports through the selected subpath gateway', async () => {
+    const context = { apiBaseUrl: '/testwise/api' };
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        await mockJson({
+          success: true,
+          report: {
+            id: 'report-1',
+            title: 'Report',
+            software_version: 'build-1',
+            test_version: 'release1',
+            scope: { product: '合一版本', scenes: ['API'] },
+            environment: {},
+            summary: { total: 0, pass: 0, failed: 0, skipped: 0, running: 0, success_rate: 0, total_duration_seconds: 0 },
+            conclusion: { passed: true, verdict: '通过', gates: [], reason: '通过' },
+            risks: [],
+            result_data: [],
+            created_at: '2026-07-15T10:00:00',
+            created_by: 'system'
+          }
+        })
+      )
+      .mockResolvedValueOnce(await mockJson({ success: true, message: '报告已删除' }));
+
+    const detail = await getReport(context, 'report-1');
+    const downloadUrl = getReportDownloadUrl(context, 'report-1', 'md');
+    const deleted = await deleteReport(context, 'report-1');
+
+    expect(fetchSpy.mock.calls[0][0]).toBe('/testwise/api/reports/report-1');
+    expect(downloadUrl).toBe('/testwise/api/reports/report-1/download?format=md');
+    expect(fetchSpy.mock.calls[1]).toEqual([
+      '/testwise/api/reports/report-1',
+      { method: 'DELETE', headers: { Accept: 'application/json' } }
+    ]);
+    expect(detail.report.id).toBe('report-1');
+    expect(deleted.message).toBe('报告已删除');
   });
 
   test('log export is enabled only for terminal task states with a download URL', () => {

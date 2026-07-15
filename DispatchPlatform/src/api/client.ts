@@ -14,7 +14,18 @@ import type {
   TaskLogLevel,
   TaskLogSnapshot,
   TaskLogsWireResponse,
-  TriggerType
+  TriggerType,
+  CreateReportRequest,
+  CreateReportResponse,
+  DeleteReportResponse,
+  ReportDetailResponse,
+  ReportDownloadFormat,
+  ReportListQuery,
+  ReportListResponse,
+  StatisticsFilters,
+  StatisticsSummaryResponse,
+  TaskScriptStatusResponse,
+  TestVersionResponse
 } from '../types';
 
 interface FeatureResponse {
@@ -41,6 +52,7 @@ interface LiveTaskCreateResponse {
   total_scripts?: number;
   created_at?: string;
   estimated_duration?: string;
+  version?: string;
 }
 
 interface LiveTask {
@@ -57,6 +69,7 @@ interface LiveTask {
   log_dir?: string;
   download_url?: string;
   error_message?: string;
+  version?: string;
 }
 
 interface LiveTaskStatusEnvelope {
@@ -95,8 +108,8 @@ export function buildApiUrl(
   const url = new URL(`${base}${path}`, 'http://local.test');
 
   Object.entries(params ?? {}).forEach(([key, value]) => {
-    if (typeof value === 'string' && value) {
-      url.searchParams.set(key, value);
+    if ((typeof value === 'string' && value) || (typeof value === 'number' && Number.isFinite(value))) {
+      url.searchParams.set(key, String(value));
     }
   });
 
@@ -143,6 +156,87 @@ export async function getScripts(
   return readJson<ScriptResponse>(response);
 }
 
+export async function getVersions(context: ApiContext): Promise<TestVersionResponse> {
+  const response = await fetch(buildApiUrl(context.apiBaseUrl, '/versions'), {
+    headers: { Accept: 'application/json' }
+  });
+  return readJson<TestVersionResponse>(response);
+}
+
+export async function getStatisticsSummary(
+  context: ApiContext,
+  filters: StatisticsFilters = {}
+): Promise<StatisticsSummaryResponse> {
+  const response = await fetch(buildApiUrl(context.apiBaseUrl, '/statistics/summary', filters), {
+    headers: { Accept: 'application/json' }
+  });
+  return readJson<StatisticsSummaryResponse>(response);
+}
+
+export async function getTaskScriptStatus(
+  context: ApiContext,
+  taskId: string
+): Promise<TaskScriptStatusResponse> {
+  const response = await fetch(buildApiUrl(context.apiBaseUrl, `/tasks/${taskId}/script-status`), {
+    headers: { Accept: 'application/json' }
+  });
+  return readJson<TaskScriptStatusResponse>(response);
+}
+
+export async function createReport(
+  context: ApiContext,
+  payload: CreateReportRequest
+): Promise<CreateReportResponse> {
+  const response = await fetch(buildApiUrl(context.apiBaseUrl, '/reports'), {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+  return readJson<CreateReportResponse>(response);
+}
+
+export async function listReports(
+  context: ApiContext,
+  query: ReportListQuery
+): Promise<ReportListResponse> {
+  const response = await fetch(buildApiUrl(context.apiBaseUrl, '/reports', query), {
+    headers: { Accept: 'application/json' }
+  });
+  return readJson<ReportListResponse>(response);
+}
+
+export async function getReport(
+  context: ApiContext,
+  reportId: string
+): Promise<ReportDetailResponse> {
+  const response = await fetch(buildApiUrl(context.apiBaseUrl, `/reports/${reportId}`), {
+    headers: { Accept: 'application/json' }
+  });
+  return readJson<ReportDetailResponse>(response);
+}
+
+export function getReportDownloadUrl(
+  context: ApiContext,
+  reportId: string,
+  format: ReportDownloadFormat = 'html'
+): string {
+  return buildApiUrl(context.apiBaseUrl, `/reports/${reportId}/download`, { format });
+}
+
+export async function deleteReport(
+  context: ApiContext,
+  reportId: string
+): Promise<DeleteReportResponse> {
+  const response = await fetch(buildApiUrl(context.apiBaseUrl, `/reports/${reportId}`), {
+    method: 'DELETE',
+    headers: { Accept: 'application/json' }
+  });
+  return readJson<DeleteReportResponse>(response);
+}
+
 export async function createTask(
   context: ApiContext,
   payload: TaskCreateRequest
@@ -167,7 +261,8 @@ export async function createTask(
     estimated_duration: body.estimated_duration,
     backend_status: body.status,
     queue_position: body.queue_position,
-    total_scripts: body.total_scripts
+    total_scripts: body.total_scripts,
+    version: body.version
   };
 }
 
@@ -282,7 +377,8 @@ export function normalizeCreatedTask(response: TaskCreateResponse): NormalizedTa
           failed: 0
         },
     started_at: response.created_at,
-    estimated_remaining: response.estimated_duration
+    estimated_remaining: response.estimated_duration,
+    version: response.version
   });
 }
 
@@ -290,7 +386,10 @@ function triggerTypeForRequest(payload: TaskCreateRequest): TriggerType {
   if ('script_name' in payload) {
     return 'scripts';
   }
-  return 'level' in payload ? 'level' : 'feature';
+  if ('level' in payload) {
+    return 'level';
+  }
+  return 'feature' in payload ? 'feature' : 'scene';
 }
 
 function mapBackendTaskStatus(status: BackendTaskStatus): TaskStatus {
@@ -350,7 +449,8 @@ function normalizeLiveTaskStatus(
       : undefined,
     logs,
     started_at: task.started_at,
-    completed_at: task.completed_at
+    completed_at: task.completed_at,
+    version: task.version
   };
 }
 

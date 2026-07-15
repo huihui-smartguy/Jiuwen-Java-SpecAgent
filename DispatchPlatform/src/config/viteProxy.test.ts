@@ -30,4 +30,33 @@ describe('development API proxy', () => {
     });
     expect(proxy?.['/testwise/api'].rewrite?.('/testwise/api/features')).toBe('/api/features');
   });
+
+  test('routes report paths to their dedicated service before the task API fallback', () => {
+    const proxy = createApiProxy(
+      'http://backend.example.test:3000',
+      '/testwise/',
+      'http://backend.example.test:3001'
+    );
+
+    expect(Object.keys(proxy ?? {})).toEqual([
+      '/api/reports',
+      '/api',
+      '/testwise/api/reports',
+      '/testwise/api'
+    ]);
+    expect(proxy?.['/api/reports']).toMatchObject({
+      target: 'http://backend.example.test:3001',
+      changeOrigin: false
+    });
+    expect(proxy?.['/testwise/api/reports']).toMatchObject({
+      target: 'http://backend.example.test:3001',
+      changeOrigin: false
+    });
+    expect(proxy?.['/testwise/api/reports'].rewrite?.('/testwise/api/reports/report-1')).toBe(
+      '/api/reports/report-1'
+    );
+    expect(proxy?.['/testwise/api']).toMatchObject({
+      target: 'http://backend.example.test:3000'
+    });
+  });
 });
