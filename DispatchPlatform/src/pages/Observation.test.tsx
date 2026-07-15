@@ -115,6 +115,17 @@ describe('Observation', () => {
     await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
   });
 
+  test('releases the fixed desktop header rail before the responsive content narrows', () => {
+    const observeCss = readFileSync('src/styles/routes/observe.css', 'utf8');
+
+    expect(observeCss).toMatch(
+      /@media \(max-width:\s*1319px\)[\s\S]*?\.observation-page\s*>\s*\.page-header\s*>\s*div:first-child\s*\{[^}]*width:\s*auto;[^}]*min-width:\s*0;[^}]*flex:\s*1\s+1\s+auto;/
+    );
+    expect(observeCss).toMatch(
+      /@media \(max-width:\s*980px\)[\s\S]*?\.observation-page\s*>\s*\.page-header\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*118px;/
+    );
+  });
+
   test('matches the approved Observe composition and source order without legacy log controls', async () => {
     mockTaskApi([activeTask]);
 

@@ -277,15 +277,23 @@ describe('approved Tasks composition', () => {
     const compressedDesktopStart = tasksStyles.indexOf('@media (max-width: 1319px)');
     const stackedStart = tasksStyles.indexOf('@media (max-width: 1179px)');
     const tabletStart = tasksStyles.indexOf('@media (max-width: 980px)');
+    const mobileStart = tasksStyles.indexOf('@media (max-width: 680px)');
 
     expect(compressedDesktopStart).toBeGreaterThanOrEqual(0);
     expect(stackedStart).toBeGreaterThan(compressedDesktopStart);
     expect(tabletStart).toBeGreaterThan(stackedStart);
+    expect(mobileStart).toBeGreaterThan(tabletStart);
     expect(tasksStyles.slice(compressedDesktopStart, stackedStart)).toMatch(
       /\.tasks-table-scroll\s*\{[^}]*width:\s*auto;/
     );
     expect(tasksStyles.slice(stackedStart, tabletStart)).toMatch(
       /\.tasks-table-scroll\s*\{[^}]*width:\s*auto;/
+    );
+    expect(tasksStyles.slice(tabletStart, mobileStart)).toMatch(
+      /\.tasks-right-rail\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/
+    );
+    expect(tasksStyles.slice(tabletStart, mobileStart)).toMatch(
+      /\.tasks-launch-button,\s*\.tasks-guardrail-list\s*>\s*div\s*\{[^}]*width:\s*100%;/
     );
   });
 
