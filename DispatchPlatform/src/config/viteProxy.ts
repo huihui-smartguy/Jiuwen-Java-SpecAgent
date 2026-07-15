@@ -6,6 +6,14 @@ interface ProxyRule {
   rewrite?: (path: string) => string;
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function reportProxyContext(apiPath: string): string {
+  return `^${escapeRegExp(apiPath)}/reports(?:/|$)`;
+}
+
 export function createApiProxy(
   target = process.env.TESTWISE_API_PROXY_TARGET,
   basePath = process.env.VITE_BASE_PATH,
@@ -22,7 +30,7 @@ export function createApiProxy(
   const proxy: Record<string, ProxyRule> = {};
 
   if (reportTarget) {
-    proxy['/api/reports'] = {
+    proxy[reportProxyContext('/api')] = {
       target: reportTarget,
       changeOrigin: false
     };
@@ -36,10 +44,13 @@ export function createApiProxy(
   if (deploymentApiPath !== '/api') {
     if (reportTarget) {
       const deploymentReportPath = `${deploymentApiPath}/reports`;
-      proxy[deploymentReportPath] = {
+      proxy[reportProxyContext(deploymentApiPath)] = {
         target: reportTarget,
         changeOrigin: false,
-        rewrite: (path) => path.replace(new RegExp(`^${deploymentReportPath}`), '/api/reports')
+        rewrite: (path) => path.replace(
+          new RegExp(`^${escapeRegExp(deploymentReportPath)}`),
+          '/api/reports'
+        )
       };
     }
     proxy[deploymentApiPath] = {

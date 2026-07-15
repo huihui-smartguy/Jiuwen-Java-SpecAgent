@@ -527,7 +527,6 @@ describe('execution API client', () => {
         success: true,
         task_id: 'task-scene',
         status: 'queued',
-        version: 'release1',
         message: '任务已加入队列'
       })
     );

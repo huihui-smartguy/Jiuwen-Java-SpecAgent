@@ -262,7 +262,7 @@ export async function createTask(
     backend_status: body.status,
     queue_position: body.queue_position,
     total_scripts: body.total_scripts,
-    version: body.version
+    version: body.version ?? payload.version
   };
 }
 

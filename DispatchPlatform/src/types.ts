@@ -227,10 +227,9 @@ export interface TestVersionResponse {
   versions: TestVersion[];
 }
 
-export interface StatisticsFilters {
-  product?: string;
-  scene?: string;
-}
+export type StatisticsFilters =
+  | { product?: never; scene?: never }
+  | { product: string; scene?: string };
 
 export interface StatisticsSummary {
   total_scripts: number;
@@ -352,7 +351,7 @@ export interface ReportConclusion {
 }
 
 export interface ReportRisk {
-  level: 'high' | 'medium' | 'low' | string;
+  level: 'high' | 'medium' | 'low';
   category: string;
   title: string;
   count: number;
@@ -377,7 +376,7 @@ export interface ReportEnvironment {
   };
 }
 
-export type ReportResultStatus = 'pass' | 'failed' | 'skipped' | 'running' | string;
+export type ReportResultStatus = 'pass' | 'failed' | 'skipped' | 'running';
 
 export interface ReportResultRow {
   script_id: string;
