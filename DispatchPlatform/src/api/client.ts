@@ -226,6 +226,29 @@ export function getReportDownloadUrl(
   return buildApiUrl(context.apiBaseUrl, `/reports/${reportId}/download`, { format });
 }
 
+export function resolvePublicDownloadUrl(
+  context: ApiContext,
+  downloadUrl: string
+): string {
+  if (!downloadUrl) {
+    return downloadUrl;
+  }
+  if (!isAbsoluteHttpUrl(context.apiBaseUrl)) {
+    return rebaseDownloadUrl(downloadUrl, context.apiBaseUrl) ?? downloadUrl;
+  }
+  if (isAbsoluteHttpUrl(downloadUrl)) {
+    return downloadUrl;
+  }
+
+  const base = new URL(context.apiBaseUrl);
+  const resolved = new URL(downloadUrl, base.origin);
+  const apiPath = trimTrailingSlash(base.pathname);
+  if (apiPath !== '/api' && resolved.pathname.startsWith('/api/')) {
+    resolved.pathname = `${apiPath}${resolved.pathname.slice('/api'.length)}`;
+  }
+  return resolved.toString();
+}
+
 export async function deleteReport(
   context: ApiContext,
   reportId: string

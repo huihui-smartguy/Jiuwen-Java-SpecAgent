@@ -6,6 +6,7 @@ import { activeTask as initialActiveTask } from './data/mockData';
 import { Dashboard } from './pages/Dashboard';
 import { Knowledge } from './pages/Knowledge';
 import { Observation } from './pages/Observation';
+import { ReportDetailPage } from './pages/ReportDetailPage';
 import { Results } from './pages/Results';
 import { Scripts } from './pages/Scripts';
 import { SettingsPage } from './pages/SettingsPage';
@@ -73,12 +74,20 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
   }, [selectedSut]);
   const handleTaskStatusChange = useCallback((task: NormalizedTaskStatus) => {
     setActiveTask((current) => (current?.task_id === task.task_id
-      ? { ...task, sourceSut: task.sourceSut ?? current.sourceSut }
+      ? {
+          ...task,
+          version: task.version ?? current.version,
+          sourceSut: task.sourceSut ?? current.sourceSut
+        }
       : current));
     setSessionTasks((current) => {
       const hasTask = current.some((item) => item.task_id === task.task_id);
       const nextTasks = current.map((item) => (item.task_id === task.task_id
-        ? { ...task, sourceSut: task.sourceSut ?? item.sourceSut }
+        ? {
+            ...task,
+            version: task.version ?? item.version,
+            sourceSut: task.sourceSut ?? item.sourceSut
+          }
         : item));
       return hasTask ? nextTasks : [task, ...nextTasks];
     });
@@ -141,6 +150,16 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
           <Route
             path="/results"
             element={<Results {...sharedProps} sessionTasks={sessionTasks} />}
+          />
+          <Route
+            path="/results/:reportId"
+            element={(
+              <ReportDetailPage
+                language={language}
+                selectedSut={selectedSut}
+                runtimeConfig={runtimeConfig}
+              />
+            )}
           />
           <Route path="/scripts" element={<Scripts {...sharedProps} />} />
           <Route path="/knowledge" element={<Knowledge {...sharedProps} />} />

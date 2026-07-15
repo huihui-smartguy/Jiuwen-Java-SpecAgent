@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { render, screen, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { normalizeTaskStatus } from '../api/client';
 import { resolveRuntimeConfig } from '../config/runtime';
@@ -13,6 +14,14 @@ const mockRuntimeConfig = resolveRuntimeConfig({
   defaultLanguage: 'zh',
   enableMockFallback: true
 });
+
+function json(body: unknown, status = 200) {
+  return Promise.resolve({
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body
+  } as Response);
+}
 
 function LocationProbe() {
   const location = useLocation();
@@ -32,17 +41,28 @@ function renderResults({
   activeTask?: NormalizedTaskStatus | null;
   sessionTasks?: NormalizedTaskStatus[];
 } = {}) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <MemoryRouter initialEntries={['/results']}>
-      <Results
-        language={language}
-        selectedSut={selectedSut}
-        activeTask={activeTask}
-        sessionTasks={sessionTasks}
-        runtimeConfig={runtimeConfig}
-      />
-      <LocationProbe />
-    </MemoryRouter>
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={['/results']}>
+        <Routes>
+          <Route
+            path="/results"
+            element={(
+              <Results
+                language={language}
+                selectedSut={selectedSut}
+                activeTask={activeTask}
+                sessionTasks={sessionTasks}
+                runtimeConfig={runtimeConfig}
+              />
+            )}
+          />
+          <Route path="/results/:reportId" element={null} />
+        </Routes>
+        <LocationProbe />
+      </MemoryRouter>
+    </QueryClientProvider>
   );
 }
 
@@ -64,6 +84,7 @@ function task(
 
 afterEach(() => {
   vi.restoreAllMocks();
+  window.localStorage.clear();
 });
 
 describe('Results', () => {
@@ -121,7 +142,7 @@ describe('Results', () => {
     expect(screen.getByText('聚合通过率、失败趋势与可追溯报告，快速定位质量变化。')).toBeInTheDocument();
     const pageHeader = screen.getByRole('heading', { name: '结果与报告', level: 1 }).closest('.page-header');
     expect(within(pageHeader as HTMLElement).getByRole('button', { name: '筛选' })).toBeInTheDocument();
-    expect(within(pageHeader as HTMLElement).getByRole('button', { name: '导出' })).toBeInTheDocument();
+    expect(within(pageHeader as HTMLElement).getByRole('button', { name: '生成报告' })).toBeInTheDocument();
     expect(pageHeader?.querySelector('svg')).not.toBeInTheDocument();
 
     const metrics = screen.getByRole('region', { name: '结果指标' });
@@ -234,22 +255,24 @@ describe('Results', () => {
     expect(screen.queryByText('回归验证 · API 密钥管理')).not.toBeInTheDocument();
   });
 
-  test('keeps all approved presentation controls focusable and completely inert', async () => {
+  test('keeps mock mode report-free while making Filter functional', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
     const user = userEvent.setup();
     renderResults();
 
-    const controls = [
-      screen.getByRole('button', { name: '筛选' }),
-      screen.getByRole('button', { name: /导出/ }),
-      ...screen.getAllByRole('button', { name: /查看用例/ })
-    ];
+    const filter = screen.getByRole('button', { name: '筛选' });
+    expect(filter).not.toHaveAttribute('aria-disabled', 'true');
+    await user.click(filter);
+    expect(screen.getByRole('region', { name: '报告筛选条件' })).toBeInTheDocument();
 
-    for (const control of controls) {
+    const generate = screen.getByRole('button', { name: '生成报告' });
+    expect(generate).toHaveAttribute('aria-disabled', 'true');
+    expect(generate).not.toBeDisabled();
+    await user.click(generate);
+
+    for (const control of screen.getAllByRole('button', { name: /查看用例/ })) {
       expect(control).toHaveAttribute('aria-disabled', 'true');
       expect(control).not.toBeDisabled();
-      control.focus();
-      expect(control).toHaveFocus();
       await user.click(control);
     }
 
@@ -317,6 +340,9 @@ describe('Results', () => {
       activeTask: latestActiveTask,
       sessionTasks: [staleDuplicate, sessionTask, staleDuplicate]
     });
+
+    expect(screen.getByRole('tab', { name: '会话结果' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: '持久化报告' })).toHaveAttribute('aria-selected', 'false');
 
     const metrics = screen.getByRole('region', { name: '结果指标' });
     expect(within(metrics).getAllByTestId('metric-value').map((value) => value.textContent)).toEqual([
@@ -499,6 +525,269 @@ describe('Results', () => {
     expect(within(reports).queryByText('task-ad06c8e5')).not.toBeInTheDocument();
     expect(within(reports).queryByText('task-7f1820bd')).not.toBeInTheDocument();
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  test('defaults to Persisted Reports without session tasks and queries exact version filters with 20-row pagination', async () => {
+    const runtimeConfig = resolveRuntimeConfig({ enableMockFallback: false });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = new URL(String(input), 'http://local.test');
+      if (url.pathname.endsWith('/versions')) {
+        return json({
+          success: true,
+          default_version: 'release1',
+          versions: [{
+            code: 'release1',
+            name: 'Release 1',
+            description: 'Stable',
+            created_at: '2026-07-01T00:00:00Z',
+            is_default: true
+          }]
+        });
+      }
+      if (url.pathname.endsWith('/reports')) {
+        return json({
+          success: true,
+          total: 21,
+          reports: [{
+            id: `report-${url.searchParams.get('offset') ?? '0'}`,
+            title: 'Build v2.4.1 regression report',
+            software_version: 'v2.4.1',
+            test_version: url.searchParams.get('test_version') ?? 'release1',
+            summary: {
+              total: 10,
+              pass: 9,
+              failed: 1,
+              skipped: 0,
+              success_rate: 90,
+              total_duration_seconds: 42
+            },
+            conclusion: { passed: false, verdict: '不通过', reason: 'One failure' },
+            created_at: '2026-07-15T10:30:00',
+            created_by: 'codex-verification'
+          }]
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    renderResults({ runtimeConfig, activeTask: null, sessionTasks: [] });
+
+    const persistedTab = screen.getByRole('tab', { name: '持久化报告' });
+    const sessionTab = screen.getByRole('tab', { name: '会话结果' });
+    expect(persistedTab).toHaveAttribute('aria-selected', 'true');
+    persistedTab.focus();
+    await userEvent.keyboard('{ArrowLeft}');
+    expect(sessionTab).toHaveAttribute('aria-selected', 'true');
+    await userEvent.keyboard('{ArrowRight}');
+    expect(persistedTab).toHaveAttribute('aria-selected', 'true');
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledWith(
+      '/api/reports?software_version=v2.4.1&limit=20&offset=0',
+      { headers: { Accept: 'application/json' } }
+    ));
+    expect(await screen.findByText('Build v2.4.1 regression report')).toBeInTheDocument();
+    expect(screen.getByText('第 1 / 2 页')).toBeInTheDocument();
+    const reportRequestsBeforeSearch = fetchSpy.mock.calls.filter(([input]) => (
+      String(input).includes('/reports?')
+    )).length;
+    await userEvent.type(screen.getByRole('searchbox', { name: '搜索报告或任务' }), 'Build v2');
+    expect(screen.getByText('Build v2.4.1 regression report')).toBeInTheDocument();
+    expect(fetchSpy.mock.calls.filter(([input]) => String(input).includes('/reports?')))
+      .toHaveLength(reportRequestsBeforeSearch);
+    await userEvent.clear(screen.getByRole('searchbox', { name: '搜索报告或任务' }));
+
+    await userEvent.click(screen.getByRole('button', { name: '筛选' }));
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: '测试批次（可选）' }), 'release1');
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledWith(
+      '/api/reports?software_version=v2.4.1&test_version=release1&limit=20&offset=0',
+      { headers: { Accept: 'application/json' } }
+    ));
+
+    await userEvent.click(screen.getByRole('button', { name: '下一页' }));
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledWith(
+      '/api/reports?software_version=v2.4.1&test_version=release1&limit=20&offset=20',
+      { headers: { Accept: 'application/json' } }
+    ));
+  });
+
+  test('gates generic Object versions until an exact software build is entered and remembers it per Object', async () => {
+    const runtimeConfig = resolveRuntimeConfig({
+      enableMockFallback: false,
+      sutTargets: [{
+        id: 'generic-version-object',
+        name: 'Generic version Object',
+        product: 'AgentPlatform',
+        scene: 'API',
+        version: 'Latest',
+        apiBaseUrl: '/api',
+        status: 'healthy'
+      }]
+    });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = new URL(String(input), 'http://local.test');
+      if (url.pathname.endsWith('/versions')) {
+        return json({ success: true, default_version: 'release1', versions: [] });
+      }
+      if (url.pathname.endsWith('/reports')) {
+        return json({ success: true, total: 0, reports: [] });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    renderResults({ runtimeConfig, selectedSut: runtimeConfig.sutTargets[0] });
+
+    expect(screen.getByText('请输入精确的软件版本或构建号后查询报告。')).toBeInTheDocument();
+    expect(fetchSpy.mock.calls.some(([input]) => String(input).includes('/reports?'))).toBe(false);
+
+    await userEvent.click(screen.getByRole('button', { name: '筛选' }));
+    const softwareVersion = screen.getByRole('textbox', { name: '被测软件版本' });
+    await userEvent.clear(softwareVersion);
+    await userEvent.type(softwareVersion, 'AgentPlatform 3.5.2 build 20260715.1');
+
+    await waitFor(() => expect(fetchSpy.mock.calls.some(([input]) => (
+      String(input).includes('/api/reports?software_version=AgentPlatform+3.5.2+build+20260715.1')
+    ))).toBe(true));
+    expect(window.localStorage.getItem('testwise.reportSoftwareVersion:generic-version-object'))
+      .toBe('AgentPlatform 3.5.2 build 20260715.1');
+  });
+
+  test('generates a scoped report from an accessible modal and opens its detail route', async () => {
+    const runtimeConfig = resolveRuntimeConfig({ enableMockFallback: false });
+    const sessionTask = task('task-for-report', {
+      version: 'release1',
+      result: { total_commands: 1, success_count: 1, failed_count: 0 }
+    });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = new URL(String(input), 'http://local.test');
+      if (url.pathname.endsWith('/versions')) {
+        return json({
+          success: true,
+          default_version: 'release1',
+          versions: [{
+            code: 'release1',
+            name: 'Release 1',
+            description: 'Stable',
+            created_at: '2026-07-01T00:00:00Z',
+            is_default: true
+          }]
+        });
+      }
+      if (url.pathname.endsWith('/features')) {
+        return json({
+          success: true,
+          product: runtimeConfig.sutTargets[0].product,
+          scene: runtimeConfig.sutTargets[0].scene,
+          features: [{ id: 'save', name: 'Save API', type: 'L1' }],
+          total: 1
+        });
+      }
+      if (url.pathname.endsWith('/reports') && init?.method === 'POST') {
+        return json({ success: true, report_id: 'report-created-20260715' });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    renderResults({ runtimeConfig, activeTask: sessionTask, sessionTasks: [sessionTask] });
+
+    const user = userEvent.setup();
+    const generate = screen.getByRole('button', { name: '生成报告' });
+    await user.click(generate);
+    let modal = await screen.findByRole('dialog', { name: '生成报告' });
+    expect(within(modal).getByRole('button', { name: '关闭生成报告' })).toHaveFocus();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: '生成报告' })).not.toBeInTheDocument();
+    expect(generate).toHaveFocus();
+    await user.click(generate);
+    modal = await screen.findByRole('dialog', { name: '生成报告' });
+    expect(within(modal).getByText(`${runtimeConfig.sutTargets[0].product} · ${runtimeConfig.sutTargets[0].scene}`))
+      .toBeInTheDocument();
+    await waitFor(() => expect(within(modal).getByRole('combobox', { name: '测试批次' })).toHaveValue('release1'));
+    await user.selectOptions(within(modal).getByRole('combobox', { name: 'Feature（可选）' }), 'Save API');
+    await user.selectOptions(within(modal).getByRole('combobox', { name: '级别（可选）' }), 'L1');
+    await user.type(within(modal).getByRole('textbox', { name: '报告标题（可选）' }), 'Release verification');
+    await user.type(within(modal).getByLabelText('开始时间（可选）'), '2026-07-15T09:00');
+    await user.type(within(modal).getByLabelText('结束时间（可选）'), '2026-07-15T10:00');
+    await user.click(within(modal).getByRole('button', { name: '创建并打开报告' }));
+
+    await waitFor(() => {
+      const post = fetchSpy.mock.calls.find(([, init]) => init?.method === 'POST');
+      expect(JSON.parse(String(post?.[1]?.body))).toEqual({
+        test_version: 'release1',
+        software_version: 'v2.4.1',
+        scope: {
+          product: runtimeConfig.sutTargets[0].product,
+          scenes: [runtimeConfig.sutTargets[0].scene],
+          features: ['Save API'],
+          levels: ['L1']
+        },
+        title: 'Release verification',
+        time_window: ['2026-07-15T09:00', '2026-07-15T10:00']
+      });
+    });
+    expect(await screen.findByTestId('location-path')).toHaveTextContent('/results/report-created-20260715');
+  });
+
+  test('omits All scope restrictions and surfaces backend 400 generation errors', async () => {
+    const runtimeConfig = resolveRuntimeConfig({ enableMockFallback: false });
+    const sessionTask = task('task-report-error', {});
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = new URL(String(input), 'http://local.test');
+      if (url.pathname.endsWith('/versions')) {
+        return json({
+          success: true,
+          default_version: 'release1',
+          versions: [{
+            code: 'release1',
+            name: 'Release 1',
+            description: 'Stable',
+            created_at: '2026-07-01T00:00:00Z',
+            is_default: true
+          }]
+        });
+      }
+      if (url.pathname.endsWith('/features')) {
+        return json({ success: true, product: '高码java', scene: '场景', features: [], total: 0 });
+      }
+      if (url.pathname.endsWith('/reports') && init?.method === 'POST') {
+        return json({ success: false, message: 'No matching execution results' }, 400);
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    renderResults({ runtimeConfig, activeTask: sessionTask, sessionTasks: [sessionTask] });
+    await userEvent.click(screen.getByRole('button', { name: '生成报告' }));
+    const modal = await screen.findByRole('dialog', { name: '生成报告' });
+    await waitFor(() => expect(within(modal).getByRole('combobox', { name: '测试批次' })).toHaveValue('release1'));
+    await userEvent.click(within(modal).getByRole('button', { name: '创建并打开报告' }));
+
+    expect(await within(modal).findByRole('alert')).toHaveTextContent('No matching execution results');
+    const post = fetchSpy.mock.calls.find(([, init]) => init?.method === 'POST');
+    expect(JSON.parse(String(post?.[1]?.body))).toEqual({
+      test_version: 'release1',
+      software_version: 'v2.4.1',
+      scope: {
+        product: runtimeConfig.sutTargets[0].product,
+        scenes: [runtimeConfig.sutTargets[0].scene]
+      }
+    });
+  });
+
+  test('shows a persisted-list 500 error without replacing session results', async () => {
+    const runtimeConfig = resolveRuntimeConfig({ enableMockFallback: false });
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = new URL(String(input), 'http://local.test');
+      if (url.pathname.endsWith('/versions')) {
+        return json({ success: true, default_version: 'release1', versions: [] });
+      }
+      if (url.pathname.endsWith('/reports')) {
+        return json({ success: false, message: 'Report list exploded' }, 500);
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    renderResults({ runtimeConfig });
+    expect(await screen.findByRole('alert')).toHaveTextContent('Report list exploded');
+    await userEvent.click(screen.getByRole('tab', { name: '会话结果' }));
+    expect(screen.getByRole('table', { name: '最近报告' })).toBeInTheDocument();
   });
 
   test('owns the approved desktop grid geometry and responsive source-order collapse', () => {

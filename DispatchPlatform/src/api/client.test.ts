@@ -16,7 +16,8 @@ import {
   getVersions,
   listReports,
   normalizeCreatedTask,
-  normalizeTaskStatus
+  normalizeTaskStatus,
+  resolvePublicDownloadUrl
 } from './client';
 
 const api = { apiBaseUrl: '/api' };
@@ -608,6 +609,13 @@ describe('execution API client', () => {
 
     expect(fetchSpy.mock.calls[0][0]).toBe('/testwise/api/reports/report-1');
     expect(downloadUrl).toBe('/testwise/api/reports/report-1/download?format=md');
+    expect(resolvePublicDownloadUrl(context, '/api/download/report-1/execution.log')).toBe(
+      '/testwise/api/download/report-1/execution.log'
+    );
+    expect(resolvePublicDownloadUrl(
+      context,
+      'http://backend.example.test/api/download/report-1/execution.log'
+    )).toBe('/testwise/api/download/report-1/execution.log');
     expect(fetchSpy.mock.calls[1]).toEqual([
       '/testwise/api/reports/report-1',
       { method: 'DELETE', headers: { Accept: 'application/json' } }

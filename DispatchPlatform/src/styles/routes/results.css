@@ -1,5 +1,56 @@
 .results-page {
+  position: relative;
   gap: 0;
+}
+
+.results-filter-panel {
+  position: absolute;
+  z-index: 30;
+  top: 92px;
+  right: 0;
+  display: grid;
+  width: 560px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--color-outline);
+  border-radius: 18px;
+  background: var(--color-surface);
+  box-shadow: 0 16px 38px rgba(10, 20, 41, 0.14);
+}
+
+.results-filter-panel label,
+.report-generation-fields label {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.results-filter-panel input,
+.results-filter-panel select,
+.report-generation-fields input,
+.report-generation-fields select {
+  width: 100%;
+  height: 42px;
+  min-width: 0;
+  padding: 0 12px;
+  border: 1px solid var(--color-outline);
+  border-radius: 12px;
+  color: var(--color-text-primary);
+  background: var(--color-surface-low);
+  font: inherit;
+  font-weight: 500;
+}
+
+.results-filter-panel p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--color-danger);
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .results-page > .page-header {
@@ -290,11 +341,46 @@
 }
 
 .results-reports-card {
+  position: relative;
   display: flex;
   height: 374px;
   flex-direction: column;
   gap: 14px;
   padding: 22px 28px 20px;
+}
+
+.results-report-tools {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.results-report-tabs {
+  display: inline-grid;
+  height: 42px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 3px;
+  border-radius: 13px;
+  background: #e6eaf0;
+}
+
+.results-report-tabs button {
+  min-width: 116px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--color-text-secondary);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.results-report-tabs button[aria-selected='true'] {
+  color: var(--color-accent);
+  background: var(--color-surface);
+  box-shadow: 0 2px 6px rgba(10, 20, 41, 0.08);
 }
 
 .results-reports-heading {
@@ -366,12 +452,165 @@
 }
 
 .results-table-scroll {
+  position: relative;
   width: 1240px;
   height: 270px;
   min-height: 0;
   flex: 0 0 270px;
   margin-left: -1px;
   overflow-x: auto;
+}
+
+.results-persisted-state {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  place-items: center;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  text-align: center;
+}
+
+.results-persisted-state.is-error {
+  color: var(--color-danger);
+}
+
+.results-empty-row td {
+  grid-column: 1 / -1;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.results-pagination {
+  position: sticky;
+  z-index: 3;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  width: 100%;
+  min-height: 46px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 6px 12px;
+  background: color-mix(in srgb, var(--color-surface-low) 94%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.results-pagination button {
+  min-width: 72px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--color-outline);
+  border-radius: 10px;
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.results-pagination button:disabled {
+  opacity: 0.45;
+}
+
+.results-pagination span {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.report-modal-backdrop {
+  position: fixed;
+  z-index: 90;
+  inset: 0;
+  display: grid;
+  padding: 24px;
+  place-items: center;
+  background: rgba(10, 20, 41, 0.42);
+}
+
+.report-generation-modal {
+  display: flex;
+  width: min(720px, 100%);
+  max-height: calc(100vh - 48px);
+  flex-direction: column;
+  gap: 20px;
+  overflow: auto;
+  padding: 28px;
+  border: 1px solid var(--color-outline);
+  border-radius: 24px;
+  background: var(--color-surface);
+  box-shadow: 0 24px 64px rgba(10, 20, 41, 0.2);
+}
+
+.report-generation-modal > header,
+.report-generation-modal > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.report-generation-modal > header p,
+.report-generation-modal > header h2 {
+  margin: 0;
+}
+
+.report-generation-modal > header p {
+  margin-bottom: 4px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.report-generation-modal > header h2 {
+  font-size: 26px;
+  line-height: 34px;
+}
+
+.report-generation-modal > header button {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-outline);
+  border-radius: 14px;
+  color: var(--color-text-primary);
+  background: var(--color-surface-low);
+  font-size: 24px;
+}
+
+.report-generation-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.report-generation-wide-field {
+  grid-column: 1 / -1;
+}
+
+.report-generation-message {
+  min-height: 20px;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.report-generation-message.is-error {
+  color: var(--color-danger);
+}
+
+.report-generation-modal > footer {
+  justify-content: flex-end;
+}
+
+.report-generation-modal > footer .button {
+  min-width: 140px;
+  min-height: 44px;
 }
 
 .results-reports-card table {
@@ -547,6 +786,19 @@
 }
 
 @media (max-width: 680px) {
+  .results-filter-panel {
+    position: fixed;
+    top: 88px;
+    right: 16px;
+    left: 16px;
+    width: auto;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .results-filter-panel p {
+    grid-column: 1;
+  }
+
   .results-page > .page-header {
     height: auto;
     min-height: 0;
@@ -593,7 +845,7 @@
 
   .results-reports-heading {
     height: auto;
-    min-height: 104px;
+    min-height: 156px;
     flex: 0 0 auto;
     align-items: stretch;
     flex-direction: column;
@@ -603,5 +855,31 @@
   .results-report-search {
     width: 100%;
     min-width: 0;
+  }
+
+  .results-report-tools {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .results-report-tabs button {
+    min-width: 0;
+  }
+
+  .report-modal-backdrop {
+    padding: 12px;
+  }
+
+  .report-generation-modal {
+    max-height: calc(100vh - 24px);
+    padding: 20px;
+  }
+
+  .report-generation-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .report-generation-wide-field {
+    grid-column: 1;
   }
 }

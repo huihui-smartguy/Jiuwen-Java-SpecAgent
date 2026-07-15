@@ -1,0 +1,322 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import {
+  ApiError,
+  deleteReport,
+  getReport,
+  getReportDownloadUrl,
+  resolvePublicDownloadUrl
+} from '../api/client';
+import { PageHeader } from '../components/PageHeader';
+import type { Language, ReportFeatureScope, RuntimeConfig, SutTarget } from '../types';
+
+interface ReportDetailPageProps {
+  language: Language;
+  selectedSut: SutTarget;
+  runtimeConfig: RuntimeConfig;
+}
+
+function displayDate(value: string | null | undefined, fallback: string) {
+  if (!value) {
+    return fallback;
+  }
+  return value.replace('T', ' ').replace(/Z$/, ' UTC');
+}
+
+function featureLabel(feature: string | ReportFeatureScope) {
+  return typeof feature === 'string'
+    ? feature
+    : feature.feature_version
+      ? `${feature.name} · ${feature.feature_version}`
+      : feature.name;
+}
+
+export function ReportDetailPage({
+  language,
+  selectedSut,
+  runtimeConfig
+}: ReportDetailPageProps) {
+  const isChinese = language === 'zh';
+  const { reportId = '' } = useParams();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const moreActionsRef = useRef<HTMLButtonElement>(null);
+  const confirmationDialogRef = useRef<HTMLElement>(null);
+  const confirmationCloseRef = useRef<HTMLButtonElement>(null);
+  const api = useMemo(() => ({
+    apiBaseUrl: selectedSut.apiBaseUrl || runtimeConfig.apiBaseUrl
+  }), [runtimeConfig.apiBaseUrl, selectedSut.apiBaseUrl]);
+  const reportQuery = useQuery({
+    queryKey: ['report-detail', api.apiBaseUrl, reportId],
+    queryFn: () => getReport(api, reportId),
+    enabled: Boolean(reportId) && !runtimeConfig.enableMockFallback
+  });
+  const deletion = useMutation({
+    mutationFn: () => deleteReport(api, reportId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['reports'] });
+      queryClient.removeQueries({ queryKey: ['report-detail', api.apiBaseUrl, reportId] });
+      navigate('/results');
+    }
+  });
+
+  useEffect(() => {
+    if (!confirmDelete) {
+      return undefined;
+    }
+    confirmationCloseRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setConfirmDelete(false);
+        queueMicrotask(() => moreActionsRef.current?.focus());
+        return;
+      }
+      if (event.key !== 'Tab') {
+        return;
+      }
+      const focusable = Array.from(
+        confirmationDialogRef.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? []
+      );
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [confirmDelete]);
+
+  if (runtimeConfig.enableMockFallback) {
+    return (
+      <div className="report-detail-page">
+        <Link className="report-detail-back" to="/results">← {isChinese ? '返回报告列表' : 'Back to reports'}</Link>
+        <p className="report-detail-state is-error" role="alert">
+          {isChinese
+            ? '演示模式下不提供持久化报告。'
+            : 'Persisted reports are unavailable in demo mode.'}
+        </p>
+      </div>
+    );
+  }
+
+  if (reportQuery.isLoading) {
+    return (
+      <div className="report-detail-page">
+        <Link className="report-detail-back" to="/results">← {isChinese ? '返回报告列表' : 'Back to reports'}</Link>
+        <p className="report-detail-state" role="status">
+          {isChinese ? '正在加载报告…' : 'Loading report…'}
+        </p>
+      </div>
+    );
+  }
+
+  if (reportQuery.isError || !reportQuery.data?.report) {
+    return (
+      <div className="report-detail-page">
+        <Link className="report-detail-back" to="/results">← {isChinese ? '返回报告列表' : 'Back to reports'}</Link>
+        <p className="report-detail-state is-error" role="alert">
+          {reportQuery.error instanceof ApiError
+            ? reportQuery.error.message
+            : isChinese ? '报告加载失败。' : 'Unable to load report.'}
+        </p>
+      </div>
+    );
+  }
+
+  const report = reportQuery.data.report;
+  const notAvailable = isChinese ? '未提供' : 'Not provided';
+  const markdownUrl = getReportDownloadUrl(api, report.id, 'md');
+  const htmlUrl = getReportDownloadUrl(api, report.id, 'html');
+
+  return (
+    <div className="page-stack report-detail-page">
+      <Link className="report-detail-back" to="/results">← {isChinese ? '返回报告列表' : 'Back to reports'}</Link>
+      <PageHeader
+        title={report.title}
+        subtitle={`${report.software_version} · ${report.test_version} · ${displayDate(report.created_at, notAvailable)}`}
+        action={(
+          <div className="report-detail-header-actions">
+            <a className="button button--secondary" href={markdownUrl} download>
+              {isChinese ? '下载 Markdown' : 'Download Markdown'}
+            </a>
+            <a className="button button--primary" href={htmlUrl} download>
+              {isChinese ? '下载 HTML' : 'Download HTML'}
+            </a>
+            <div className="report-detail-overflow">
+              <button
+                ref={moreActionsRef}
+                type="button"
+                aria-label={isChinese ? '更多报告操作' : 'More report actions'}
+                aria-expanded={actionsOpen}
+                onClick={() => setActionsOpen((current) => !current)}
+              >
+                •••
+              </button>
+              {actionsOpen ? (
+                <div className="report-detail-overflow-menu">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActionsOpen(false);
+                      setConfirmDelete(true);
+                    }}
+                  >
+                    {isChinese ? '删除报告' : 'Delete report'}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        )}
+      />
+
+      <section className="report-detail-summary" aria-label={isChinese ? '报告摘要' : 'Report summary'}>
+        <article><span>{isChinese ? '用例总数' : 'Total cases'}</span><strong>{report.summary.total}</strong></article>
+        <article><span>{isChinese ? '通过' : 'Passed'}</span><strong>{report.summary.pass}</strong></article>
+        <article><span>{isChinese ? '失败' : 'Failed'}</span><strong>{report.summary.failed}</strong></article>
+        <article><span>{isChinese ? '成功率' : 'Success rate'}</span><strong>{report.summary.success_rate.toFixed(1)}%</strong></article>
+        <article><span>{isChinese ? '总耗时' : 'Duration'}</span><strong>{report.summary.total_duration_seconds.toFixed(1)}s</strong></article>
+      </section>
+
+      <div className="report-detail-grid">
+        <section className="report-detail-card report-conclusion-card" aria-labelledby="report-conclusion-title">
+          <header>
+            <h2 id="report-conclusion-title">{isChinese ? '结论与门禁' : 'Conclusion & gates'}</h2>
+            <span className={report.conclusion.passed ? 'is-passed' : 'is-failed'}>
+              {report.conclusion.verdict}
+            </span>
+          </header>
+          <p>{report.conclusion.reason}</p>
+          <ul className="report-gates">
+            {(report.conclusion.gates ?? []).map((gate) => (
+              <li key={gate.name}>
+                <div><strong>{gate.name}</strong><span>{gate.actual} / {gate.required}</span></div>
+                <span className={gate.passed ? 'is-passed' : 'is-failed'}>
+                  {gate.passed ? (isChinese ? '通过' : 'Passed') : (isChinese ? '未通过' : 'Failed')}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section className="report-detail-card" aria-labelledby="report-scope-title">
+          <h2 id="report-scope-title">{isChinese ? '范围与环境' : 'Scope & environment'}</h2>
+          <dl className="report-environment">
+            <div><dt>Object</dt><dd>{report.scope.product} · {report.scope.scenes.join(', ')}</dd></div>
+            <div><dt>{isChinese ? 'Feature' : 'Features'}</dt><dd>{report.scope.features?.map(featureLabel).join(', ') || (isChinese ? '全部' : 'All')}</dd></div>
+            <div><dt>{isChinese ? '级别' : 'Levels'}</dt><dd>{report.scope.levels?.join(', ') || (isChinese ? '全部' : 'All')}</dd></div>
+            <div><dt>{isChinese ? '执行方式' : 'Runner mode'}</dt><dd>{report.environment.execute_mode ?? notAvailable}</dd></div>
+            <div><dt>{isChinese ? '被测地址' : 'SUT URL'}</dt><dd>{report.environment.sut?.base_url ?? notAvailable}</dd></div>
+            <div><dt>{isChinese ? '执行主机' : 'Execution host'}</dt><dd>{report.environment.test_runner?.exec_host ?? notAvailable}</dd></div>
+            <div><dt>OS</dt><dd>{report.environment.test_runner?.os ?? notAvailable}</dd></div>
+            <div><dt>Python / pytest</dt><dd>{[report.environment.test_runner?.python_version, report.environment.test_runner?.pytest_version].filter(Boolean).join(' / ') || notAvailable}</dd></div>
+          </dl>
+        </section>
+      </div>
+
+      <section className="report-detail-card" aria-labelledby="report-risks-title">
+        <h2 id="report-risks-title">{isChinese ? '风险与建议' : 'Risks & recommendations'}</h2>
+        {report.risks.length ? (
+          <ul className="report-risks">
+            {report.risks.map((risk, index) => (
+              <li key={`${risk.title}-${index}`} className={`is-${risk.level}`}>
+                <div><span>{risk.level.toUpperCase()}</span><strong>{risk.title}</strong><small>{risk.category} · {risk.count}</small></div>
+                <p>{risk.recommendation}</p>
+                {risk.evidence.length ? <code>{risk.evidence[0]}</code> : null}
+              </li>
+            ))}
+          </ul>
+        ) : <p>{isChinese ? '未识别到风险。' : 'No risks identified.'}</p>}
+      </section>
+
+      <section className="report-detail-card report-results-card" aria-labelledby="report-results-title">
+        <h2 id="report-results-title">{isChinese ? '用例结果' : 'Case results'}</h2>
+        <div className="report-results-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>{isChinese ? '用例' : 'Case'}</th>
+                <th>Feature / {isChinese ? '级别' : 'Level'}</th>
+                <th>{isChinese ? '状态' : 'Status'}</th>
+                <th>{isChinese ? '耗时' : 'Duration'}</th>
+                <th>{isChinese ? '失败信息' : 'Failure'}</th>
+                <th>{isChinese ? '日志' : 'Log'}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.result_data.map((result) => (
+                <tr key={result.script_id}>
+                  <td><strong>{result.filename}</strong><small>{result.task_id ?? ''}</small></td>
+                  <td>{result.feature} · {result.level}</td>
+                  <td><span className={`report-case-status is-${result.status}`}>{result.status}</span></td>
+                  <td>{result.duration_seconds === null ? '—' : `${result.duration_seconds.toFixed(1)}s`}</td>
+                  <td>{result.error_message ?? result.failure_detail ?? '—'}</td>
+                  <td>
+                    {result.log_download_url ? (
+                      <a
+                        href={resolvePublicDownloadUrl(api, result.log_download_url)}
+                        download
+                      >
+                        {isChinese ? '下载用例日志' : 'Download case log'}
+                      </a>
+                    ) : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {confirmDelete ? (
+        <div className="report-delete-backdrop">
+          <section
+            ref={confirmationDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="report-delete-title"
+            className="report-delete-dialog"
+          >
+            <h2 id="report-delete-title">{isChinese ? '删除报告？' : 'Delete report?'}</h2>
+            <p>{isChinese
+              ? '此操作会删除持久化快照，且无法撤销。'
+              : 'This permanently removes the persisted snapshot and cannot be undone.'}</p>
+            {deletion.isError ? (
+              <p role="alert" className="is-error">
+                {deletion.error instanceof ApiError
+                  ? deletion.error.message
+                  : isChinese ? '删除失败。' : 'Delete failed.'}
+              </p>
+            ) : null}
+            <div>
+              <button
+                ref={confirmationCloseRef}
+                type="button"
+                onClick={() => {
+                  setConfirmDelete(false);
+                  queueMicrotask(() => moreActionsRef.current?.focus());
+                }}
+              >
+                {isChinese ? '取消' : 'Cancel'}
+              </button>
+              <button type="button" disabled={deletion.isPending} onClick={() => deletion.mutate()}>
+                {deletion.isPending
+                  ? isChinese ? '正在删除…' : 'Deleting…'
+                  : isChinese ? '永久删除' : 'Delete permanently'}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+    </div>
+  );
+}

@@ -1,11 +1,21 @@
-import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent
+} from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ApiError, getVersions, listReports } from '../api/client';
 import { MetricCard } from '../components/MetricCard';
 import { PageHeader } from '../components/PageHeader';
-import { PresentationOnlyButton } from '../components/PresentationOnlyButton';
+import { ReportGenerationModal } from '../components/ReportGenerationModal';
 import { getCopy } from '../i18n';
 import type {
   Language,
   NormalizedTaskStatus,
+  ReportListItem,
   RuntimeConfig,
   SutTarget,
   UiTaskStatus
@@ -337,6 +347,40 @@ function TrendChart({
   );
 }
 
+type ResultsTab = 'session' | 'persisted';
+
+function softwareVersionStorageKey(objectId: string) {
+  return `testwise.reportSoftwareVersion:${objectId}`;
+}
+
+function initialSoftwareVersion(sut: SutTarget) {
+  try {
+    return window.localStorage.getItem(softwareVersionStorageKey(sut.id)) ?? sut.version;
+  } catch {
+    return sut.version;
+  }
+}
+
+function hasExactSoftwareVersion(value: string) {
+  const normalized = value.trim();
+  return Boolean(normalized) && !/^(?:live|current|latest)$/i.test(normalized);
+}
+
+function persistedReportMatches(report: ReportListItem, search: string) {
+  if (!search) {
+    return true;
+  }
+  return [
+    report.title,
+    report.id,
+    report.software_version,
+    report.test_version,
+    report.conclusion.verdict,
+    report.created_by,
+    report.created_at
+  ].some((value) => value.toLocaleLowerCase().includes(search));
+}
+
 export function Results({
   language,
   selectedSut,
@@ -345,17 +389,103 @@ export function Results({
   runtimeConfig
 }: ResultsProps) {
   const t = getCopy(language);
+  const navigate = useNavigate();
+  const generateButtonRef = useRef<HTMLButtonElement>(null);
+  const sessionTaskSnapshot = useMemo(
+    () => uniqueTasks(sessionTasks, activeTask),
+    [activeTask, sessionTasks]
+  );
+  const hasSessionRows = runtimeConfig.enableMockFallback || sessionTaskSnapshot.length > 0;
+  const [activeTab, setActiveTab] = useState<ResultsTab>(() => (
+    hasSessionRows ? 'session' : 'persisted'
+  ));
   const [reportSearch, setReportSearch] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [generateOpen, setGenerateOpen] = useState(false);
+  const [softwareVersion, setSoftwareVersion] = useState(() => initialSoftwareVersion(selectedSut));
+  const [softwareVersionObjectId, setSoftwareVersionObjectId] = useState(selectedSut.id);
+  const [testVersionFilter, setTestVersionFilter] = useState('');
+  const [reportPage, setReportPage] = useState(0);
   const trendTitle = language === 'zh' ? '通过率趋势' : 'Pass rate trend';
   const trendPeriod = language === 'zh' ? '近 7 天' : 'Last 7 days';
   const searchReportsLabel = language === 'zh' ? '搜索报告或任务' : 'Search reports or tasks';
+  const resolvedApiBaseUrl = selectedSut.apiBaseUrl || runtimeConfig.apiBaseUrl;
+  const targetIdentity = useMemo(() => ({
+    id: selectedSut.id,
+    product: selectedSut.product,
+    scene: selectedSut.scene,
+    apiBaseUrl: resolvedApiBaseUrl
+  }), [resolvedApiBaseUrl, selectedSut.id, selectedSut.product, selectedSut.scene]);
+  const api = useMemo(() => ({ apiBaseUrl: targetIdentity.apiBaseUrl }), [targetIdentity.apiBaseUrl]);
+  const exactSoftwareVersion = hasExactSoftwareVersion(softwareVersion);
+  const versionsQuery = useQuery({
+    queryKey: ['versions', targetIdentity],
+    queryFn: () => getVersions(api),
+    enabled: !runtimeConfig.enableMockFallback && (activeTab === 'persisted' || filtersOpen)
+  });
+  const reportsQuery = useQuery({
+    queryKey: [
+      'reports',
+      targetIdentity,
+      {
+        softwareVersion: softwareVersion.trim(),
+        testVersion: testVersionFilter,
+        limit: 20,
+        offset: reportPage * 20
+      }
+    ],
+    queryFn: () => listReports(api, {
+      software_version: softwareVersion.trim(),
+      ...(testVersionFilter ? { test_version: testVersionFilter } : {}),
+      limit: 20,
+      offset: reportPage * 20
+    }),
+    enabled: !runtimeConfig.enableMockFallback
+      && activeTab === 'persisted'
+      && softwareVersionObjectId === selectedSut.id
+      && exactSoftwareVersion
+  });
+
+  useEffect(() => {
+    setSoftwareVersion(initialSoftwareVersion(selectedSut));
+    setSoftwareVersionObjectId(selectedSut.id);
+    setTestVersionFilter('');
+    setReportPage(0);
+  }, [selectedSut.id]);
+
+  const updateSoftwareVersion = (value: string) => {
+    setSoftwareVersion(value);
+    setSoftwareVersionObjectId(selectedSut.id);
+    setReportPage(0);
+    try {
+      window.localStorage.setItem(softwareVersionStorageKey(selectedSut.id), value);
+    } catch {
+      // Browsers may disable storage; the current edit still remains usable for this session.
+    }
+  };
+  const handleTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+      return;
+    }
+    event.preventDefault();
+    const nextTab: ResultsTab = event.key === 'ArrowLeft' || event.key === 'Home'
+      ? 'session'
+      : 'persisted';
+    setActiveTab(nextTab);
+    if (nextTab === 'persisted') {
+      setReportPage(0);
+    }
+    requestAnimationFrame(() => {
+      document.getElementById(`results-${nextTab}-tab`)?.focus();
+    });
+  };
   const viewModel = useMemo(() => {
     if (runtimeConfig.enableMockFallback) {
       return mockViewModel(language);
     }
 
     return liveViewModel(
-      uniqueTasks(sessionTasks, activeTask),
+      sessionTaskSnapshot,
       selectedSut,
       {
         success: t.success,
@@ -374,7 +504,7 @@ export function Results({
         reportPrefix: language === 'zh' ? '报告' : 'Report'
       }
     );
-  }, [activeTask, language, runtimeConfig.enableMockFallback, selectedSut, sessionTasks, t]);
+  }, [language, runtimeConfig.enableMockFallback, selectedSut, sessionTaskSnapshot, t]);
   const normalizedSearch = reportSearch.trim().toLocaleLowerCase();
   const filteredReports = normalizedSearch
     ? viewModel.reports.filter((report) => (
@@ -382,6 +512,10 @@ export function Results({
         .some((value) => value.toLocaleLowerCase().includes(normalizedSearch))
     ))
     : viewModel.reports;
+  const persistedReports = (reportsQuery.data?.reports ?? []).filter((report) => (
+    persistedReportMatches(report, normalizedSearch)
+  ));
+  const reportPageCount = Math.max(1, Math.ceil((reportsQuery.data?.total ?? 0) / 20));
   const maximumFailureCount = Math.max(...viewModel.failures.map((failure) => failure.count), 1);
 
   return (
@@ -391,15 +525,67 @@ export function Results({
         subtitle={t.resultsSubtitle}
         action={(
           <div className="results-header-actions">
-            <PresentationOnlyButton className="results-header-action results-filter-action">
+            <button
+              type="button"
+              className="results-header-action results-filter-action"
+              aria-expanded={filtersOpen}
+              onClick={() => setFiltersOpen((current) => !current)}
+            >
               {t.filterResults}
-            </PresentationOnlyButton>
-            <PresentationOnlyButton className="results-header-action results-export-action">
-              {language === 'zh' ? '导出' : 'Export'}
-            </PresentationOnlyButton>
+            </button>
+            <button
+              ref={generateButtonRef}
+              type="button"
+              className="results-header-action results-export-action"
+              aria-disabled={runtimeConfig.enableMockFallback || undefined}
+              onClick={() => {
+                if (!runtimeConfig.enableMockFallback) {
+                  setGenerateOpen(true);
+                }
+              }}
+            >
+              {language === 'zh' ? '生成报告' : 'Generate Report'}
+            </button>
           </div>
         )}
       />
+
+      {filtersOpen ? (
+        <section
+          className="results-filter-panel"
+          aria-label={language === 'zh' ? '报告筛选条件' : 'Report filters'}
+        >
+          <label>
+            <span>{language === 'zh' ? '被测软件版本' : 'Software/build version'}</span>
+            <input
+              type="text"
+              value={softwareVersion}
+              onChange={(event) => updateSoftwareVersion(event.target.value)}
+            />
+          </label>
+          <label>
+            <span>{language === 'zh' ? '测试批次（可选）' : 'Test batch (optional)'}</span>
+            <select
+              value={testVersionFilter}
+              onChange={(event) => {
+                setTestVersionFilter(event.target.value);
+                setReportPage(0);
+              }}
+              disabled={runtimeConfig.enableMockFallback || versionsQuery.isLoading}
+            >
+              <option value="">{language === 'zh' ? '全部批次' : 'All batches'}</option>
+              {(versionsQuery.data?.versions ?? []).map((version) => (
+                <option key={version.code} value={version.code}>{version.name} · {version.code}</option>
+              ))}
+            </select>
+          </label>
+          {!exactSoftwareVersion ? (
+            <p>{language === 'zh'
+              ? '请输入精确的软件版本或构建号。'
+              : 'Enter an exact software version or build.'}</p>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="results-metrics" aria-labelledby="results-metrics-title">
         <h2 className="sr-only" id="results-metrics-title">{t.resultsMetrics}</h2>
@@ -485,65 +671,204 @@ export function Results({
             <p>TRACEABLE ARTIFACTS</p>
             <h2 id="recent-reports-title">{t.recentReports}</h2>
           </div>
-          <label className="results-report-search">
-            <span className="results-report-search-glyph" aria-hidden="true">⌕</span>
-            <span className="sr-only">{searchReportsLabel}</span>
-            <input
-              type="search"
-              value={reportSearch}
-              aria-label={searchReportsLabel}
-              placeholder={searchReportsLabel}
-              onChange={(event) => setReportSearch(event.target.value)}
-            />
-          </label>
+          <div className="results-report-tools">
+            <div
+              className="results-report-tabs"
+              role="tablist"
+              aria-label={language === 'zh' ? '结果来源' : 'Result source'}
+            >
+              <button
+                id="results-session-tab"
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'session'}
+                aria-controls="results-report-panel"
+                tabIndex={activeTab === 'session' ? 0 : -1}
+                onKeyDown={handleTabKeyDown}
+                onClick={() => setActiveTab('session')}
+              >
+                {language === 'zh' ? '会话结果' : 'Session Results'}
+              </button>
+              <button
+                id="results-persisted-tab"
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'persisted'}
+                aria-controls="results-report-panel"
+                tabIndex={activeTab === 'persisted' ? 0 : -1}
+                onKeyDown={handleTabKeyDown}
+                onClick={() => {
+                  setActiveTab('persisted');
+                  setReportPage(0);
+                }}
+              >
+                {language === 'zh' ? '持久化报告' : 'Persisted Reports'}
+              </button>
+            </div>
+            <label className="results-report-search">
+              <span className="results-report-search-glyph" aria-hidden="true">⌕</span>
+              <span className="sr-only">{searchReportsLabel}</span>
+              <input
+                type="search"
+                value={reportSearch}
+                aria-label={searchReportsLabel}
+                placeholder={searchReportsLabel}
+                onChange={(event) => setReportSearch(event.target.value)}
+              />
+            </label>
+          </div>
         </div>
-        <div className="results-table-scroll">
-          <table aria-label={t.recentReports}>
-            <thead>
-              <tr>
-                <th>{language === 'zh' ? '报告' : 'Report'}</th>
-                <th>Object</th>
-                <th>{language === 'zh' ? '任务' : 'Task'}</th>
-                <th>{language === 'zh' ? '结果' : 'Result'}</th>
-                <th>{language === 'zh' ? '完成时间' : 'Completed'}</th>
-                <th>{language === 'zh' ? '操作' : 'Action'}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredReports.map((report) => (
-                <tr key={report.id}>
-                  <td className="results-report-title">{report.title}</td>
-                  <td>{report.object}</td>
-                  <td className="results-report-id">{report.id}</td>
-                  <td>
-                    <span
-                      className={`results-status-pill is-${report.resultTone}`}
-                      aria-label={language === 'zh'
-                        ? `${report.result}，通过率 ${report.passRate}`
-                        : `${report.result}, Pass rate ${report.passRate}`}
-                    >
-                      {report.result}
-                    </span>
-                  </td>
-                  <td>{report.completed}</td>
-                  <td>
-                    <button
-                      type="button"
-                      className="presentation-only-button results-report-action"
-                      aria-disabled="true"
-                      aria-label={language === 'zh'
-                        ? `${t.viewCases}：${report.title}，${report.id}`
-                        : `${t.viewCases}: ${report.title}, ${report.id}`}
-                    >
-                      {`${t.viewCases}  →`}
-                    </button>
-                  </td>
+        <div
+          id="results-report-panel"
+          className="results-table-scroll"
+          role="tabpanel"
+          aria-labelledby={`results-${activeTab}-tab`}
+        >
+          {activeTab === 'session' ? (
+            <table aria-label={t.recentReports}>
+              <thead>
+                <tr>
+                  <th>{language === 'zh' ? '报告' : 'Report'}</th>
+                  <th>Object</th>
+                  <th>{language === 'zh' ? '任务' : 'Task'}</th>
+                  <th>{language === 'zh' ? '结果' : 'Result'}</th>
+                  <th>{language === 'zh' ? '完成时间' : 'Completed'}</th>
+                  <th>{language === 'zh' ? '操作' : 'Action'}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filteredReports.map((report) => (
+                  <tr key={report.id}>
+                    <td className="results-report-title">{report.title}</td>
+                    <td>{report.object}</td>
+                    <td className="results-report-id">{report.id}</td>
+                    <td>
+                      <span
+                        className={`results-status-pill is-${report.resultTone}`}
+                        aria-label={language === 'zh'
+                          ? `${report.result}，通过率 ${report.passRate}`
+                          : `${report.result}, Pass rate ${report.passRate}`}
+                      >
+                        {report.result}
+                      </span>
+                    </td>
+                    <td>{report.completed}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="presentation-only-button results-report-action"
+                        aria-disabled="true"
+                        aria-label={language === 'zh'
+                          ? `${t.viewCases}：${report.title}，${report.id}`
+                          : `${t.viewCases}: ${report.title}, ${report.id}`}
+                      >
+                        {`${t.viewCases}  →`}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : !exactSoftwareVersion ? (
+            <p className="results-persisted-state" role="status">
+              {language === 'zh'
+                ? '请输入精确的软件版本或构建号后查询报告。'
+                : 'Enter an exact software version or build before querying reports.'}
+            </p>
+          ) : reportsQuery.isLoading ? (
+            <p className="results-persisted-state" role="status">
+              {language === 'zh' ? '正在加载持久化报告…' : 'Loading persisted reports…'}
+            </p>
+          ) : reportsQuery.isError ? (
+            <p className="results-persisted-state is-error" role="alert">
+              {reportsQuery.error instanceof ApiError
+                ? reportsQuery.error.message
+                : language === 'zh' ? '报告列表加载失败。' : 'Unable to load reports.'}
+            </p>
+          ) : (
+            <>
+              <table aria-label={t.recentReports} className="results-persisted-table">
+                <thead>
+                  <tr>
+                    <th>{language === 'zh' ? '报告' : 'Report'}</th>
+                    <th>{language === 'zh' ? '软件版本' : 'Software version'}</th>
+                    <th>{language === 'zh' ? '测试批次' : 'Test batch'}</th>
+                    <th>{language === 'zh' ? '结论' : 'Conclusion'}</th>
+                    <th>{language === 'zh' ? '创建时间' : 'Created'}</th>
+                    <th>{language === 'zh' ? '操作' : 'Action'}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {persistedReports.map((report) => (
+                    <tr key={report.id}>
+                      <td className="results-report-title">{report.title}</td>
+                      <td>{report.software_version}</td>
+                      <td className="results-report-id">{report.test_version}</td>
+                      <td>
+                        <span
+                          className={`results-status-pill is-${report.conclusion.passed ? 'success' : 'danger'}`}
+                          aria-label={`${report.conclusion.verdict}, ${report.summary.success_rate.toFixed(1)}%`}
+                        >
+                          {report.conclusion.verdict}
+                        </span>
+                      </td>
+                      <td>{displayTaskTime(report.created_at)}</td>
+                      <td>
+                        <Link
+                          className="results-report-action"
+                          to={`/results/${encodeURIComponent(report.id)}`}
+                        >
+                          {language === 'zh' ? '打开报告  →' : 'Open report  →'}
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                  {!persistedReports.length ? (
+                    <tr className="results-empty-row">
+                      <td>{language === 'zh' ? '没有匹配的持久化报告' : 'No matching persisted reports'}</td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+              <nav className="results-pagination" aria-label={language === 'zh' ? '报告分页' : 'Report pagination'}>
+                <button
+                  type="button"
+                  disabled={reportPage === 0}
+                  onClick={() => setReportPage((current) => Math.max(0, current - 1))}
+                >
+                  {language === 'zh' ? '上一页' : 'Previous'}
+                </button>
+                <span>{language === 'zh'
+                  ? `第 ${reportPage + 1} / ${reportPageCount} 页`
+                  : `Page ${reportPage + 1} of ${reportPageCount}`}</span>
+                <button
+                  type="button"
+                  disabled={reportPage + 1 >= reportPageCount}
+                  onClick={() => setReportPage((current) => current + 1)}
+                >
+                  {language === 'zh' ? '下一页' : 'Next'}
+                </button>
+              </nav>
+            </>
+          )}
         </div>
       </section>
+
+      {generateOpen ? (
+        <ReportGenerationModal
+          language={language}
+          selectedSut={selectedSut}
+          runtimeConfig={runtimeConfig}
+          softwareVersion={softwareVersion}
+          returnFocusRef={generateButtonRef}
+          onSoftwareVersionChange={updateSoftwareVersion}
+          onClose={() => setGenerateOpen(false)}
+          onCreated={(reportId) => {
+            setGenerateOpen(false);
+            navigate(`/results/${encodeURIComponent(reportId)}`);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
