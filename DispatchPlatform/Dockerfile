@@ -9,6 +9,7 @@ RUN npm run build
 FROM nginx:1.27-alpine
 
 ENV BACKEND_UPSTREAM=backend:3000
+ENV REPORT_BACKEND_UPSTREAM=backend:3001
 
 COPY deploy/nginx.conf /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
