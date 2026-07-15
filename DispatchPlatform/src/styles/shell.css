@@ -31,7 +31,7 @@
 .app-header__inner {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 496px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) max-content minmax(0, 1fr);
   align-items: center;
   width: 100%;
   max-width: 1440px;
@@ -61,10 +61,10 @@
 
 .desktop-navigation {
   display: grid;
-  grid-template-columns: repeat(7, 64px);
+  grid-template-columns: repeat(7, minmax(64px, max-content));
   align-items: center;
   gap: 8px;
-  width: 496px;
+  width: max-content;
   height: 72px;
   white-space: nowrap;
 }
@@ -73,8 +73,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 64px;
+  width: auto;
+  min-width: 64px;
   height: 40px;
+  padding: 0 8px;
   border-radius: 16px;
   color: var(--color-text-secondary);
   font-size: 15px;
@@ -497,7 +499,7 @@
   bottom: calc(100% + 10px);
 }
 
-@media (max-width: 1319px) {
+@media (max-width: 1329px) {
   .app-header__inner {
     grid-template-columns: minmax(0, 1fr) auto;
   }

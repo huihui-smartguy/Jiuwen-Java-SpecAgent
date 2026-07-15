@@ -122,18 +122,18 @@ describe('AppShell', () => {
     expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();
   });
 
-  test('encodes the approved 72px centered desktop header contract', () => {
+  test('encodes the approved 72px centered desktop header with adaptive English label widths', () => {
     expect(shellStyles).toMatch(/\.app-header\s*\{[^}]*height:\s*72px;[^}]*background:\s*#fff;/s);
-    expect(shellStyles).toMatch(/\.app-header__inner\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+496px\s+minmax\(0,\s*1fr\);[^}]*max-width:\s*1440px;[^}]*height:\s*72px;[^}]*padding:\s*0 40px;/s);
-    expect(shellStyles).toMatch(/\.desktop-navigation\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*repeat\(7,\s*64px\);[^}]*gap:\s*8px;/s);
-    expect(shellStyles).toMatch(/\.desktop-nav-link\s*\{[^}]*width:\s*64px;[^}]*height:\s*40px;[^}]*border-radius:\s*16px;[^}]*font-size:\s*15px;/s);
+    expect(shellStyles).toMatch(/\.app-header__inner\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+max-content\s+minmax\(0,\s*1fr\);[^}]*max-width:\s*1440px;[^}]*height:\s*72px;[^}]*padding:\s*0 40px;/s);
+    expect(shellStyles).toMatch(/\.desktop-navigation\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*repeat\(7,\s*minmax\(64px,\s*max-content\)\);[^}]*gap:\s*8px;[^}]*width:\s*max-content;/s);
+    expect(shellStyles).toMatch(/\.desktop-nav-link\s*\{[^}]*width:\s*auto;[^}]*min-width:\s*64px;[^}]*height:\s*40px;[^}]*padding:\s*0 8px;[^}]*border-radius:\s*16px;[^}]*font-size:\s*15px;/s);
     expect(shellStyles).toMatch(/\.gradient-ghost-logo\s*\{[^}]*width:\s*32px;[^}]*height:\s*32px;/s);
     expect(shellStyles).toMatch(/\.desktop-object-control\s*\{[^}]*width:\s*216px;/s);
     expect(shellStyles).toMatch(/\.object-control\s*\{[^}]*height:\s*44px;[^}]*border-radius:\s*16px;/s);
     expect(shellStyles).toMatch(/\.language-button,[\s\S]*?\.account-menu__trigger\s*\{[^}]*width:\s*44px;[^}]*height:\s*44px;/s);
     expect(shellStyles).toMatch(/\.language-button,[\s\S]*?\.account-menu__trigger\s*\{[^}]*font-weight:\s*500;/s);
     expect(shellStyles).toMatch(/\.account-menu__trigger\s*\{[^}]*font-weight:\s*700;/s);
-    expect(shellStyles).toMatch(/@media \(max-width:\s*1319px\)\s*\{[\s\S]*?\.app-header__inner\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto;[^}]*\}[\s\S]*?\.app-header__actions\s*\{[^}]*grid-column:\s*2;[^}]*\}/s);
+    expect(shellStyles).toMatch(/@media \(max-width:\s*1329px\)\s*\{[\s\S]*?\.app-header__inner\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto;[^}]*\}[\s\S]*?\.app-header__actions\s*\{[^}]*grid-column:\s*2;[^}]*\}/s);
   });
 
   test('clicks through every direct destination without exposing legacy or extra UI', async () => {
@@ -445,35 +445,38 @@ describe('AppShell', () => {
 
   test('the Tasks change-Object affordance focuses the desktop Object selector', async () => {
     const user = userEvent.setup();
-    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
+    const matchMedia = vi.fn().mockReturnValue({
       matches: false,
-      media: '(max-width: 1319px)',
+      media: '(max-width: 1329px)',
       onchange: null,
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
       addListener: vi.fn(),
       removeListener: vi.fn(),
       dispatchEvent: vi.fn()
-    }));
+    });
+    vi.stubGlobal('matchMedia', matchMedia);
     renderShell('/tasks');
 
     await user.click(screen.getByRole('button', { name: '更换对象' }));
 
+    expect(matchMedia).toHaveBeenCalledWith('(max-width: 1329px)');
     expect(within(screen.getByTestId('object-control')).getByLabelText('Object')).toHaveFocus();
   });
 
-  test('the Tasks change-Object affordance opens the drawer and focuses its Object selector below 1320px', async () => {
+  test('the Tasks change-Object affordance opens the drawer and focuses its Object selector below 1330px', async () => {
     const user = userEvent.setup();
-    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
+    const matchMedia = vi.fn().mockReturnValue({
       matches: true,
-      media: '(max-width: 1319px)',
+      media: '(max-width: 1329px)',
       onchange: null,
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
       addListener: vi.fn(),
       removeListener: vi.fn(),
       dispatchEvent: vi.fn()
-    }));
+    });
+    vi.stubGlobal('matchMedia', matchMedia);
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
       callback(0);
       return 1;
@@ -483,6 +486,7 @@ describe('AppShell', () => {
     await user.click(screen.getByRole('button', { name: '更换对象' }));
 
     const drawer = await screen.findByRole('dialog', { name: /导航|navigation/i });
+    expect(matchMedia).toHaveBeenCalledWith('(max-width: 1329px)');
     expect(within(drawer).getByLabelText('Object')).toHaveFocus();
   });
 

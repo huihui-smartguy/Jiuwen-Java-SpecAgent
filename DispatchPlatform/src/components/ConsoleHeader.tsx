@@ -154,7 +154,7 @@ export function ConsoleHeader({
     }
     lastObjectFocusRequestRef.current = objectFocusRequest;
 
-    const isDrawerLayout = window.matchMedia?.('(max-width: 1319px)').matches ?? false;
+    const isDrawerLayout = window.matchMedia?.('(max-width: 1329px)').matches ?? false;
     if (!isDrawerLayout) {
       desktopObjectRef.current?.focus();
       return;
