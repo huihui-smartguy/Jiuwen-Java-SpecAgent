@@ -2,6 +2,7 @@ import { ChevronDown, Menu, X } from 'lucide-react';
 import { useEffect, useRef, type Ref } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { getCopy } from '../i18n';
+import { objectOptionLabel } from '../objectLabels';
 import type { AuthConfig, Language, SutTarget } from '../types';
 import { AccountMenu } from './AccountMenu';
 import { GradientGhostLogo } from './GradientGhostLogo';
@@ -61,7 +62,7 @@ function ObjectControl({
       >
         {objects.map((object) => (
           <option key={object.id} value={object.id}>
-            {object.product} {object.scene}
+            {objectOptionLabel(object, objects)}
           </option>
         ))}
       </select>

@@ -23,10 +23,14 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
   const [language, setLanguage] = useState<Language>(runtimeConfig.defaultLanguage);
   const [selectedSutId, setSelectedSutId] = useState(runtimeConfig.sutTargets[0].id);
   const [activeTask, setActiveTask] = useState<NormalizedTaskStatus | null>(() => (
-    runtimeConfig.enableMockFallback ? initialActiveTask : null
+    runtimeConfig.enableMockFallback
+      ? { ...initialActiveTask, sourceSut: { ...runtimeConfig.sutTargets[0] } }
+      : null
   ));
   const [sessionTasks, setSessionTasks] = useState<NormalizedTaskStatus[]>(() => (
-    runtimeConfig.enableMockFallback ? [initialActiveTask] : []
+    runtimeConfig.enableMockFallback
+      ? [{ ...initialActiveTask, sourceSut: { ...runtimeConfig.sutTargets[0] } }]
+      : []
   ));
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [objectFocusRequest, setObjectFocusRequest] = useState(0);
@@ -60,15 +64,22 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
 
   const sharedProps = { language, selectedSut, activeTask, runtimeConfig };
   const handleTaskCreated = useCallback((response: TaskCreateResponse) => {
-    const task = normalizeCreatedTask(response);
+    const task = {
+      ...normalizeCreatedTask(response),
+      sourceSut: { ...selectedSut }
+    };
     setActiveTask(task);
     setSessionTasks((current) => [task, ...current.filter((item) => item.task_id !== task.task_id)]);
-  }, []);
+  }, [selectedSut]);
   const handleTaskStatusChange = useCallback((task: NormalizedTaskStatus) => {
-    setActiveTask((current) => (current?.task_id === task.task_id ? task : current));
+    setActiveTask((current) => (current?.task_id === task.task_id
+      ? { ...task, sourceSut: task.sourceSut ?? current.sourceSut }
+      : current));
     setSessionTasks((current) => {
       const hasTask = current.some((item) => item.task_id === task.task_id);
-      const nextTasks = current.map((item) => (item.task_id === task.task_id ? task : item));
+      const nextTasks = current.map((item) => (item.task_id === task.task_id
+        ? { ...task, sourceSut: task.sourceSut ?? item.sourceSut }
+        : item));
       return hasTask ? nextTasks : [task, ...nextTasks];
     });
   }, []);

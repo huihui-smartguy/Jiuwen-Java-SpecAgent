@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { PageHeader } from '../components/PageHeader';
 import { PresentationOnlyButton } from '../components/PresentationOnlyButton';
 import { getCopy } from '../i18n';
+import { objectOptionLabel } from '../objectLabels';
 import type { Language, RuntimeConfig, SutTarget } from '../types';
 
 const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
@@ -119,7 +120,7 @@ export function SettingsPage({
                 >
                   {runtimeConfig.sutTargets.map((object) => (
                     <option key={object.id} value={object.id}>
-                      {object.name}
+                      {objectOptionLabel(object, runtimeConfig.sutTargets, 'name')}
                     </option>
                   ))}
                 </select>

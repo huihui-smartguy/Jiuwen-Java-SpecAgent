@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { resolveRuntimeConfig } from '../config/runtime';
 import { activeTask, mockObservationEvents } from '../data/mockData';
-import type { Language, NormalizedTaskStatus, RuntimeConfig } from '../types';
+import type { Language, NormalizedTaskStatus, RuntimeConfig, SutTarget } from '../types';
 import { Observation } from './Observation';
 
 function mockJson(body: unknown, ok = true, status = 200) {
@@ -48,6 +48,7 @@ type ObservationOverrides = {
   task?: NormalizedTaskStatus;
   language?: Language;
   runtimeOverrides?: Partial<RuntimeConfig>;
+  selectedSut?: SutTarget;
   onTaskStatusChange?: ReturnType<typeof vi.fn>;
 };
 
@@ -64,7 +65,7 @@ function renderObservation(overrides: ObservationOverrides = {}) {
       <QueryClientProvider client={client}>
         <Observation
           language={merged.language ?? 'en'}
-          selectedSut={runtimeConfig.sutTargets[0]}
+          selectedSut={merged.selectedSut ?? runtimeConfig.sutTargets[0]}
           activeTask={task}
           runtimeConfig={runtimeConfig}
           onTaskStatusChange={merged.onTaskStatusChange ?? vi.fn()}
@@ -89,6 +90,60 @@ afterEach(() => {
 });
 
 describe('Observation', () => {
+  test('keeps polling, logs, cancellation, and Object identity bound to the task origin', async () => {
+    const user = userEvent.setup();
+    const originSut: SutTarget = {
+      id: 'origin-object',
+      name: 'Origin Object',
+      product: 'Origin product',
+      scene: 'API',
+      version: 'v1',
+      apiBaseUrl: '/origin-api',
+      status: 'healthy'
+    };
+    const newlySelectedSut: SutTarget = {
+      id: 'new-object',
+      name: 'New Object',
+      product: 'New product',
+      scene: 'API',
+      version: 'v2',
+      apiBaseUrl: '/new-api',
+      status: 'healthy'
+    };
+    const originTask = {
+      ...activeTask,
+      sourceSut: originSut
+    } as NormalizedTaskStatus & { sourceSut: SutTarget };
+    const fetchSpy = mockTaskApi([activeTask], [{
+      success: true,
+      task_id: activeTask.task_id,
+      message: 'Cancellation requested'
+    }]);
+
+    renderObservation({
+      task: originTask,
+      selectedSut: newlySelectedSut,
+      runtimeOverrides: {
+        enableMockFallback: false,
+        sutTargets: [originSut, newlySelectedSut]
+      }
+    });
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledWith(
+      `/origin-api/tasks/${activeTask.task_id}`,
+      expect.any(Object)
+    ));
+    expect(screen.getByText('Origin Object')).toBeInTheDocument();
+    expect(screen.queryByText('New Object')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /cancel task/i }));
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledWith(
+      `/origin-api/tasks/${activeTask.task_id}`,
+      expect.objectContaining({ method: 'DELETE' })
+    ));
+    expect(fetchSpy.mock.calls.some(([input]) => String(input).startsWith('/new-api/tasks/'))).toBe(false);
+  });
+
   test('owns the approved Observe desktop geometry from hero through the lower grid', async () => {
     mockTaskApi([activeTask]);
 

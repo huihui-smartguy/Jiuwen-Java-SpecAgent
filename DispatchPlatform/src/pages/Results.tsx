@@ -244,15 +244,15 @@ function liveViewModel(
     reportPrefix: string;
   }
 ): ResultsViewModel {
-  const object = `${selectedSut.product} ${selectedSut.scene}`.trim();
   const reports = tasks.map((task): ReportRow => {
     const result = resultForTask(task, labels);
     const passRateValue = passRateForTask(task);
     const sourceTime = task.completed_at;
+    const taskSut = task.sourceSut ?? selectedSut;
     return {
       title: `${notes.reportPrefix} · ${task.task_id}`,
       id: task.task_id,
-      object,
+      object: `${taskSut.product} ${taskSut.scene}`.trim(),
       result: result.label,
       resultTone: result.tone,
       passRate: passRateValue === undefined ? '—' : `${passRateValue.toFixed(1)}%`,

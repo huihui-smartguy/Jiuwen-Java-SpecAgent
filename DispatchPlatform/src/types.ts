@@ -191,6 +191,8 @@ export interface NormalizedTaskStatus extends TaskStatusResponse {
   isTerminal: boolean;
   canExportLogs: boolean;
   logDownloadUrl?: string;
+  /** Immutable Object snapshot used to keep task-scoped requests on their originating API. */
+  sourceSut?: SutTarget;
 }
 
 export interface ApiContext {

@@ -28,6 +28,8 @@ The approved Figma file `TestWise Antigravity Console Demo` (`dZShT2fYtwd9cCYCXp
 - Kept the global selector label `Object` in both Chinese and English modes, as approved.
 - Corrected Results report semantics, literal glyphs, failure geometry/colors, table scrolling, bilingual authored content, and live failure totals.
 - Corrected Tasks discovery caching so Object identity includes ID, product, scene, and resolved API endpoint.
+- Bound each session task to an immutable originating Object snapshot so status polling, logs, cancellation, and Results attribution cannot move to a newly selected endpoint.
+- Disambiguated duplicate native Object options by ID only when labels collide, without changing the approved closed selector summary.
 - Added responsive containment for Observe and Tasks after the full breakpoint matrix exposed fixed-width descendants.
 
 ## Preserved behavior and boundaries
@@ -41,10 +43,10 @@ The approved Figma file `TestWise Antigravity Console Demo` (`dZShT2fYtwd9cCYCXp
 
 Executed from `DispatchPlatform` after the final responsive corrections:
 
-- `npm test -- --run`: 16 test files, 139 tests passed, 0 failed.
+- `npm test -- --run`: 16 test files, 142 tests passed, 0 failed.
 - `npm run build`: TypeScript project build and Vite production build succeeded.
 - `VITE_BASE_PATH=/testwise/ npm run build`: subpath production build succeeded.
-- Generated `dist/index.html` references `/testwise/assets/index-DrGJPUQL.js` and `/testwise/assets/index-Db8h6cVS.css` in the verified subpath build.
+- Generated `dist/index.html` references `/testwise/assets/index-v-Tc95_B.js` and `/testwise/assets/index-Db8h6cVS.css` in the verified subpath build.
 - `git diff --check`: passed with no whitespace errors.
 
 ## Browser and interaction QA

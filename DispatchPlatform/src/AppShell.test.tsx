@@ -348,11 +348,49 @@ describe('AppShell', () => {
     const user = userEvent.setup();
     renderShell('/tasks');
 
-    await user.selectOptions(screen.getByLabelText('Object'), 'python-sut');
+    await user.selectOptions(
+      within(screen.getByTestId('object-control')).getByLabelText('Object'),
+      'python-sut'
+    );
 
     const summary = screen.getByTestId('task-context-summary');
     expect(within(summary).getByText(/高码python/i)).toBeInTheDocument();
     expect(within(summary).getByText(/API/i)).toBeInTheDocument();
+  });
+
+  test('disambiguates duplicate Object choices without changing the approved selected summary', () => {
+    renderShell('/settings', {
+      sutTargets: [
+        {
+          id: 'twin-a',
+          name: 'Twin Object',
+          product: 'Twin',
+          scene: 'Scene',
+          version: 'v1',
+          apiBaseUrl: '/twin-a-api',
+          status: 'healthy'
+        },
+        {
+          id: 'twin-b',
+          name: 'Twin Object',
+          product: 'Twin',
+          scene: 'Scene',
+          version: 'v2',
+          apiBaseUrl: '/twin-b-api',
+          status: 'healthy'
+        }
+      ]
+    });
+
+    const control = screen.getByTestId('object-control');
+    expect(control).toHaveTextContent('Twin Scene');
+    expect(within(control).getByRole('option', { name: 'Twin Scene · twin-a' })).toBeInTheDocument();
+    expect(within(control).getByRole('option', { name: 'Twin Scene · twin-b' })).toBeInTheDocument();
+    const settingsControl = screen.getByRole('combobox', { name: '默认 Object' });
+    expect(within(settingsControl).getByRole('option', { name: 'Twin Object · twin-a' }))
+      .toBeInTheDocument();
+    expect(within(settingsControl).getByRole('option', { name: 'Twin Object · twin-b' }))
+      .toBeInTheDocument();
   });
 
   test('shares AppShell-owned Object and language state with Settings without persistence', async () => {
@@ -542,17 +580,51 @@ describe('AppShell', () => {
       }
       return Promise.reject(new Error(`Unexpected request: ${url.pathname}`));
     });
-    renderShell('/tasks', { enableMockFallback: false });
+    renderShell('/tasks', {
+      enableMockFallback: false,
+      sutTargets: [
+        {
+          id: 'java-sut',
+          name: '营销系统 Java SUT',
+          product: '高码java',
+          scene: '场景',
+          version: 'v2.4.1',
+          apiBaseUrl: '/java-api',
+          status: 'healthy'
+        },
+        {
+          id: 'python-sut',
+          name: '高码 Python 验证环境',
+          product: '高码python',
+          scene: 'API',
+          version: 'v1.8.0',
+          apiBaseUrl: '/python-api',
+          status: 'healthy'
+        }
+      ]
+    });
 
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Feature' })).toHaveValue('Shell feature'));
     await waitFor(() => expect(screen.getByRole('button', { name: '启动执行' })).toBeEnabled());
     await user.click(screen.getByRole('button', { name: '启动执行' }));
     expect(await screen.findByRole('heading', { name: '执行观测' })).toBeInTheDocument();
 
+    await user.selectOptions(
+      within(screen.getByTestId('object-control')).getByLabelText('Object'),
+      'python-sut'
+    );
+    expect(screen.getByText('营销系统 Java SUT')).toBeInTheDocument();
+    expect(fetchSpy.mock.calls.some(([input]) => (
+      new URL(String(input), 'http://local.test').pathname
+        .startsWith('/python-api/tasks/task_from_app_shell')
+    ))).toBe(false);
+
     await user.click(screen.getByRole('link', { name: '结果' }));
 
     const reports = await screen.findByRole('region', { name: '最近报告' });
     expect(within(reports).getByText('task_from_app_shell')).toBeInTheDocument();
+    expect(within(reports).getByText('高码java 场景')).toBeInTheDocument();
+    expect(within(reports).queryByText('高码python API')).not.toBeInTheDocument();
     expect(within(reports).getAllByRole('row')).toHaveLength(2);
     expect(fetchSpy.mock.calls.filter(([input]) => (
       new URL(String(input), 'http://local.test').pathname.includes('/reports')

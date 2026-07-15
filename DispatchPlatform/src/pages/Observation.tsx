@@ -118,9 +118,10 @@ export function Observation({
 }: PageProps) {
   const t = getCopy(language);
   const [cancellationRequestedTaskId, setCancellationRequestedTaskId] = useState<string>();
+  const taskSut = activeTask.sourceSut ?? selectedSut;
   const api = useMemo(
-    () => ({ apiBaseUrl: selectedSut.apiBaseUrl || runtimeConfig.apiBaseUrl }),
-    [runtimeConfig.apiBaseUrl, selectedSut.apiBaseUrl]
+    () => ({ apiBaseUrl: taskSut.apiBaseUrl || runtimeConfig.apiBaseUrl }),
+    [runtimeConfig.apiBaseUrl, taskSut.apiBaseUrl]
   );
   const taskQuery = useQuery<TaskStatusQueryResult>({
     queryKey: ['task-status', api.apiBaseUrl, activeTask.task_id],
@@ -194,9 +195,12 @@ export function Observation({
 
   useEffect(() => {
     if (taskQuery.data) {
-      onTaskStatusChange(taskQuery.data.task);
+      onTaskStatusChange({
+        ...taskQuery.data.task,
+        sourceSut: taskSut
+      });
     }
-  }, [onTaskStatusChange, taskQuery.data]);
+  }, [onTaskStatusChange, taskQuery.data, taskSut]);
 
   return (
     <div className="page-stack observation-page">
@@ -231,8 +235,8 @@ export function Observation({
         />
         <ObservationMetric
           label="Object"
-          value={selectedSut.name}
-          detail={`${selectedSut.version} · ${t[selectedSut.status]}`}
+          value={taskSut.name}
+          detail={`${taskSut.version} · ${t[taskSut.status]}`}
         />
       </section>
 

@@ -67,6 +67,46 @@ afterEach(() => {
 });
 
 describe('Results', () => {
+  test('labels each live session report with the Object that created that task', () => {
+    const runtimeConfig = resolveRuntimeConfig({
+      enableMockFallback: false,
+      sutTargets: [
+        {
+          id: 'origin-object',
+          name: 'Origin Object',
+          product: 'Origin product',
+          scene: 'API',
+          version: 'v1',
+          apiBaseUrl: '/origin-api',
+          status: 'healthy'
+        },
+        {
+          id: 'new-object',
+          name: 'New Object',
+          product: 'New product',
+          scene: 'API',
+          version: 'v2',
+          apiBaseUrl: '/new-api',
+          status: 'healthy'
+        }
+      ]
+    });
+    const originTask = task('task-origin', {
+      sourceSut: runtimeConfig.sutTargets[0]
+    } as Partial<NormalizedTaskStatus>);
+
+    renderResults({
+      runtimeConfig,
+      selectedSut: runtimeConfig.sutTargets[1],
+      activeTask: originTask,
+      sessionTasks: [originTask]
+    });
+
+    const reports = screen.getByRole('region', { name: '最近报告' });
+    expect(within(reports).getByText('Origin product API')).toBeInTheDocument();
+    expect(within(reports).queryByText('New product API')).not.toBeInTheDocument();
+  });
+
   test('keeps Results level copy distinct from the existing log-level filter copy', () => {
     expect(copy.zh.allLevels).toBe('全部日志级别');
     expect(copy.zh.allResultLevels).toBe('全部级别');
