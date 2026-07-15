@@ -529,7 +529,8 @@ describe('Observation', () => {
   test('shows the selected test batch and opens a keyboard-accessible case-status drawer', async () => {
     const user = userEvent.setup();
     const task = { ...activeTask, version: 'release1' };
-    const fetchSpy = mockTaskApi([task], [], [{
+    const { version: _omittedVersion, ...statusWithoutVersion } = task;
+    const fetchSpy = mockTaskApi([statusWithoutVersion], [], [{
       success: true,
       task_id: task.task_id,
       scripts_status: [
@@ -560,6 +561,7 @@ describe('Observation', () => {
     renderObservation({ task });
 
     const control = screen.getByRole('region', { name: 'Task control' });
+    await waitFor(() => expect(within(control).getByRole('status')).toHaveTextContent('Connected'));
     expect(within(control).getByText('Test batch')).toBeInTheDocument();
     expect(within(control).getByText('release1')).toBeInTheDocument();
     const trigger = within(control).getByRole('button', { name: 'View case status' });

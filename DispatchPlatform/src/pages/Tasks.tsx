@@ -126,8 +126,9 @@ export function Tasks({
   });
 
   const features = featuresQuery.data ?? emptyFeatures;
+  const featureNames = useMemo(() => features.map((feature) => feature.name), [features]);
   const scriptQuery = useQuery({
-    queryKey: ['scripts', targetIdentity, mode, selectedFeature, selectedLevel],
+    queryKey: ['scripts', targetIdentity, mode, selectedFeature, selectedLevel, featureNames],
     queryFn: async (): Promise<Script[]> => {
       const query = {
         product: targetIdentity.product,
@@ -136,6 +137,16 @@ export function Tasks({
         level: mode === 'level' ? selectedLevel : undefined
       };
       try {
+        if (mode === 'scene') {
+          const responses = await Promise.all(featureNames.map((feature) => getScripts(api, {
+            product: targetIdentity.product,
+            scene: targetIdentity.scene,
+            feature
+          })));
+          return [...new Map(
+            responses.flatMap((response) => response.scripts).map((script) => [script.id, script])
+          ).values()];
+        }
         return (await getScripts(api, query)).scripts;
       } catch (error) {
         if (runtimeConfig.enableMockFallback) {
@@ -147,7 +158,10 @@ export function Tasks({
         }
         throw error;
       }
-    }
+    },
+    enabled: mode === 'scene'
+      ? featuresQuery.isSuccess && featureNames.length > 0
+      : !requiresFeature || Boolean(selectedFeature)
   });
 
   const scripts = scriptQuery.data ?? emptyScripts;

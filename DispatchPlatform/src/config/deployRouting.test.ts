@@ -30,8 +30,10 @@ describe('production API routing', () => {
     expect(nginx).toContain('set $report_backend_upstream ${REPORT_BACKEND_UPSTREAM};');
     expect(nginx).toContain(exactReport);
     expect(nginx).toContain(nestedReports);
-    expect(nginx).toContain('proxy_pass http://$report_backend_upstream/api/reports;');
-    expect(nginx).toContain('proxy_pass http://$report_backend_upstream/api/reports/;');
+    expect(nginx.match(/proxy_pass http:\/\/\$report_backend_upstream;/g)).toHaveLength(2);
+    expect(nginx).toContain('proxy_pass http://$backend_upstream;');
+    expect(nginx).not.toContain('proxy_pass http://$report_backend_upstream/api/reports');
+    expect(nginx).not.toContain('proxy_pass http://$backend_upstream/api/');
     expect(nginx.indexOf(exactReport)).toBeLessThan(nginx.indexOf(remainingApi));
     expect(nginx.indexOf(nestedReports)).toBeLessThan(nginx.indexOf(remainingApi));
 

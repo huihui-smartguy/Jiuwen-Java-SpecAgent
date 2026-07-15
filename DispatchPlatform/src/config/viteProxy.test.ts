@@ -39,31 +39,33 @@ describe('development API proxy', () => {
     );
 
     expect(Object.keys(proxy ?? {})).toEqual([
-      '^/api/reports(?:/|$)',
+      '^/api/reports(?:[/?]|$)',
       '/api',
-      '^/testwise/api/reports(?:/|$)',
+      '^/testwise/api/reports(?:[/?]|$)',
       '/testwise/api'
     ]);
-    expect(proxy?.['^/api/reports(?:/|$)']).toMatchObject({
+    expect(proxy?.['^/api/reports(?:[/?]|$)']).toMatchObject({
       target: 'http://backend.example.test:3001',
       changeOrigin: false
     });
-    expect(proxy?.['^/testwise/api/reports(?:/|$)']).toMatchObject({
+    expect(proxy?.['^/testwise/api/reports(?:[/?]|$)']).toMatchObject({
       target: 'http://backend.example.test:3001',
       changeOrigin: false
     });
-    expect(proxy?.['^/testwise/api/reports(?:/|$)'].rewrite?.('/testwise/api/reports/report-1')).toBe(
+    expect(proxy?.['^/testwise/api/reports(?:[/?]|$)'].rewrite?.('/testwise/api/reports/report-1')).toBe(
       '/api/reports/report-1'
     );
     expect(proxy?.['/testwise/api']).toMatchObject({
       target: 'http://backend.example.test:3000'
     });
 
-    const rootReportMatcher = new RegExp('^/api/reports(?:/|$)');
-    const deployedReportMatcher = new RegExp('^/testwise/api/reports(?:/|$)');
+    const rootReportMatcher = new RegExp('^/api/reports(?:[/?]|$)');
+    const deployedReportMatcher = new RegExp('^/testwise/api/reports(?:[/?]|$)');
     expect(rootReportMatcher.test('/api/reports')).toBe(true);
+    expect(rootReportMatcher.test('/api/reports?software_version=build-1')).toBe(true);
     expect(rootReportMatcher.test('/api/reports/report-1')).toBe(true);
     expect(rootReportMatcher.test('/api/reportsfoo')).toBe(false);
+    expect(deployedReportMatcher.test('/testwise/api/reports?limit=20')).toBe(true);
     expect(deployedReportMatcher.test('/testwise/api/reports/report-1')).toBe(true);
     expect(deployedReportMatcher.test('/testwise/api/reportsfoo')).toBe(false);
   });

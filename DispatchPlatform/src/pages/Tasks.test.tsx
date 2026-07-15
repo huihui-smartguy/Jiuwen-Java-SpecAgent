@@ -505,6 +505,16 @@ describe('task creation contracts', () => {
 
     await user.click(screen.getByRole('radio', { name: '整个场景' }));
     await user.selectOptions(await screen.findByRole('combobox', { name: '测试批次' }), 'release2');
+    await waitFor(() => expect(fetchSpy.mock.calls.some(([input]) => {
+      const url = new URL(String(input), 'http://local.test');
+      return url.pathname.endsWith('/scripts') && url.searchParams.has('feature');
+    })).toBe(true));
+    expect(fetchSpy.mock.calls.some(([input]) => {
+      const url = new URL(String(input), 'http://local.test');
+      return url.pathname.endsWith('/scripts') &&
+        !url.searchParams.has('feature') &&
+        !url.searchParams.has('level');
+    })).toBe(false);
     expect(screen.getByTestId('task-mode-summary')).toHaveTextContent('Scene');
     expect(screen.getByTestId('task-version-summary')).toHaveTextContent('release2');
     await user.click(screen.getByRole('button', { name: '启动执行' }));

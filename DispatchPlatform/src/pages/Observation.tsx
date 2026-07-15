@@ -173,7 +173,15 @@ export function Observation({
       void taskQuery.refetch();
     }
   });
-  const task = taskQuery.isError ? asPollingError(activeTask) : taskQuery.data?.task ?? activeTask;
+  const task = taskQuery.isError
+    ? asPollingError(activeTask)
+    : taskQuery.data?.task
+      ? {
+          ...taskQuery.data.task,
+          version: taskQuery.data.task.version ?? activeTask.version,
+          sourceSut: taskQuery.data.task.sourceSut ?? activeTask.sourceSut
+        }
+      : activeTask;
   const scriptStatusQuery = useQuery<TaskScriptStatusResponse>({
     queryKey: ['task-script-status', api.apiBaseUrl, task.task_id],
     queryFn: async () => {
@@ -240,10 +248,11 @@ export function Observation({
     if (taskQuery.data) {
       onTaskStatusChange({
         ...taskQuery.data.task,
+        version: taskQuery.data.task.version ?? activeTask.version,
         sourceSut: taskSut
       });
     }
-  }, [onTaskStatusChange, taskQuery.data, taskSut]);
+  }, [activeTask.version, onTaskStatusChange, taskQuery.data, taskSut]);
 
   const closeCaseStatus = () => {
     setCaseStatusOpen(false);

@@ -11,7 +11,7 @@ function escapeRegExp(value: string): string {
 }
 
 function reportProxyContext(apiPath: string): string {
-  return `^${escapeRegExp(apiPath)}/reports(?:/|$)`;
+  return `^${escapeRegExp(apiPath)}/reports(?:[/?]|$)`;
 }
 
 export function createApiProxy(
