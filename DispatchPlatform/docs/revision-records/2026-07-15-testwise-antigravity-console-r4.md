@@ -79,15 +79,17 @@ The approved Figma frames define the 1440px desktop composition. Narrower layout
 
 ## Deployment evidence
 
-Status: pending atomic production deployment.
+Status: atomically deployed and verified.
 
-- Deployed source commit: pending
-- Release path: pending
-- Artifact SHA-256: pending
-- Previous release / rollback target: pending
-- Production runtime assertions: pending
-- Nginx validation: pending
-- Seven-route and asset smoke test: pending
-- Deployment timestamp (Asia/Shanghai): pending
+- Deployed source commit: `b8e99d74ae0bf2ef3f8696e6671b8d496f2c1989`
+- Release path: `/data1/testwise/releases/20260715-084123-b8e99d7`
+- Artifact SHA-256: `edf323bbccdeaab4aaa657387bf0cace7e4b9ffcb6ecae6c8ca6600594bb84c0`
+- Previous release / rollback target: `/data1/testwise/releases/20260715-005815-175b133`
+- Production runtime assertions: passed for `apiBaseUrl: /testwise/api`, `deploymentMode: process`, `defaultLanguage: zh`, `enableMockFallback: false`, and all configured Object API bases.
+- Nginx validation: `nginx -t` passed before and after the atomic symlink switch; the backend remained listening on port `3000`.
+- Seven-route and asset smoke test: `/testwise/`, `/testwise/tasks`, `/testwise/observation`, `/testwise/results`, `/testwise/scripts`, `/testwise/knowledge`, and `/testwise/settings` returned `200`; the hashed JS/CSS assets returned their correct content types and matched the release files byte-for-byte.
+- API smoke test: public feature discovery and valid feature-scoped script discovery passed, as did the direct backend feature probe.
+- Browser smoke test: all seven navigation options were clicked in production; the empty-session Observe guard correctly returned users to Tasks, the remaining destinations showed their approved H1, and no production error-level console messages were recorded.
+- Deployment timestamp (Asia/Shanghai): `2026-07-15 08:41:23 CST`
 
-This section must be updated with sanitized values after deployment. Credentials, tokens, raw sensitive responses, and passwords must never be recorded.
+No credential, token, raw sensitive response, or password is recorded in this revision record.
