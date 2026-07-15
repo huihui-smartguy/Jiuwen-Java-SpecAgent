@@ -57,15 +57,19 @@ The proposed variants are grouped under section `63:2`, labelled “Proposed –
 
 ## Deployment evidence
 
-Status: pending controlled deployment.
+Status: atomically deployed and verified.
 
-- Deployed source commit: pending
-- Release path: pending
-- Previous release / rollback target: pending
-- Controlled task verification ID: pending
-- Temporary report verification ID and deletion result: pending
-- Deployment timestamp (Asia/Shanghai): pending
-
-This section will be finalized immediately after the atomic server rollout and acceptance checks.
+- Deployed source commit: `0362c0447e8ceb482c84195f9cf7560e32031bcd`
+- Release path: `/data1/testwise/releases/20260715-172745-0362c04`
+- Previous release / rollback target: `/data1/testwise/releases/20260715-092046-f129efa`
+- Main JavaScript SHA-256: `288badeb1559c4231388c742776b89835adc7c12743f62f0927552c6d800b681`
+- Installed Nginx include SHA-256: `0302e354c799e80e88b620c55f8f7942d3a1d87bd9c6e0cad8e075480b0ef9b7`
+- The prior runtime configuration was preserved byte-for-byte. Nginx validation passed before and after the switch, and both backend listeners remained available.
+- Public health, runtime, task versions, Object statistics, report listing, application assets, root SPA, and report-detail SPA refresh all returned `200` from the new release.
+- Live 1440×1100 browser captures verified Tasks and Results against the deployed `/testwise/` routes.
+- Controlled task verification: `task-a72e7e54`, test batch `release1`, one read-only API-key-list script. The task lifecycle reached a valid terminal `failed` state because the backend runner returned a test-command failure; status, version, progress, and failure counts remained available through the public gateway.
+- Temporary report verification: `36835e69-22cb-4ab1-9adc-adeb2e1d0ecc`, title `[TEMP VERIFY] TestWise backend adaptation 2026-07-15 task-a72e7e54`. Create, exact-version list, detail, three conclusion gates, Markdown download, and HTML download succeeded. Its narrowly scoped snapshot contained zero result rows, so non-empty case rendering remains covered by the automated contract fixtures rather than this live artifact.
+- Only that temporary report was deleted. Deletion returned `200`; the exact-version list returned zero reports and subsequent detail returned `404`.
+- Deployment timestamp (Asia/Shanghai): `2026-07-15 17:37:50 CST`
 
 No credential, token, raw sensitive response, backend filesystem path, or password is recorded in this revision record.
