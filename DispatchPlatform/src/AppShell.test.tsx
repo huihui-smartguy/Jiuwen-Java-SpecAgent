@@ -548,6 +548,19 @@ describe('AppShell', () => {
           filters: {}
         }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
       }
+      if (url.pathname.endsWith('/versions')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          success: true,
+          default_version: 'release1',
+          versions: [{
+            code: 'release1',
+            name: 'Release 1',
+            description: 'Stable test batch',
+            created_at: '2026-07-01T00:00:00Z',
+            is_default: true
+          }]
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+      }
       if (url.pathname.endsWith('/tasks') && init?.method === 'POST') {
         return Promise.resolve(new Response(JSON.stringify({
           success: true,
@@ -557,7 +570,8 @@ describe('AppShell', () => {
           queue_position: 1,
           total_scripts: 1,
           created_at: '2026-07-14T10:42:00',
-          estimated_duration: '1 minute'
+          estimated_duration: '1 minute',
+          version: 'release1'
         }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
       }
       if (url.pathname.endsWith('/tasks/task_from_app_shell/logs')) {
@@ -578,7 +592,8 @@ describe('AppShell', () => {
             executed_scripts: 0,
             failed_scripts: 0,
             queue_position: 1,
-            started_at: '2026-07-14T10:42:00'
+            started_at: '2026-07-14T10:42:00',
+            version: 'release1'
           }
         }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
       }

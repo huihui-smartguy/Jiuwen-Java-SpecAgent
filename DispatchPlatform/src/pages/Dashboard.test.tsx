@@ -1,8 +1,10 @@
 import { readFileSync } from 'node:fs';
-import { render, screen, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { resolveRuntimeConfig } from '../config/runtime';
 import { activeTask } from '../data/mockData';
 import type { NormalizedTaskStatus, RuntimeConfig, SutTarget } from '../types';
@@ -21,17 +23,24 @@ function renderDashboard({
   runtimeConfig?: RuntimeConfig;
   selectedSut?: SutTarget;
 } = {}) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <MemoryRouter>
-      <Dashboard
-        language="zh"
-        selectedSut={selectedSut}
-        activeTask={task}
-        runtimeConfig={runtimeConfig}
-      />
-    </MemoryRouter>
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <Dashboard
+          language="zh"
+          selectedSut={selectedSut}
+          activeTask={task}
+          runtimeConfig={runtimeConfig}
+        />
+      </MemoryRouter>
+    </QueryClientProvider>
   );
 }
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('Overview dashboard', () => {
   test('encodes the exact approved 1440px Overview geometry and type scale', () => {
@@ -248,6 +257,7 @@ describe('Overview dashboard', () => {
   });
 
   test('renders truthful unavailable data when mock fallback is disabled and no task is active', () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise<Response>(() => undefined));
     const runtimeConfig = resolveRuntimeConfig({ defaultLanguage: 'zh', enableMockFallback: false });
     const { container } = renderDashboard({ runtimeConfig, task: null });
 
@@ -263,5 +273,141 @@ describe('Overview dashboard', () => {
     expect(within(currentRun).getByText('暂无活动任务')).toBeInTheDocument();
     expect(within(currentRun).getByText('0 / 0')).toBeInTheDocument();
     expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(4);
+  });
+
+  test('maps live Object-scoped statistics into the approved dashboard structure', async () => {
+    const runtimeConfig = resolveRuntimeConfig({ defaultLanguage: 'zh', enableMockFallback: false });
+    const selectedSut = runtimeConfig.sutTargets[0];
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        success: true,
+        message: 'ok',
+        data: {
+          summary: {
+            total_scripts: 10,
+            executed_scripts: 8,
+            unexecuted_scripts: 2,
+            pass_count: 6,
+            failed_count: 2,
+            running_count: 0,
+            pass_rate: '75.00%',
+            execution_rate: '80.00%'
+          },
+          breakdown: [
+            {
+              product: selectedSut.product,
+              scene: selectedSut.scene,
+              feature: 'Save API',
+              total_scripts: 4,
+              executed: 4,
+              unexecuted: 0,
+              pass: 3,
+              failed: 1,
+              running: 0
+            },
+            {
+              product: selectedSut.product,
+              scene: selectedSut.scene,
+              feature: 'Query API',
+              total_scripts: 6,
+              executed: 4,
+              unexecuted: 2,
+              pass: 3,
+              failed: 1,
+              running: 0
+            }
+          ],
+          filters: { product: selectedSut.product, scene: selectedSut.scene }
+        }
+      })
+    } as Response);
+
+    const { container } = renderDashboard({ runtimeConfig, selectedSut, task: null });
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledWith(
+      `/api/statistics/summary?product=${encodeURIComponent(selectedSut.product)}&scene=${encodeURIComponent(selectedSut.scene)}`,
+      { headers: { Accept: 'application/json' } }
+    ));
+    const quality = screen.getByRole('region', { name: '质量摘要' });
+    expect(await within(quality).findByText('75.00')).toBeInTheDocument();
+    expect(within(quality).getByRole('heading', { name: 'Save API' })).toBeInTheDocument();
+    expect(within(quality).getByRole('heading', { name: 'Query API' })).toBeInTheDocument();
+    expect(Array.from(container.querySelectorAll('.overview-metric-card')).map((metric) => (
+      within(metric as HTMLElement).getByTestId('metric-value').textContent
+    ))).toEqual(['8', '75.00%', '2']);
+  });
+
+  test('refetches statistics when the selected Object changes', async () => {
+    const runtimeConfig = resolveRuntimeConfig({ defaultLanguage: 'zh', enableMockFallback: false });
+    const firstTarget = runtimeConfig.sutTargets[0];
+    const secondTarget: SutTarget = {
+      ...firstTarget,
+      id: 'statistics-second-object',
+      name: 'Second statistics Object',
+      product: 'Second Product',
+      scene: 'UI',
+      apiBaseUrl: '/second-api'
+    };
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = new URL(String(input), 'http://local.test');
+      const second = url.pathname.startsWith('/second-api/');
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          message: 'ok',
+          data: {
+            summary: {
+              total_scripts: second ? 4 : 10,
+              executed_scripts: second ? 2 : 8,
+              unexecuted_scripts: 2,
+              pass_count: second ? 1 : 6,
+              failed_count: second ? 1 : 2,
+              running_count: 0,
+              pass_rate: second ? '50.00%' : '75.00%',
+              execution_rate: second ? '50.00%' : '80.00%'
+            },
+            breakdown: [],
+            filters: {
+              product: second ? secondTarget.product : firstTarget.product,
+              scene: second ? secondTarget.scene : firstTarget.scene
+            }
+          }
+        })
+      } as Response);
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    function DashboardHarness() {
+      const [target, setTarget] = useState(firstTarget);
+      return (
+        <MemoryRouter>
+          <button type="button" onClick={() => setTarget(secondTarget)}>Switch Object</button>
+          <Dashboard
+            language="zh"
+            selectedSut={target}
+            activeTask={null}
+            runtimeConfig={runtimeConfig}
+          />
+        </MemoryRouter>
+      );
+    }
+
+    render(
+      <QueryClientProvider client={client}>
+        <DashboardHarness />
+      </QueryClientProvider>
+    );
+
+    expect(await screen.findByText('75.00')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Switch Object' }));
+    expect(await screen.findByText('50.00')).toBeInTheDocument();
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/second-api/statistics/summary?product=Second+Product&scene=UI',
+      { headers: { Accept: 'application/json' } }
+    );
   });
 });

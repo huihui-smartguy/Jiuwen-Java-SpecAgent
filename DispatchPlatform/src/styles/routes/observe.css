@@ -572,6 +572,29 @@
   margin-left: -1px;
 }
 
+.observation-action-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.observation-case-status {
+  display: inline-flex;
+  min-width: 0;
+  height: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 14px;
+  color: var(--color-accent);
+  background: var(--color-accent-surface);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
 .observation-cancel {
   display: inline-flex;
   width: 100%;
@@ -619,6 +642,167 @@
 
 .observation-control-card .polling-error {
   color: var(--color-danger);
+}
+
+.observation-drawer-backdrop {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(10, 20, 41, 0.32);
+}
+
+.observation-case-drawer {
+  display: flex;
+  width: min(560px, calc(100vw - 32px));
+  height: 100%;
+  flex-direction: column;
+  gap: 20px;
+  overflow: hidden;
+  padding: 32px;
+  background: var(--color-surface-low);
+  box-shadow: -16px 0 42px rgba(10, 20, 41, 0.16);
+}
+
+.observation-case-drawer > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.observation-case-drawer > header p,
+.observation-case-drawer > header h2 {
+  margin: 0;
+}
+
+.observation-case-drawer > header p {
+  margin-bottom: 4px;
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.observation-case-drawer > header h2 {
+  font-size: 24px;
+  line-height: 32px;
+}
+
+.observation-case-drawer > header button {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+  font-size: 24px;
+}
+
+.observation-case-summary {
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: 12px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.observation-drawer-state {
+  display: grid;
+  flex: 1;
+  margin: 0;
+  place-items: center;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.observation-drawer-state.is-error {
+  color: var(--color-danger);
+}
+
+.observation-case-table-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: var(--color-surface);
+}
+
+.observation-case-table-scroll table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.observation-case-table-scroll th,
+.observation-case-table-scroll td {
+  padding: 14px 12px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  text-align: left;
+}
+
+.observation-case-table-scroll th {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  background: var(--color-surface);
+  font-weight: 700;
+}
+
+.observation-case-table-scroll td:first-child {
+  max-width: 230px;
+}
+
+.observation-case-table-scroll td strong,
+.observation-case-table-scroll td small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.observation-case-table-scroll td strong {
+  color: var(--color-text-primary);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.observation-case-table-scroll td small {
+  margin-top: 4px;
+  color: var(--color-danger);
+  white-space: normal;
+}
+
+.observation-case-state {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.observation-case-state.is-pass {
+  color: var(--color-success);
+  background: var(--color-success-surface);
+}
+
+.observation-case-state.is-running,
+.observation-case-state.is-todo {
+  color: var(--color-accent);
+  background: var(--color-accent-surface);
+}
+
+.observation-case-state.is-failed {
+  color: var(--color-danger);
+  background: var(--color-danger-surface);
 }
 
 @media (max-width: 1319px) {

@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ApiError, createTask, getFeatures, getScripts } from '../api/client';
+import { ApiError, createTask, getFeatures, getScripts, getVersions } from '../api/client';
 import { PageHeader } from '../components/PageHeader';
 import { mockFeatures, mockScripts } from '../data/mockData';
 import { getCopy } from '../i18n';
@@ -13,6 +13,7 @@ import type {
   SutTarget,
   TaskCreateRequest,
   TaskCreateResponse,
+  TestVersionResponse,
   TriggerType
 } from '../types';
 
@@ -26,7 +27,19 @@ interface TasksProps {
 
 const emptyFeatures: Feature[] = [];
 const emptyScripts: Script[] = [];
+const emptyVersions: TestVersionResponse['versions'] = [];
 const levels = ['L0', 'L1', 'L2', 'L3', 'L4'] as const;
+const fallbackVersions: TestVersionResponse = {
+  success: true,
+  default_version: 'release1',
+  versions: [{
+    code: 'release1',
+    name: 'Release 1',
+    description: 'Demo test batch',
+    created_at: '2026-07-01T00:00:00Z',
+    is_default: true
+  }]
+};
 
 function fallbackScripts(sut: SutTarget): Script[] {
   return mockScripts.filter((script) => script.product === sut.product && script.scene === sut.scene);
@@ -38,7 +51,8 @@ function createFallbackTask(payload: TaskCreateRequest, triggerType: TriggerType
     task_id: `demo_${Date.now()}`,
     status: 'pending',
     trigger_type: triggerType,
-    message: `Demo task created from ${Object.keys(payload).join(', ')}`
+    message: `Demo task created from ${Object.keys(payload).join(', ')}`,
+    version: payload.version
   };
 }
 
@@ -63,6 +77,7 @@ export function Tasks({
   const [mode, setMode] = useState<TriggerType>('feature');
   const [selectedFeature, setSelectedFeature] = useState('');
   const [selectedLevel, setSelectedLevel] = useState('L1');
+  const [selectedVersion, setSelectedVersion] = useState('');
   const [selectedScriptNames, setSelectedScriptNames] = useState<string[]>([]);
   const [scriptSearch, setScriptSearch] = useState('');
   const resolvedApiBaseUrl = selectedSut.apiBaseUrl || runtimeConfig.apiBaseUrl;
@@ -80,6 +95,21 @@ export function Tasks({
     [targetIdentity.apiBaseUrl]
   );
   const requiresFeature = mode === 'feature' || mode === 'scripts';
+
+  const versionsQuery = useQuery({
+    queryKey: ['versions', targetIdentity],
+    queryFn: async (): Promise<TestVersionResponse> => {
+      try {
+        return await getVersions(api);
+      } catch (error) {
+        if (runtimeConfig.enableMockFallback) {
+          return fallbackVersions;
+        }
+        throw error;
+      }
+    }
+  });
+  const versions = versionsQuery.data?.versions ?? emptyVersions;
 
   const featuresQuery = useQuery({
     queryKey: ['features', targetIdentity],
@@ -133,6 +163,21 @@ export function Tasks({
   }, [scriptSearch, scripts]);
 
   useEffect(() => {
+    if (!versions.length) {
+      setSelectedVersion('');
+      return;
+    }
+    if (!selectedVersion || !versions.some((version) => version.code === selectedVersion)) {
+      const defaultVersion = versionsQuery.data?.default_version;
+      setSelectedVersion(
+        versions.find((version) => version.code === defaultVersion)?.code
+          ?? versions.find((version) => version.is_default)?.code
+          ?? versions[0].code
+      );
+    }
+  }, [selectedVersion, versions, versionsQuery.data?.default_version]);
+
+  useEffect(() => {
     if (!selectedFeature || !features.some((feature) => feature.name === selectedFeature)) {
       setSelectedFeature(features[0]?.name ?? '');
     }
@@ -140,6 +185,7 @@ export function Tasks({
 
   useEffect(() => {
     setSelectedFeature('');
+    setSelectedVersion('');
     setSelectedScriptNames([]);
     setScriptSearch('');
   }, [selectedSut.id]);
@@ -169,22 +215,30 @@ export function Tasks({
   });
 
   const payload = useMemo<TaskCreateRequest>(() => {
+    const base = {
+      product: selectedSut.product,
+      scene: selectedSut.scene,
+      version: selectedVersion
+    };
     if (mode === 'level') {
-      return { product: selectedSut.product, scene: selectedSut.scene, level: selectedLevel };
+      return { ...base, level: selectedLevel };
     }
     if (mode === 'scripts') {
       return {
-        product: selectedSut.product,
-        scene: selectedSut.scene,
+        ...base,
         feature: selectedFeature,
         script_name: selectedScriptNames
       };
     }
-    return { product: selectedSut.product, scene: selectedSut.scene, feature: selectedFeature };
-  }, [mode, selectedFeature, selectedLevel, selectedScriptNames, selectedSut.product, selectedSut.scene]);
+    if (mode === 'scene') {
+      return base;
+    }
+    return { ...base, feature: selectedFeature };
+  }, [mode, selectedFeature, selectedLevel, selectedScriptNames, selectedSut.product, selectedSut.scene, selectedVersion]);
 
   const canCreate =
     !creation.isPending &&
+    Boolean(selectedVersion) &&
     (mode !== 'scripts' || selectedScriptNames.length > 0) &&
     (!requiresFeature || Boolean(selectedFeature));
   const objectPassed = selectedSut.status === 'healthy';
@@ -195,7 +249,9 @@ export function Tasks({
     ? `Feature · ${selectedFeature || '—'}`
     : mode === 'level'
       ? `Level · ${selectedLevel}`
-      : `Scripts · ${selectedScriptNames.length}`;
+      : mode === 'scripts'
+        ? `Scripts · ${selectedScriptNames.length}`
+        : 'Scene · All scripts';
 
   const toggleScript = (name: string) => {
     setSelectedScriptNames((current) => (
@@ -285,7 +341,8 @@ export function Tasks({
                 {([
                   ['feature', t.byFeature, 'Feature'],
                   ['level', t.byLevel, 'Level'],
-                  ['scripts', t.byScripts, 'Scripts']
+                  ['scripts', t.byScripts, 'Scripts'],
+                  ['scene', t.entireScene, 'Scene']
                 ] as const).map(([value, label, visibleLabel]) => (
                   <label key={value}>
                     <input
@@ -315,25 +372,48 @@ export function Tasks({
                     ))}
                   </select>
                 </label>
-              ) : (
+              ) : mode === 'level' ? (
                 <label className="tasks-field">
                   <span>Level</span>
                   <select value={selectedLevel} onChange={(event) => setSelectedLevel(event.target.value)}>
                     {levels.map((level) => <option key={level} value={level}>{level}</option>)}
                   </select>
                 </label>
+              ) : (
+                <label className="tasks-field">
+                  <span>{language === 'zh' ? '场景' : 'Scene'}</span>
+                  <select value={selectedSut.scene} disabled>
+                    <option value={selectedSut.scene}>{selectedSut.scene}</option>
+                  </select>
+                </label>
               )}
               <label className="tasks-field">
-                <span>{t.executionProfile}</span>
-                <select value="live-standard" onChange={() => undefined}>
-                  <option value="live-standard">{t.liveStandard}</option>
+                <span>{t.testVersion}</span>
+                <select
+                  value={selectedVersion}
+                  onChange={(event) => setSelectedVersion(event.target.value)}
+                  disabled={versionsQuery.isLoading || versions.length === 0}
+                >
+                  {versionsQuery.isLoading ? <option value="">{t.loadingVersions}</option> : null}
+                  {!versionsQuery.isLoading && versions.length === 0 ? (
+                    <option value="">{t.versionsUnavailable}</option>
+                  ) : null}
+                  {versions.map((version) => (
+                    <option key={version.code} value={version.code}>
+                      {version.name} · {version.code}
+                      {version.code === versionsQuery.data?.default_version ? ` · ${t.defaultVersion}` : ''}
+                    </option>
+                  ))}
                 </select>
               </label>
             </div>
 
-            {(featuresQuery.isError || scriptQuery.isError) && (
+            {(featuresQuery.isError || scriptQuery.isError || versionsQuery.isError) && (
               <p className="tasks-inline-error" role="alert">
-                {getRequestErrorMessage(featuresQuery.error ?? scriptQuery.error, t.contextLoadFailed)}
+                {getRequestErrorMessage(
+                  featuresQuery.error ?? scriptQuery.error ?? versionsQuery.error,
+                  t.contextLoadFailed
+                )}
               </p>
             )}
           </section>
@@ -411,8 +491,14 @@ export function Tasks({
               <h2 id="launch-summary-title">Launch summary</h2>
             </div>
             <dl className="tasks-launch-list">
-              <div><dt>Object</dt><dd>{selectedSut.product} {selectedSut.scene}</dd></div>
-              <div><dt>Mode</dt><dd>{modeSummary}</dd></div>
+              <div>
+                <dt>Object</dt>
+                <dd>
+                  {selectedSut.product} {selectedSut.scene} ·{' '}
+                  <span data-testid="task-version-summary">{selectedVersion || '—'}</span>
+                </dd>
+              </div>
+              <div><dt>Mode</dt><dd data-testid="task-mode-summary">{modeSummary}</dd></div>
               <div><dt>Scripts</dt><dd>{scripts.length}</dd></div>
               <div><dt>Estimated</dt><dd data-testid="launch-estimate">{runtimeConfig.enableMockFallback ? '~ 6 min' : '—'}</dd></div>
             </dl>

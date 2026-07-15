@@ -52,11 +52,33 @@ function json(body: unknown) {
 function mockTaskApi(options: {
   scripts?: Script[];
   taskId?: string;
-  triggerType?: 'feature' | 'level' | 'scripts';
+  triggerType?: 'feature' | 'level' | 'scripts' | 'scene';
 } = {}) {
   const availableScripts = options.scripts ?? scripts;
   return vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
     const url = new URL(String(input), 'http://local.test');
+    if (url.pathname.endsWith('/versions')) {
+      return json({
+        success: true,
+        default_version: 'release1',
+        versions: [
+          {
+            code: 'release1',
+            name: 'Release 1',
+            description: 'Stable test batch',
+            created_at: '2026-07-01T00:00:00Z',
+            is_default: true
+          },
+          {
+            code: 'release2',
+            name: 'Release 2',
+            description: 'Candidate test batch',
+            created_at: '2026-07-10T00:00:00Z',
+            is_default: false
+          }
+        ]
+      });
+    }
     if (url.pathname.endsWith('/features')) {
       return json({
         success: true,
@@ -170,13 +192,15 @@ describe('approved Tasks composition', () => {
     expect(within(modeSelector).getByRole('radio', { name: '按 Feature' })).toBeChecked();
     expect(within(modeSelector).getByRole('radio', { name: '按 Level' })).toBeInTheDocument();
     expect(within(modeSelector).getByRole('radio', { name: '选择脚本' })).toBeInTheDocument();
+    expect(within(modeSelector).getByRole('radio', { name: '整个场景' })).toBeInTheDocument();
     expect(Array.from(modeSelector.querySelectorAll('label > span')).map((item) => item.textContent)).toEqual([
       'Feature',
       'Level',
       'Scripts',
+      'Scene',
     ]);
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Feature' })).toHaveValue('Save API'));
-    expect(screen.getByLabelText('Execution profile')).toHaveValue('live-standard');
+    await waitFor(() => expect(screen.getByLabelText('测试批次')).toHaveValue('release1'));
 
     expect(screen.getByRole('heading', { name: '脚本快照 · READ-ONLY SELECTION' })).toBeInTheDocument();
     expect(screen.getByRole('searchbox', { name: '搜索脚本' })).toBeInTheDocument();
@@ -333,6 +357,19 @@ describe('approved Tasks composition', () => {
       if (url.pathname.endsWith('/scripts')) {
         return json({ success: true, scripts: [], total: 0, filters: {} });
       }
+      if (url.pathname.endsWith('/versions')) {
+        return json({
+          success: true,
+          default_version: 'release1',
+          versions: [{
+            code: 'release1',
+            name: 'Release 1',
+            description: 'Stable test batch',
+            created_at: '2026-07-01T00:00:00Z',
+            is_default: true
+          }]
+        });
+      }
       throw new Error(`unexpected request: ${url.toString()}`);
     });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -401,7 +438,8 @@ describe('task creation contracts', () => {
     expect(postPayload(fetchSpy)).toEqual({
       product: selectedSut.product,
       scene: selectedSut.scene,
-      feature: 'Save API'
+      feature: 'Save API',
+      version: 'release1'
     });
     await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/observation'));
     expect(fetchSpy.mock.calls.some(([input]) => {
@@ -426,7 +464,8 @@ describe('task creation contracts', () => {
     expect(postPayload(fetchSpy)).toEqual({
       product: selectedSut.product,
       scene: selectedSut.scene,
-      level: 'L1'
+      level: 'L1',
+      version: 'release1'
     });
   });
 
@@ -453,7 +492,28 @@ describe('task creation contracts', () => {
       product: selectedSut.product,
       scene: selectedSut.scene,
       feature: 'Save API',
-      script_name: ['save_api_test']
+      script_name: ['save_api_test'],
+      version: 'release1'
+    });
+  });
+
+  test('creates an entire-scene task with only Object scope and the selected test batch', async () => {
+    const user = userEvent.setup();
+    const onTaskCreated = vi.fn();
+    const fetchSpy = mockTaskApi({ taskId: 'task_scene', triggerType: 'scene' });
+    renderTasks({ onTaskCreated });
+
+    await user.click(screen.getByRole('radio', { name: '整个场景' }));
+    await user.selectOptions(await screen.findByRole('combobox', { name: '测试批次' }), 'release2');
+    expect(screen.getByTestId('task-mode-summary')).toHaveTextContent('Scene');
+    expect(screen.getByTestId('task-version-summary')).toHaveTextContent('release2');
+    await user.click(screen.getByRole('button', { name: '启动执行' }));
+
+    await waitFor(() => expect(onTaskCreated).toHaveBeenCalledTimes(1));
+    expect(postPayload(fetchSpy)).toEqual({
+      product: selectedSut.product,
+      scene: selectedSut.scene,
+      version: 'release2'
     });
   });
 });

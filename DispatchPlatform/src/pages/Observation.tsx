@@ -1,6 +1,12 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ApiError, cancelTask, getTaskStatus, normalizeTaskStatus } from '../api/client';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  ApiError,
+  cancelTask,
+  getTaskScriptStatus,
+  getTaskStatus,
+  normalizeTaskStatus
+} from '../api/client';
 import { LiveLogConsole } from '../components/LiveLogConsole';
 import { LogExportAction } from '../components/LogExportAction';
 import { PageHeader } from '../components/PageHeader';
@@ -12,6 +18,8 @@ import type {
   NormalizedTaskStatus,
   RuntimeConfig,
   SutTarget,
+  TaskScriptExecutionStatus,
+  TaskScriptStatusResponse,
   UiTaskStatus
 } from '../types';
 
@@ -91,6 +99,16 @@ function isKnownUiStatus(status: string): status is UiTaskStatus {
     || status === 'polling_error';
 }
 
+function scriptStatusLabel(
+  status: TaskScriptExecutionStatus,
+  language: Language
+) {
+  const labels = language === 'zh'
+    ? { todo: '待执行', pass: '通过', failed: '失败', running: '执行中' }
+    : { todo: 'Pending', pass: 'Passed', failed: 'Failed', running: 'Running' };
+  return labels[status];
+}
+
 function ObservationMetric({
   label,
   value,
@@ -118,6 +136,10 @@ export function Observation({
 }: PageProps) {
   const t = getCopy(language);
   const [cancellationRequestedTaskId, setCancellationRequestedTaskId] = useState<string>();
+  const [caseStatusOpen, setCaseStatusOpen] = useState(false);
+  const caseStatusTriggerRef = useRef<HTMLButtonElement>(null);
+  const caseStatusCloseRef = useRef<HTMLButtonElement>(null);
+  const caseStatusDrawerRef = useRef<HTMLElement>(null);
   const taskSut = activeTask.sourceSut ?? selectedSut;
   const api = useMemo(
     () => ({ apiBaseUrl: taskSut.apiBaseUrl || runtimeConfig.apiBaseUrl }),
@@ -152,6 +174,27 @@ export function Observation({
     }
   });
   const task = taskQuery.isError ? asPollingError(activeTask) : taskQuery.data?.task ?? activeTask;
+  const scriptStatusQuery = useQuery<TaskScriptStatusResponse>({
+    queryKey: ['task-script-status', api.apiBaseUrl, task.task_id],
+    queryFn: async () => {
+      try {
+        return await getTaskScriptStatus(api, task.task_id);
+      } catch (error) {
+        if (runtimeConfig.enableMockFallback) {
+          return {
+            success: true,
+            task_id: task.task_id,
+            scripts_status: [],
+            summary: { todo_count: 0, pass_count: 0, failed_count: 0, running_count: 0 }
+          };
+        }
+        throw error;
+      }
+    },
+    enabled: caseStatusOpen,
+    refetchInterval: isPollingTask(task) ? 5000 : false,
+    refetchIntervalInBackground: true
+  });
   const progress = task.progress;
   const completedCommands = progress?.completed ?? task.result?.success_count ?? 0;
   const totalCommands = progress?.total_commands ?? task.result?.total_commands ?? 0;
@@ -201,6 +244,50 @@ export function Observation({
       });
     }
   }, [onTaskStatusChange, taskQuery.data, taskSut]);
+
+  const closeCaseStatus = () => {
+    setCaseStatusOpen(false);
+    queueMicrotask(() => caseStatusTriggerRef.current?.focus());
+  };
+
+  useEffect(() => {
+    if (!caseStatusOpen) {
+      return undefined;
+    }
+    caseStatusCloseRef.current?.focus();
+    const handleEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setCaseStatusOpen(false);
+        queueMicrotask(() => caseStatusTriggerRef.current?.focus());
+        return;
+      }
+      if (event.key === 'Tab') {
+        const focusable = Array.from(
+          caseStatusDrawerRef.current?.querySelectorAll<HTMLElement>(
+            'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])'
+          ) ?? []
+        );
+        const first = focusable[0];
+        const last = focusable.at(-1);
+        if (!first || !last) {
+          event.preventDefault();
+        } else if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [caseStatusOpen]);
+
+  useEffect(() => {
+    setCaseStatusOpen(false);
+  }, [task.task_id]);
 
   return (
     <div className="page-stack observation-page">
@@ -296,8 +383,8 @@ export function Observation({
               <dd title={task.task_id}>{compactTaskId(task.task_id)}</dd>
             </div>
             <div>
-              <dt>{t.createdBy}</dt>
-              <dd>{t.notAvailable}</dd>
+              <dt>{t.testVersion}</dt>
+              <dd>{task.version ?? t.notAvailable}</dd>
             </div>
             <div>
               <dt>{t.started}</dt>
@@ -310,14 +397,24 @@ export function Observation({
           </dl>
 
           <div className="observation-control-card__actions">
-            <button
-              type="button"
-              className="observation-cancel"
-              onClick={() => cancellation.mutate(task.task_id)}
-              disabled={!canRequestCancellation || cancellationPending}
-            >
-              {cancellationPending ? t.requestingCancellation : t.requestCancellation}
-            </button>
+            <div className="observation-action-row">
+              <button
+                ref={caseStatusTriggerRef}
+                type="button"
+                className="observation-case-status"
+                onClick={() => setCaseStatusOpen(true)}
+              >
+                {t.viewCaseStatus}
+              </button>
+              <button
+                type="button"
+                className="observation-cancel"
+                onClick={() => cancellation.mutate(task.task_id)}
+                disabled={!canRequestCancellation || cancellationPending}
+              >
+                {cancellationPending ? t.requestingCancellation : t.requestCancellation}
+              </button>
+            </div>
             {cancellationAcknowledged ? (
               <p className="cancellation-status" role="status">{t.cancellationRequested}</p>
             ) : null}
@@ -327,6 +424,94 @@ export function Observation({
           </div>
         </section>
       </div>
+
+      {caseStatusOpen ? (
+        <div
+          className="observation-drawer-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              closeCaseStatus();
+            }
+          }}
+        >
+          <aside
+            ref={caseStatusDrawerRef}
+            className="observation-case-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="case-status-title"
+          >
+            <header>
+              <div>
+                <p>{compactTaskId(task.task_id)} · {task.version ?? t.notAvailable}</p>
+                <h2 id="case-status-title">{t.caseStatus}</h2>
+              </div>
+              <button
+                ref={caseStatusCloseRef}
+                type="button"
+                aria-label={t.closeCaseStatus}
+                onClick={closeCaseStatus}
+              >
+                <span aria-hidden="true">×</span>
+              </button>
+            </header>
+
+            {scriptStatusQuery.data ? (
+              <p className="observation-case-summary" role="status">
+                {language === 'zh'
+                  ? `${scriptStatusQuery.data.summary.pass_count} 通过 · ${scriptStatusQuery.data.summary.running_count} 执行中 · ${scriptStatusQuery.data.summary.failed_count} 失败 · ${scriptStatusQuery.data.summary.todo_count} 待执行`
+                  : `${scriptStatusQuery.data.summary.pass_count} passed · ${scriptStatusQuery.data.summary.running_count} running · ${scriptStatusQuery.data.summary.failed_count} failed · ${scriptStatusQuery.data.summary.todo_count} pending`}
+              </p>
+            ) : null}
+
+            {scriptStatusQuery.isLoading ? (
+              <p className="observation-drawer-state">{t.loadingCaseStatus}</p>
+            ) : scriptStatusQuery.isError ? (
+              <p className="observation-drawer-state is-error" role="alert">
+                {scriptStatusQuery.error instanceof ApiError
+                  ? scriptStatusQuery.error.message
+                  : t.caseStatusUnavailable}
+              </p>
+            ) : scriptStatusQuery.data?.scripts_status.length ? (
+              <div className="observation-case-table-scroll">
+                <table aria-label={t.caseStatus}>
+                  <thead>
+                    <tr>
+                      <th>{language === 'zh' ? '用例' : 'Case'}</th>
+                      <th>{t.status}</th>
+                      <th>{language === 'zh' ? '批次' : 'Batch'}</th>
+                      <th>{language === 'zh' ? '耗时' : 'Duration'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scriptStatusQuery.data.scripts_status.map((script) => (
+                      <tr key={script.script_id}>
+                        <td>
+                          <strong>{script.script_name}</strong>
+                          {script.error_message ? <small>{script.error_message}</small> : null}
+                        </td>
+                        <td>
+                          <span className={`observation-case-state is-${script.status}`}>
+                            {scriptStatusLabel(script.status, language)}
+                          </span>
+                        </td>
+                        <td>{script.version}</td>
+                        <td>
+                          {script.duration_seconds === null
+                            ? t.notAvailable
+                            : `${script.duration_seconds.toFixed(1)}s`}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="observation-drawer-state">{t.noCaseStatus}</p>
+            )}
+          </aside>
+        </div>
+      ) : null}
     </div>
   );
 }

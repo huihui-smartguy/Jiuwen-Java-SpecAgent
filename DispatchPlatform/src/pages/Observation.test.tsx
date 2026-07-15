@@ -18,14 +18,23 @@ function mockJson(body: unknown, ok = true, status = 200) {
 
 function mockTaskApi(
   statusResponses: unknown[],
-  cancellationResponses: unknown[] = []
+  cancellationResponses: unknown[] = [],
+  scriptStatusResponses: unknown[] = []
 ) {
   let statusIndex = 0;
   let cancellationIndex = 0;
+  let scriptStatusIndex = 0;
   return vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
     const url = String(input);
     if (url.endsWith('/logs')) {
       return mockJson({ success: true, total: 0, logs: [] });
+    }
+    if (url.endsWith('/script-status')) {
+      const response = scriptStatusResponses[
+        Math.min(scriptStatusIndex, scriptStatusResponses.length - 1)
+      ];
+      scriptStatusIndex += 1;
+      return mockJson(response);
     }
     if (init?.method === 'DELETE') {
       const response = cancellationResponses[Math.min(cancellationIndex, cancellationResponses.length - 1)];
@@ -41,6 +50,12 @@ function mockTaskApi(
 function countStatusRequests(fetchSpy: ReturnType<typeof vi.spyOn>, taskId: string) {
   return fetchSpy.mock.calls.filter(([input, init]) => (
     String(input) === `/api/tasks/${taskId}` && init?.method !== 'DELETE'
+  )).length;
+}
+
+function countScriptStatusRequests(fetchSpy: ReturnType<typeof vi.spyOn>, taskId: string) {
+  return fetchSpy.mock.calls.filter(([input]) => (
+    String(input) === `/api/tasks/${taskId}/script-status`
   )).length;
 }
 
@@ -509,5 +524,91 @@ describe('Observation', () => {
     const metrics = screen.getByRole('region', { name: 'Observation metrics' });
     expect(await within(metrics).findByText(/queue position: 3/i)).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Observe' }).closest('.page-header')).not.toHaveTextContent(/queue position/i);
+  });
+
+  test('shows the selected test batch and opens a keyboard-accessible case-status drawer', async () => {
+    const user = userEvent.setup();
+    const task = { ...activeTask, version: 'release1' };
+    const fetchSpy = mockTaskApi([task], [], [{
+      success: true,
+      task_id: task.task_id,
+      scripts_status: [
+        {
+          script_id: 'script-save',
+          script_name: 'save_api_test',
+          version: 'release1',
+          status: 'pass',
+          started_at: '2026-07-15T09:00:00Z',
+          completed_at: '2026-07-15T09:00:04Z',
+          duration_seconds: 4,
+          error_message: null
+        },
+        {
+          script_id: 'script-query',
+          script_name: 'query_api_test',
+          version: 'release1',
+          status: 'running',
+          started_at: '2026-07-15T09:00:04Z',
+          completed_at: null,
+          duration_seconds: null,
+          error_message: null
+        }
+      ],
+      summary: { todo_count: 0, pass_count: 1, failed_count: 0, running_count: 1 }
+    }]);
+
+    renderObservation({ task });
+
+    const control = screen.getByRole('region', { name: 'Task control' });
+    expect(within(control).getByText('Test batch')).toBeInTheDocument();
+    expect(within(control).getByText('release1')).toBeInTheDocument();
+    const trigger = within(control).getByRole('button', { name: 'View case status' });
+    await user.click(trigger);
+
+    const drawer = await screen.findByRole('dialog', { name: 'Case status' });
+    expect(fetchSpy).toHaveBeenCalledWith(`/api/tasks/${task.task_id}/script-status`, {
+      headers: { Accept: 'application/json' }
+    });
+    expect(within(drawer).getByText('save_api_test')).toBeInTheDocument();
+    expect(within(drawer).getByText('query_api_test')).toBeInTheDocument();
+    expect(within(drawer).getByText('1 passed · 1 running · 0 failed · 0 pending')).toBeInTheDocument();
+    const closeButton = within(drawer).getByRole('button', { name: 'Close case status' });
+    expect(closeButton).toHaveFocus();
+    await user.tab();
+    expect(closeButton).toHaveFocus();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Case status' })).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
+  test('does not poll case status after the parent task reaches a terminal state', async () => {
+    vi.useFakeTimers();
+    const task: NormalizedTaskStatus = {
+      ...activeTask,
+      status: 'success',
+      uiStatus: 'success',
+      isTerminal: true,
+      version: 'release1'
+    };
+    const fetchSpy = mockTaskApi([task], [], [{
+      success: true,
+      task_id: task.task_id,
+      scripts_status: [],
+      summary: { todo_count: 0, pass_count: 0, failed_count: 0, running_count: 0 }
+    }]);
+
+    renderObservation({ task });
+    fireEvent.click(screen.getByRole('button', { name: 'View case status' }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(countScriptStatusRequests(fetchSpy, task.task_id)).toBe(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(countScriptStatusRequests(fetchSpy, task.task_id)).toBe(1);
   });
 });
