@@ -84,4 +84,20 @@ The production release must be staged beneath `/data1/testwise/releases`, preser
 
 ## Deployment evidence
 
-Pending production rollout. Sanitized release identifiers, hashes, runtime-preservation proof, and smoke-test results will be appended after deployment.
+Production rollout completed at `2026-07-17T17:39:06+08:00`.
+
+- Source commit: `512e498ac59f59915e707660fdc3ffca3b16b65e` on `develop`.
+- Release: `20260717-171626-512e498`.
+- Captured rollback release: `20260715-172745-0362c04`.
+- Release archive SHA-256: `d9663b0109760c5f0a177ae597abbdc7c06bc4b6b6ff4666492c9c5508f603af`.
+- `index.html` SHA-256: `43e75e5a4bf1aaa81026950cc5df43560d5e42117eceaafdfee14b14ad7c80de`.
+- CSS SHA-256: `02a5b9db1d788b4c85a605896e7fa6436fb00293adc52fd710d352721d84f900`.
+- JavaScript SHA-256: `1b54168faf7269e536269096850cf57df5775ccdf9296ec94de30906af2b1cda`.
+- Live runtime SHA-256 before and after the switch: `216a056145da45da17ec2e74b0ad64cf3fe8f8a02d741a8f5ab81b1262901203`.
+- Nginx configuration passed before and after the atomic switch; no reload was required because no Nginx configuration changed.
+- `/testwise/`, `/tasks`, `/observation`, `/results`, `/scripts`, `/knowledge`, and `/settings` returned HTTP 200 through Nginx.
+- CSS, JavaScript, and runtime JSON returned HTTP 200 with the expected content types.
+- `/testwise/healthz` returned `ok`; backend listeners on ports 3000 and 3001 remained active; `/testwise/api/versions` returned HTTP 200 JSON.
+- Live Browser verification passed for the R6 Basic and Performance states, 390 px responsive layout, mobile selector containment, and direct Tasks route refresh.
+- The live Browser console reported no errors.
+- No credential or password is recorded in this revision record.
