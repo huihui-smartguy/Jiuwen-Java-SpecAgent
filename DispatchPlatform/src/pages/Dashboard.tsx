@@ -1,20 +1,22 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check } from 'lucide-react';
-import { useEffect, useMemo } from 'react';
+import { Check, ChevronDown } from 'lucide-react';
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState
+} from 'react';
 import { Link } from 'react-router-dom';
-import { getStatisticsSummary } from '../api/client';
 import { ExecutionFocus } from '../components/ExecutionFocus';
-import { MetricCard } from '../components/MetricCard';
 import { PageHeader } from '../components/PageHeader';
-import { PresentationOnlyButton } from '../components/PresentationOnlyButton';
+import {
+  overviewQualityMock,
+  type DimensionQualityMock,
+  type QualityDimensionId
+} from '../data/overviewMockData';
 import { getCopy } from '../i18n';
-import type {
-  Language,
-  NormalizedTaskStatus,
-  RuntimeConfig,
-  StatisticsBreakdown,
-  SutTarget
-} from '../types';
+import type { Language, NormalizedTaskStatus, RuntimeConfig, SutTarget } from '../types';
 
 interface PageProps {
   language: Language;
@@ -23,104 +25,439 @@ interface PageProps {
   runtimeConfig: RuntimeConfig;
 }
 
-type QualityTone = 'accent' | 'warning';
+const dimensionIds: readonly QualityDimensionId[] = [
+  'basic',
+  'dfx',
+  'scenario',
+  'performance'
+];
 
-interface QualitySignal {
-  label: string;
-  value: string;
-  percent: number;
-  tone: QualityTone;
-}
-
-interface ActivityItem {
-  title: string;
-  detail: string;
-  time: string;
-}
-
-function percentNumber(value: string) {
-  const parsed = Number.parseFloat(value.replace('%', ''));
-  return Number.isFinite(parsed) ? Math.min(Math.max(parsed, 0), 100) : 0;
-}
-
-function signalForBreakdown(item: StatisticsBreakdown): QualitySignal {
-  const percent = item.executed > 0 ? (item.pass / item.executed) * 100 : 0;
-  return {
-    label: item.feature,
-    value: `${percent.toFixed(1)}%`,
-    percent,
-    tone: item.failed > 0 ? 'warning' : 'accent'
-  };
-}
-
-export function Dashboard({
-  language,
-  selectedSut,
-  activeTask,
-  runtimeConfig
-}: PageProps) {
+function dimensionLabel(language: Language, id: QualityDimensionId) {
   const t = getCopy(language);
-  const showPresentationFallback = runtimeConfig.enableMockFallback;
-  const resolvedApiBaseUrl = selectedSut.apiBaseUrl || runtimeConfig.apiBaseUrl;
-  const targetIdentity = useMemo(() => ({
-    id: selectedSut.id,
-    product: selectedSut.product,
-    scene: selectedSut.scene,
-    apiBaseUrl: resolvedApiBaseUrl
-  }), [resolvedApiBaseUrl, selectedSut.id, selectedSut.product, selectedSut.scene]);
-  const statisticsQuery = useQuery({
-    queryKey: ['statistics-summary', targetIdentity],
-    queryFn: () => getStatisticsSummary(
-      { apiBaseUrl: targetIdentity.apiBaseUrl },
-      { product: targetIdentity.product, scene: targetIdentity.scene }
-    ),
-    enabled: !showPresentationFallback
-  });
-  const queryClient = useQueryClient();
+  switch (id) {
+    case 'basic':
+      return t.dimensionBasic;
+    case 'dfx':
+      return t.dimensionDfx;
+    case 'scenario':
+      return t.dimensionScenario;
+    case 'performance':
+      return t.dimensionPerformance;
+  }
+}
+
+function dimensionTechnicalLabel(id: QualityDimensionId) {
+  switch (id) {
+    case 'basic':
+      return 'BASIC FUNCTIONALITY';
+    case 'dfx':
+      return 'DFX';
+    case 'scenario':
+      return 'SCENARIO-BASED';
+    case 'performance':
+      return 'PERFORMANCE';
+  }
+}
+
+function dimensionConclusion(language: Language, id: Exclude<QualityDimensionId, 'performance'>) {
+  const t = getCopy(language);
+  switch (id) {
+    case 'basic':
+      return t.basicQualityConclusion;
+    case 'dfx':
+      return t.dfxQualityConclusion;
+    case 'scenario':
+      return t.scenarioQualityConclusion;
+  }
+}
+
+function QualityRing({
+  score,
+  label,
+  size = 'large'
+}: {
+  score: number;
+  label: string;
+  size?: 'large' | 'compact';
+}) {
+  const boundedScore = Math.min(100, Math.max(0, score));
+
+  return (
+    <div
+      className={`overview-quality-ring is-${size}`}
+      role="img"
+      aria-label={`${label} ${boundedScore.toFixed(2)}`}
+    >
+      <svg viewBox="0 0 106 106" aria-hidden="true">
+        <circle className="overview-quality-ring__track" cx="53" cy="53" r="44" pathLength="100" />
+        <circle
+          className="overview-quality-ring__value"
+          cx="53"
+          cy="53"
+          r="44"
+          pathLength="100"
+          strokeDasharray={`${boundedScore} 100`}
+        />
+      </svg>
+      <div className="overview-quality-ring__copy">
+        <strong>{boundedScore.toFixed(2)}</strong>
+        <span>{label}</span>
+      </div>
+    </div>
+  );
+}
+
+function DimensionSelector({
+  language,
+  value,
+  onChange
+}: {
+  language: Language;
+  value: QualityDimensionId;
+  onChange: (value: QualityDimensionId) => void;
+}) {
+  const t = getCopy(language);
+  const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(() => dimensionIds.indexOf(value));
+  const listboxId = useId();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const selectedLabel = dimensionLabel(language, value);
 
   useEffect(() => {
-    if (activeTask?.isTerminal) {
-      void queryClient.invalidateQueries({ queryKey: ['statistics-summary'] });
+    if (!open) {
+      return;
     }
-  }, [activeTask?.isTerminal, activeTask?.task_id, queryClient]);
 
-  const statistics = statisticsQuery.data?.data;
-  const fallbackQualitySignals: QualitySignal[] = [
-    { label: t.basic, value: '96%', percent: 96, tone: 'accent' },
-    { label: t.performance, value: '91%', percent: 91, tone: 'accent' },
-    { label: t.scenario, value: '88%', percent: 88, tone: 'warning' },
-    { label: t.dfx, value: '93%', percent: 93, tone: 'accent' }
-  ];
-  const qualitySignals = showPresentationFallback
-    ? fallbackQualitySignals
-    : (statistics?.breakdown ?? []).slice(0, 4).map(signalForBreakdown);
-  const passRate = showPresentationFallback ? '93.6%' : statistics?.summary.pass_rate;
-  const qualityScore = passRate?.replace(/%$/, '');
-  const qualityPercent = passRate ? percentNumber(passRate) : 0;
-  const pathStages = [
-    t.environmentCheck,
-    t.scriptPreparation,
-    t.saveApi,
-    t.queryApi,
-    t.summary
-  ];
-  const activityItems: ActivityItem[] = [
-    {
-      title: t.activityTaskStarted,
-      detail: t.activityTaskStartedDetail,
-      time: '10:42'
-    },
-    {
-      title: t.activityRegressionComplete,
-      detail: t.activityRegressionCompleteDetail,
-      time: '09:18'
-    },
-    {
-      title: t.activityLogsExported,
-      detail: t.activityLogsExportedDetail,
-      time: '08:56'
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
     }
-  ];
+
+    const frame = window.requestAnimationFrame(() => optionRefs.current[activeIndex]?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeIndex, open]);
+
+  useEffect(() => {
+    setActiveIndex(dimensionIds.indexOf(value));
+  }, [value]);
+
+  const closeAndReturnFocus = () => {
+    setOpen(false);
+    window.requestAnimationFrame(() => triggerRef.current?.focus());
+  };
+
+  const moveActive = (nextIndex: number) => {
+    const normalized = (nextIndex + dimensionIds.length) % dimensionIds.length;
+    setActiveIndex(normalized);
+  };
+
+  const handleTriggerKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      const selectedIndex = dimensionIds.indexOf(value);
+      const nextIndex = event.key === 'ArrowDown'
+        ? Math.min(selectedIndex + 1, dimensionIds.length - 1)
+        : event.key === 'ArrowUp'
+          ? Math.max(selectedIndex - 1, 0)
+          : event.key === 'Home'
+            ? 0
+            : dimensionIds.length - 1;
+      setActiveIndex(nextIndex);
+      setOpen(true);
+    }
+  };
+
+  const handleOptionKeyDown = (
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    index: number,
+    id: QualityDimensionId
+  ) => {
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        moveActive(index + 1);
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        moveActive(index - 1);
+        break;
+      case 'Home':
+        event.preventDefault();
+        moveActive(0);
+        break;
+      case 'End':
+        event.preventDefault();
+        moveActive(dimensionIds.length - 1);
+        break;
+      case 'Escape':
+        event.preventDefault();
+        closeAndReturnFocus();
+        break;
+      case 'Enter':
+      case ' ':
+        event.preventDefault();
+        onChange(id);
+        closeAndReturnFocus();
+        break;
+      case 'Tab':
+        setOpen(false);
+        break;
+    }
+  };
+
+  return (
+    <div className="dimension-selector" ref={rootRef}>
+      <button
+        ref={triggerRef}
+        type="button"
+        className="dimension-selector__trigger"
+        aria-label={`${t.selectQualityDimension}: ${selectedLabel}`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={listboxId}
+        onClick={() => {
+          setActiveIndex(dimensionIds.indexOf(value));
+          setOpen((current) => !current);
+        }}
+        onKeyDown={handleTriggerKeyDown}
+      >
+        <span>{t.qualityDimension}</span>
+        <strong>{selectedLabel}</strong>
+        <ChevronDown aria-hidden="true" />
+      </button>
+
+      {open ? (
+        <ul
+          id={listboxId}
+          className="dimension-selector__menu"
+          role="listbox"
+          aria-label={t.selectQualityDimension}
+        >
+          {dimensionIds.map((id, index) => {
+            const selected = id === value;
+            return (
+              <li key={id} role="none">
+                <button
+                  ref={(node) => {
+                    optionRefs.current[index] = node;
+                  }}
+                  type="button"
+                  role="option"
+                  className={selected ? 'is-selected' : undefined}
+                  aria-selected={selected}
+                  tabIndex={index === activeIndex ? 0 : -1}
+                  onClick={() => {
+                    onChange(id);
+                    closeAndReturnFocus();
+                  }}
+                  onKeyDown={(event) => handleOptionKeyDown(event, index, id)}
+                >
+                  <span>{dimensionLabel(language, id)}</span>
+                  {selected ? <Check aria-hidden="true" /> : null}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+function StandardDimensionSummary({
+  language,
+  dimension
+}: {
+  language: Language;
+  dimension: DimensionQualityMock & { id: Exclude<QualityDimensionId, 'performance'> };
+}) {
+  const t = getCopy(language);
+  const issueTotal = Math.max(dimension.issues, 1);
+  const failureRatio = (dimension.failed / dimension.total) * 100;
+  const statusLabel = dimension.status === 'attention' ? t.needsAttention : t.qualityHealthy;
+  const priorityCopy = dimension.criticalIssues > 0
+    ? language === 'zh'
+      ? `优先处理 ${dimension.criticalIssues} 个阻断型问题`
+      : `Prioritize ${dimension.criticalIssues} blocking ${dimension.criticalIssues === 1 ? 'issue' : 'issues'}`
+    : language === 'zh'
+      ? '暂无阻断型问题'
+      : 'No blocking issues';
+
+  return (
+    <div className="dimension-summary-grid">
+      <section className="dimension-summary-zone" aria-labelledby="passed-scripts-title">
+        <p id="passed-scripts-title" className="dimension-summary-zone__eyebrow">{t.passedTestScripts}</p>
+        <div className="dimension-summary-zone__value-row">
+          <strong>{dimension.passed}</strong>
+          <span>/ {dimension.total} {t.testScriptsUnit}</span>
+        </div>
+        <p>
+          {t.executionCoverage} 100% · {t.passRate} {dimension.score.toFixed(2)}%
+        </p>
+        <div
+          className="dimension-progress"
+          role="progressbar"
+          aria-label={`${t.passRate} ${dimension.score.toFixed(2)}%`}
+          aria-valuemin={0}
+          aria-valuemax={dimension.total}
+          aria-valuenow={dimension.passed}
+        >
+          <span style={{ width: `${dimension.score}%` }} />
+        </div>
+        <p>{t.overviewFailed} {dimension.failed} · {t.runningCount} {dimension.running}</p>
+      </section>
+
+      <section className="dimension-summary-zone" aria-labelledby="quality-assessment-title">
+        <p id="quality-assessment-title" className="dimension-summary-zone__eyebrow">
+          {t.overallQualityAssessment}
+        </p>
+        <div className="dimension-assessment">
+          <QualityRing score={dimension.score} label={t.dimensionQuality} size="compact" />
+          <div className="dimension-assessment__rating">
+            <span className={`overview-status-pill is-${dimension.status}`}>
+              <span aria-hidden="true" />
+              {statusLabel}
+            </span>
+            <strong>{t.comprehensiveRating} {dimension.rating}</strong>
+            <span>{t.failureScriptRatio} {failureRatio.toFixed(2)}%</span>
+          </div>
+        </div>
+        <p className="dimension-conclusion">
+          {t.conclusion}: {dimensionConclusion(language, dimension.id)}
+        </p>
+      </section>
+
+      <section className="dimension-summary-zone" aria-labelledby="issues-found-title">
+        <p id="issues-found-title" className="dimension-summary-zone__eyebrow">{t.issuesFound}</p>
+        <div className="dimension-summary-zone__value-row is-danger">
+          <strong>{dimension.issues}</strong>
+          <span>{t.issuesUnit}</span>
+        </div>
+        <p>
+          {t.criticalIssues} {dimension.criticalIssues} · {t.majorIssues} {dimension.majorIssues} ·{' '}
+          {t.minorIssues} {dimension.minorIssues}
+        </p>
+        <div className="issue-severity" aria-hidden="true">
+          <span
+            className="is-critical"
+            style={{ width: `${(dimension.criticalIssues / issueTotal) * 100}%` }}
+          />
+          <span
+            className="is-major"
+            style={{ width: `${(dimension.majorIssues / issueTotal) * 100}%` }}
+          />
+          <span
+            className="is-minor"
+            style={{ width: `${(dimension.minorIssues / issueTotal) * 100}%` }}
+          />
+        </div>
+        <p className="dimension-priority">{priorityCopy}</p>
+      </section>
+    </div>
+  );
+}
+
+function PerformanceDimensionSummary({ language }: { language: Language }) {
+  const t = getCopy(language);
+  const dimension = overviewQualityMock.dimensions.performance;
+  const performance = overviewQualityMock.performance;
+  const chart = useMemo(() => {
+    const width = 600;
+    const left = 8;
+    const right = width - 8;
+    const top = 12;
+    const bottom = 78;
+    const min = 400;
+    const max = 510;
+    const points = performance.trend.map((point, index) => {
+      const x = left + ((right - left) * index) / (performance.trend.length - 1);
+      const y = top + ((point.p95 - min) / (max - min)) * (bottom - top);
+      return { ...point, x, y };
+    });
+
+    return {
+      points,
+      line: points.map((point) => `${point.x},${point.y}`).join(' '),
+      area: `${left},${bottom + 8} ${points.map((point) => `${point.x},${point.y}`).join(' ')} ${right},${bottom + 8}`
+    };
+  }, [performance.trend]);
+
+  return (
+    <div className="performance-summary-grid">
+      <section className="performance-trend" aria-labelledby="performance-trend-title">
+        <div className="performance-trend__heading">
+          <div>
+            <strong>P95 <span>{performance.p95} ms</span></strong>
+            <p id="performance-trend-title">{t.performanceTrend}</p>
+          </div>
+          <span className="performance-trend__change">
+            -{performance.improvementPercent}% {t.comparedWithBaseline}
+          </span>
+        </div>
+        <div className="performance-chart">
+          <svg
+            viewBox="0 0 600 92"
+            preserveAspectRatio="none"
+            role="img"
+            aria-label={`${t.performanceTrend}. ${performance.trend.map((point) => `${point.version}: ${point.p95} ms`).join(', ')}`}
+          >
+            <line x1="8" x2="592" y1="24" y2="24" />
+            <line x1="8" x2="592" y1="52" y2="52" />
+            <line x1="8" x2="592" y1="80" y2="80" />
+            <polygon points={chart.area} />
+            <polyline points={chart.line} />
+            {chart.points.map((point) => (
+              <circle key={point.version} cx={point.x} cy={point.y} r="3.5" />
+            ))}
+          </svg>
+          <div className="performance-chart__labels" aria-hidden="true">
+            {performance.trend.map((point) => <span key={point.version}>{point.version}</span>)}
+          </div>
+        </div>
+      </section>
+
+      <section className="performance-baseline" aria-labelledby="performance-baseline-title">
+        <p id="performance-baseline-title" className="performance-baseline__title">{t.versionBaseline}</p>
+        <div className="performance-baseline__summary">
+          <span>{t.overviewPassed} {dimension.passed} / {dimension.total}</span>
+          <span>{t.overviewRating} {dimension.rating}</span>
+          <span>{t.overviewIssuesShort} {dimension.issues}</span>
+        </div>
+        <dl className="performance-baseline__rows">
+          <div>
+            <dt>{performance.currentVersion} · {t.currentVersion}</dt>
+            <dd className="is-improved">{performance.p95} ms</dd>
+          </div>
+          <div>
+            <dt>{performance.baselineVersion} · {t.performanceBaseline}</dt>
+            <dd>{performance.baselineP95} ms</dd>
+          </div>
+        </dl>
+        <p className="performance-baseline__delta">
+          {t.baselineImprovement} {performance.improvementMs} ms · -{performance.improvementPercent}%
+        </p>
+      </section>
+    </div>
+  );
+}
+
+export function Dashboard({ language, selectedSut, activeTask }: PageProps) {
+  const t = getCopy(language);
+  const [selectedDimension, setSelectedDimension] = useState<QualityDimensionId>('basic');
+  const selectedMock = overviewQualityMock.dimensions[selectedDimension];
+  const selectedLabel = dimensionLabel(language, selectedDimension);
 
   return (
     <div className="page-stack overview-page">
@@ -137,207 +474,96 @@ export function Dashboard({
 
       <ExecutionFocus language={language} sut={selectedSut} task={activeTask} />
 
-      <div className="overview-grid">
-        <section
-          className="overview-quality-card"
-          aria-labelledby="overview-quality-title"
-        >
-          <div className="overview-quality-card__heading">
-            <div>
-              <p className="overview-kicker">L0 QUALITY</p>
-              <h2 id="overview-quality-title">{t.qualitySummary}</h2>
-            </div>
-            {showPresentationFallback ? (
-              <span className="overview-stability">
-                <span aria-hidden="true" />
-                {t.stable}
-              </span>
-            ) : null}
-          </div>
-
-          <div className="overview-quality-card__summary">
-            <div className="quality-score" aria-label={`${t.overallQuality} ${qualityScore ?? t.notAvailable}`}>
-              <svg viewBox="0 0 120 120" aria-hidden="true">
-                <circle className="quality-score__track" cx="60" cy="60" r="51" pathLength="100" />
-                {qualityScore ? (
-                  <circle
-                    className="quality-score__value"
-                    cx="60"
-                    cy="60"
-                    r="51"
-                    pathLength="100"
-                    strokeDasharray={`${qualityPercent} 100`}
-                  />
-                ) : null}
-              </svg>
+      <div className="overview-quality-hierarchy">
+        <section className="overview-l0-card" aria-labelledby="overview-l0-title">
+          <div className="overview-l0-score-zone">
+            <div className="overview-hierarchy-heading">
+              <span className="overview-hierarchy-heading__spine" aria-hidden="true" />
               <div>
-                <strong>{qualityScore ?? '—'}</strong>
-                <span>{t.overallQuality}</span>
+                <p>{t.l0QualityEyebrow}</p>
+                <h2 id="overview-l0-title">{t.globalQuality}</h2>
               </div>
             </div>
-            <div className="overview-quality-card__message">
-              {showPresentationFallback ? (
-                <>
-                  <strong>{t.qualityAttentionCount}</strong>
-                  <p>{t.qualitySummaryDetail}</p>
-                </>
-              ) : statistics ? (
-                <>
-                  <strong>{statistics.summary.failed_count} {t.statisticsFailures}</strong>
-                  <p>
-                    {statistics.summary.executed_scripts} / {statistics.summary.total_scripts}{' '}
-                    {t.statisticsExecuted}
-                  </p>
-                </>
-              ) : statisticsQuery.isError ? (
-                <p role="alert">{t.statisticsUnavailable}</p>
-              ) : statisticsQuery.isLoading ? (
-                <p>{t.loadingStatistics}</p>
-              ) : (
-                <p>{t.notAvailable}</p>
-              )}
+
+            <div className="overview-l0-score-summary">
+              <QualityRing score={overviewQualityMock.overallPassRate} label={t.overallQuality} />
+              <div className="overview-l0-score-status">
+                <span className="overview-status-pill is-attention">
+                  <span aria-hidden="true" />
+                  {t.needsAttention}
+                </span>
+                <strong>{overviewQualityMock.totalIssues} {t.overviewIssuesShort}</strong>
+                <span>{overviewQualityMock.executed} / {overviewQualityMock.totalExecutions} {t.overviewExecuted}</span>
+              </div>
             </div>
           </div>
 
-          {qualitySignals.length ? (
-            <ul className="quality-signal-list">
-              {qualitySignals.map((signal) => (
-                <li key={signal.label}>
-                  <h3>{signal.label}</h3>
-                  <span className="quality-signal-list__track" aria-hidden="true">
-                    <span
-                      className={`is-${signal.tone}`}
-                      style={{ width: `${signal.percent}%` }}
-                    />
-                  </span>
-                  <strong>{signal.value}</strong>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="overview-empty-state">{t.notAvailable}</p>
-          )}
+          <div className="overview-l0-divider" aria-hidden="true" />
+
+          <div className="overview-l0-metrics" role="list" aria-label={t.globalQuality}>
+            <div className="overview-l0-metric" role="listitem">
+              <p>{t.overviewTotalExecutionEyebrow}</p>
+              <span>{t.overviewTotalExecution}</span>
+              <strong>{overviewQualityMock.totalExecutions}</strong>
+              <small>
+                {overviewQualityMock.executed} {t.overviewExecuted} · {overviewQualityMock.unexecuted} {t.overviewUnexecuted}
+              </small>
+            </div>
+            <div className="overview-l0-metric" role="listitem">
+              <p>{t.overviewOverallPassRateEyebrow}</p>
+              <span>{t.overviewOverallPassRate}</span>
+              <strong>{overviewQualityMock.overallPassRate.toFixed(2)}%</strong>
+              <small>
+                {overviewQualityMock.passed} {t.overviewPassed} · {overviewQualityMock.failed} {t.overviewFailed}
+              </small>
+            </div>
+            <div className="overview-l0-metric is-issues" role="listitem">
+              <p>{t.overviewTotalIssuesEyebrow}</p>
+              <span>{t.overviewTotalIssues}</span>
+              <strong>{overviewQualityMock.totalIssues}</strong>
+              <small>{t.overviewIssueDataNote}</small>
+            </div>
+          </div>
         </section>
 
-        <div className="overview-right-column">
-          <div className="overview-metrics">
-            <MetricCard
-              label={t.todayExecutions}
-              value={showPresentationFallback ? '24' : statistics ? String(statistics.summary.executed_scripts) : '—'}
-              change={showPresentationFallback ? '+12.5%' : undefined}
-              changeTone="positive"
-              note={showPresentationFallback
-                ? t.completedTasksToday
-                : statistics
-                  ? `${statistics.summary.execution_rate} ${t.statisticsExecutionRate}`
-                  : t.notAvailable}
-            />
-            <MetricCard
-              label={t.passRate}
-              value={passRate ?? '—'}
-              change={showPresentationFallback ? '+2.1%' : undefined}
-              changeTone="positive"
-              note={showPresentationFallback
-                ? t.pastSevenDaysImproved
-                : statistics
-                  ? `${statistics.summary.pass_count} ${t.statisticsPassed}`
-                  : t.notAvailable}
-            />
-            <MetricCard
-              label={t.overviewActiveIssues}
-              value={showPresentationFallback ? '7' : statistics ? String(statistics.summary.failed_count) : '—'}
-              change={showPresentationFallback ? t.threeNeedAttention : undefined}
-              changeTone="warning"
-              note={showPresentationFallback
-                ? t.unclaimedIssues
-                : statistics
-                  ? `${statistics.summary.unexecuted_scripts} ${t.statisticsUnexecuted}`
-                  : t.notAvailable}
-            />
-          </div>
-
-          <section className="overview-path-card" aria-labelledby="overview-path-title">
-            <div className="overview-card-heading">
+        <section className="overview-l1-section" aria-labelledby="overview-l1-title">
+          <div className="overview-l1-heading">
+            <div className="overview-hierarchy-heading">
+              <span className="overview-hierarchy-heading__spine" aria-hidden="true" />
               <div>
-                <h2 id="overview-path-title">{t.executionPath}</h2>
-                {showPresentationFallback ? (
-                  <span className="overview-running-pill">
-                    <span aria-hidden="true" />
-                    {t.inProgress}
-                  </span>
-                ) : null}
+                <p>{t.l1QualityEyebrow}</p>
+                <h2 id="overview-l1-title">{t.dimensionQualityAssessment}</h2>
               </div>
-              <span>{showPresentationFallback ? t.threeMinutesRemaining : t.notAvailable}</span>
             </div>
-            {showPresentationFallback ? (
-              <ol className="overview-path-list">
-                {pathStages.map((stage, index) => {
-                  const stageState = index < 2 ? 'complete' : index === 2 ? 'current' : 'pending';
-                  const stageStatus = stageState === 'complete'
-                    ? t.stageComplete
-                    : stageState === 'current'
-                      ? t.stageCurrent
-                      : t.stagePending;
-
-                  return (
-                    <li
-                      key={stage}
-                      className={`is-${stageState}`}
-                      aria-current={stageState === 'current' ? 'step' : undefined}
-                    >
-                      <span className="overview-path-list__track" aria-hidden="true" />
-                      <span data-testid="path-stage-label">{stage}</span>
-                      <span className="sr-only">{stageStatus}</span>
-                    </li>
-                  );
-                })}
-              </ol>
-            ) : (
-              <p className="overview-empty-state">{t.notAvailable}</p>
-            )}
-          </section>
-
-          <div className="overview-lower-grid">
-            <section className="overview-activity-card" aria-labelledby="overview-activity-title">
-              <div className="overview-card-heading">
-                <h2 id="overview-activity-title">{t.recentActivity}</h2>
-                <PresentationOnlyButton>
-                  {t.viewAll}
-                  <span aria-hidden="true">→</span>
-                </PresentationOnlyButton>
-              </div>
-              {showPresentationFallback ? (
-                <ul className="overview-activity-list">
-                  {activityItems.map((item) => (
-                    <li key={item.title}>
-                      <span className="overview-activity-list__icon" aria-hidden="true">
-                        <Check />
-                      </span>
-                      <div>
-                        <strong>{item.title}</strong>
-                        <span>{item.detail}</span>
-                      </div>
-                      <time>{item.time}</time>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="overview-empty-state">{t.notAvailable}</p>
-              )}
-            </section>
-
-            <aside className="overview-attention-card" aria-labelledby="overview-attention-title">
-              <div className="overview-attention-card__heading">
-                <h2 id="overview-attention-title">{t.attention}</h2>
-              </div>
-              <p>{t.attentionDetail}</p>
-              <PresentationOnlyButton className="overview-attention-card__action">
-                {t.viewInteractionGuide}
-                <span aria-hidden="true">→</span>
-              </PresentationOnlyButton>
-            </aside>
+            <span className="overview-mock-badge">{t.frontendMockData}</span>
           </div>
-        </div>
+
+          <div className="overview-l1-card" data-dimension={selectedDimension}>
+            <div className="overview-l1-card__heading">
+              <div>
+                <p>{t.currentDimension} · {dimensionTechnicalLabel(selectedDimension)}</p>
+                <h3>{selectedLabel}</h3>
+              </div>
+              <DimensionSelector
+                language={language}
+                value={selectedDimension}
+                onChange={setSelectedDimension}
+              />
+            </div>
+            <div className="overview-l1-card__divider" aria-hidden="true" />
+
+            {selectedDimension === 'performance' ? (
+              <PerformanceDimensionSummary language={language} />
+            ) : (
+              <StandardDimensionSummary
+                language={language}
+                dimension={selectedMock as DimensionQualityMock & {
+                  id: Exclude<QualityDimensionId, 'performance'>;
+                }}
+              />
+            )}
+          </div>
+        </section>
       </div>
     </div>
   );

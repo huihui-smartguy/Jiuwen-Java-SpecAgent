@@ -1,13 +1,11 @@
 import { readFileSync } from 'node:fs';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useState } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { resolveRuntimeConfig } from '../config/runtime';
 import { activeTask } from '../data/mockData';
-import type { NormalizedTaskStatus, RuntimeConfig, SutTarget } from '../types';
+import type { Language, NormalizedTaskStatus, RuntimeConfig, SutTarget } from '../types';
 import { Dashboard } from './Dashboard';
 
 const overviewStyles = readFileSync('src/styles/routes/overview.css', 'utf8');
@@ -15,26 +13,25 @@ const foundationStyles = readFileSync('src/styles/foundations.css', 'utf8');
 const primitiveStyles = readFileSync('src/styles/primitives.css', 'utf8');
 
 function renderDashboard({
+  language = 'zh',
   task = activeTask,
-  runtimeConfig = resolveRuntimeConfig({ defaultLanguage: 'zh', enableMockFallback: true }),
+  runtimeConfig = resolveRuntimeConfig({ defaultLanguage: language, enableMockFallback: true }),
   selectedSut = runtimeConfig.sutTargets[0]
 }: {
+  language?: Language;
   task?: NormalizedTaskStatus | null;
   runtimeConfig?: RuntimeConfig;
   selectedSut?: SutTarget;
 } = {}) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <QueryClientProvider client={client}>
-      <MemoryRouter>
-        <Dashboard
-          language="zh"
-          selectedSut={selectedSut}
-          activeTask={task}
-          runtimeConfig={runtimeConfig}
-        />
-      </MemoryRouter>
-    </QueryClientProvider>
+    <MemoryRouter>
+      <Dashboard
+        language={language}
+        selectedSut={selectedSut}
+        activeTask={task}
+        runtimeConfig={runtimeConfig}
+      />
+    </MemoryRouter>
   );
 }
 
@@ -42,100 +39,86 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('Overview dashboard', () => {
-  test('encodes the exact approved 1440px Overview geometry and type scale', () => {
+describe('Overview dashboard R6', () => {
+  test('encodes the approved desktop geometry, hierarchy gap, and single-line action', () => {
     expect(foundationStyles).toMatch(/--radius-card:\s*24px;/);
-    expect(foundationStyles).toMatch(
-      /--shadow-major:\s*0 6px 18px rgba\(10,\s*20,\s*41,\s*0\.05\);/
+    expect(primitiveStyles).toMatch(
+      /\.main-content\s*\{[^}]*max-width:\s*1440px;[^}]*padding:\s*48px 72px 80px;/s
     );
-    expect(primitiveStyles).toMatch(/\.main-content\s*\{[^}]*max-width:\s*1440px;[^}]*padding:\s*48px 72px 80px;/s);
-    expect(primitiveStyles).toMatch(/\.page-title-row h1\s*\{[^}]*font-size:\s*44px;[^}]*line-height:\s*56px;/s);
-    expect(primitiveStyles).toMatch(/\.page-subtitle\s*\{[^}]*font-size:\s*16px;[^}]*line-height:\s*26px;/s);
-    expect(overviewStyles).toMatch(/\.page-header\s*\{[^}]*height:\s*130px;[^}]*min-height:\s*130px;[^}]*margin-bottom:\s*24px;/s);
-    expect(overviewStyles).toMatch(/\.overview-create-task\s*\{[^}]*width:\s*90px;[^}]*height:\s*52px;[^}]*border-radius:\s*16px;/s);
-    expect(overviewStyles).toMatch(/\.overview-current-run\s*\{[^}]*height:\s*96px;[^}]*min-height:\s*96px;[^}]*margin-bottom:\s*24px;[^}]*padding:\s*18px 24px;/s);
-    expect(overviewStyles).toMatch(/\.overview-current-run\s*\{[^}]*box-shadow:\s*0 6px 9px rgba\(10,\s*20,\s*41,\s*0\.06\);/s);
-    expect(overviewStyles).toMatch(/\.overview-grid\s*\{[^}]*grid-template-columns:\s*404px minmax\(0,\s*1fr\);[^}]*gap:\s*24px;/s);
-    expect(overviewStyles).toMatch(/\.overview-quality-card\s*\{[^}]*height:\s*440px;[^}]*padding:\s*26px 28px;/s);
-    expect(overviewStyles).toMatch(/\.overview-right-column\s*\{[^}]*grid-template-rows:\s*128px 132px 156px;[^}]*gap:\s*12px;/s);
-    expect(overviewStyles).toMatch(/\.overview-metrics\s*\{[^}]*gap:\s*16px;/s);
-    expect(overviewStyles).toMatch(/\.overview-lower-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*566px\) minmax\(0,\s*286px\);[^}]*gap:\s*16px;/s);
-    expect(overviewStyles).toMatch(/\.overview-activity-card\s*\{[^}]*padding:\s*22px 28px;/s);
-    expect(overviewStyles).toMatch(/\.presentation-only-button\s*\{[^}]*min-height:\s*26px;/s);
-    expect(overviewStyles).toMatch(/\.overview-activity-list\s*\{[^}]*margin-top:\s*6px;/s);
-    expect(overviewStyles).toMatch(/\.overview-activity-list li\s*\{[^}]*min-height:\s*26px;/s);
-    expect(overviewStyles).toMatch(/\.overview-activity-list strong\s*\{[^}]*line-height:\s*13px;/s);
-    expect(overviewStyles).toMatch(/\.overview-activity-list li > div > span,\s*\.overview-activity-list time\s*\{[^}]*line-height:\s*11px;/s);
-  });
-
-  test('releases the fixed quality height when the Overview columns stack', () => {
-    const stackedRulesStart = overviewStyles.indexOf('@media (max-width: 980px)');
-    const stackedRulesEnd = overviewStyles.indexOf('@media (max-width: 680px)', stackedRulesStart);
-
-    expect(stackedRulesStart).toBeGreaterThanOrEqual(0);
-    expect(stackedRulesEnd).toBeGreaterThan(stackedRulesStart);
-    expect(overviewStyles.slice(stackedRulesStart, stackedRulesEnd)).toMatch(
-      /\.overview-quality-card\s*\{[^}]*height:\s*auto;/
+    expect(overviewStyles).toMatch(
+      /\.overview-create-task\s*\{[^}]*width:\s*120px;[^}]*height:\s*52px;[^}]*min-width:\s*120px;[^}]*white-space:\s*nowrap;/s
+    );
+    expect(overviewStyles).toMatch(
+      /\.overview-quality-hierarchy\s*\{[^}]*gap:\s*48px;/s
+    );
+    expect(overviewStyles).toMatch(
+      /\.overview-l0-card\s*\{[^}]*height:\s*210px;[^}]*grid-template-columns:\s*300px 1px minmax\(0,\s*1fr\);/s
+    );
+    expect(overviewStyles).toMatch(
+      /\.overview-l1-card\s*\{[^}]*min-height:\s*350px;/s
+    );
+    expect(overviewStyles).toMatch(
+      /\.dimension-selector\s*\{[^}]*width:\s*232px;/s
+    );
+    expect(overviewStyles).toMatch(
+      /\.dimension-summary-grid\s*\{[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\);/s
+    );
+    expect(overviewStyles).toMatch(
+      /@media \(max-width:\s*680px\)[\s\S]*?\.overview-create-task\s*\{[^}]*flex:\s*0 0 auto;[^}]*min-height:\s*52px;/s
+    );
+    expect(overviewStyles).toMatch(
+      /@media \(max-width:\s*680px\)[\s\S]*?\.overview-mock-badge\s*\{[^}]*flex:\s*0 0 auto;[^}]*align-self:\s*flex-start;/s
+    );
+    expect(overviewStyles).toMatch(
+      /@media \(max-width:\s*680px\)[\s\S]*?\.overview-l1-card\s*\{[^}]*grid-template-rows:\s*auto 1px auto;[^}]*gap:\s*14px;/s
     );
   });
 
-  test('keeps focusable presentation controls touch-sized below the drawer breakpoint', () => {
-    const responsiveRulesStart = overviewStyles.indexOf('@media (max-width: 1179px)');
-    const responsiveRulesEnd = overviewStyles.indexOf(
-      '@media (max-width: 980px)',
-      responsiveRulesStart
-    );
-
-    expect(responsiveRulesStart).toBeGreaterThanOrEqual(0);
-    expect(responsiveRulesEnd).toBeGreaterThan(responsiveRulesStart);
-
-    const responsiveRules = overviewStyles.slice(responsiveRulesStart, responsiveRulesEnd);
-
-    expect(responsiveRules).toMatch(
-      /\.overview-page \.presentation-only-button\s*\{[^}]*min-height:\s*44px;/
-    );
-    expect(responsiveRules).toMatch(
-      /\.overview-right-column\s*\{[^}]*grid-template-rows:\s*128px 132px auto;/
-    );
-  });
-
-  test('renders the approved Overview composition in source order', () => {
-    const { container } = renderDashboard();
+  test('renders the approved hierarchy and removes obsolete Overview sections', () => {
+    renderDashboard();
 
     const pageTitle = screen.getByRole('heading', { name: '测试看板', level: 1 });
-    expect(screen.getByText('执行态势、质量信号与需要处理的异常，一屏完成判断。')).toBeInTheDocument();
+    expect(screen.getByText('对象级 L0 质量总览与 L1 分维度测试执行分析')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /新建任务/ })).toHaveAttribute('href', '/tasks');
 
     const currentRun = screen.getByRole('region', { name: '当前执行' });
-    const quality = screen.getByRole('region', { name: '质量摘要' });
-    const executionPath = screen.getByRole('region', { name: '执行路径' });
-    const recentActivity = screen.getByRole('region', { name: '最近活动' });
-    const attention = screen.getByRole('complementary', { name: '需要关注' });
+    const l0 = screen.getByRole('region', { name: '全局质量' });
+    const l1 = screen.getByRole('region', { name: '分维度质量评估' });
 
-    for (const [earlier, later] of [
-      [pageTitle, currentRun],
-      [currentRun, quality],
-      [quality, executionPath],
-      [executionPath, recentActivity],
-      [recentActivity, attention]
-    ]) {
+    for (const [earlier, later] of [[pageTitle, currentRun], [currentRun, l0], [l0, l1]]) {
       expect(earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     }
 
-    expect(container.querySelector('.page-header .eyebrow')).not.toBeInTheDocument();
-    expect(screen.queryByText(/TESTWISE CONTROL PLANE/i)).not.toBeInTheDocument();
-    expect(screen.queryByText('执行焦点')).not.toBeInTheDocument();
-    expect(screen.queryByText('L0 质量摘要')).not.toBeInTheDocument();
-    expect(container.querySelectorAll('.overview-quality-card')).toHaveLength(1);
-    expect(container.querySelectorAll('.quality-card')).toHaveLength(0);
+    expect(screen.queryByRole('region', { name: '执行路径' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: '最近活动' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('complementary', { name: '需要关注' })).not.toBeInTheDocument();
+    expect(screen.queryByText('今日执行')).not.toBeInTheDocument();
+    expect(screen.queryByText('活动问题')).not.toBeInTheDocument();
   });
 
-  test('binds the current-run strip to the real task and selected Object', () => {
+  test('integrates object-wide L0 execution, pass rate, and issue totals', () => {
+    renderDashboard();
+
+    const l0 = screen.getByRole('region', { name: '全局质量' });
+    const metrics = within(l0).getAllByRole('listitem');
+
+    expect(metrics).toHaveLength(3);
+    expect(within(metrics[0]).getByText('总执行次数')).toBeInTheDocument();
+    expect(within(metrics[0]).getByText('134')).toBeInTheDocument();
+    expect(within(metrics[1]).getByText('整体通过率')).toBeInTheDocument();
+    expect(within(metrics[1]).getByText('67.91%')).toBeInTheDocument();
+    expect(within(metrics[2]).getByText('问题总数')).toBeInTheDocument();
+    expect(within(metrics[2]).getByText('42')).toBeInTheDocument();
+    expect(within(metrics[2]).getByText('演示问题数据 · 前端模拟')).toBeInTheDocument();
+    expect(screen.getByText('演示数据 · 前端模拟')).toBeInTheDocument();
+  });
+
+  test('keeps the current-execution strip bound to the real task and Object', () => {
     const runtimeConfig = resolveRuntimeConfig({ defaultLanguage: 'zh', enableMockFallback: true });
     const selectedSut = runtimeConfig.sutTargets[1];
     const task: NormalizedTaskStatus = {
       ...activeTask,
-      task_id: 'task_live_20260714',
+      task_id: 'task_live_20260717',
       progress: {
         total_commands: 8,
         completed: 3,
@@ -150,264 +133,146 @@ describe('Overview dashboard', () => {
     expect(within(currentRun).getByText(task.task_id)).toBeInTheDocument();
     expect(within(currentRun).getByText('3 / 8')).toBeInTheDocument();
     expect(within(currentRun).getByText('pytest testcase/live_save')).toBeInTheDocument();
-    expect(within(currentRun).getByText(`${selectedSut.name} · ${selectedSut.version}`)).toBeInTheDocument();
-    expect(within(currentRun).getByRole('progressbar', { name: '进度' })).toHaveAttribute(
-      'aria-valuenow',
-      '3'
-    );
-    expect(within(currentRun).getByRole('link', { name: /打开观测台/ })).toHaveAttribute(
-      'href',
-      '/observation'
-    );
-    expect(within(currentRun).queryByText(activeTask.task_id)).not.toBeInTheDocument();
+    expect(within(currentRun).getByText(`${selectedSut.name} · ${selectedSut.version}`)).toHaveClass('sr-only');
+    expect(within(currentRun).getByRole('progressbar', { name: '进度' })).toHaveAttribute('aria-valuenow', '3');
+    expect(within(currentRun).getByRole('link', { name: /打开观测台/ })).toHaveAttribute('href', '/observation');
   });
 
-  test('counts failed terminal commands as completed progress', () => {
-    const task: NormalizedTaskStatus = {
+  test('counts failed terminal commands and preserves polling-error truthfulness', () => {
+    const failedTask: NormalizedTaskStatus = {
       ...activeTask,
       status: 'failed',
       uiStatus: 'failed',
       isTerminal: true,
       progress: undefined,
-      result: {
-        total_commands: 5,
-        success_count: 3,
-        failed_count: 2
-      }
+      result: { total_commands: 5, success_count: 3, failed_count: 2 }
     };
+    const { rerender } = renderDashboard({ task: failedTask });
 
-    renderDashboard({ task });
+    expect(within(screen.getByRole('region', { name: '当前执行' })).getByText('5 / 5')).toBeInTheDocument();
 
-    const currentRun = screen.getByRole('region', { name: '当前执行' });
-    expect(within(currentRun).getByText('5 / 5')).toBeInTheDocument();
-    expect(within(currentRun).getByRole('progressbar', { name: '进度' })).toHaveAttribute(
-      'aria-valuenow',
-      '5'
+    const pollingTask = { ...activeTask, uiStatus: 'polling_error' as const };
+    const runtimeConfig = resolveRuntimeConfig({ defaultLanguage: 'zh', enableMockFallback: true });
+    rerender(
+      <MemoryRouter>
+        <Dashboard
+          language="zh"
+          selectedSut={runtimeConfig.sutTargets[0]}
+          activeTask={pollingTask}
+          runtimeConfig={runtimeConfig}
+        />
+      </MemoryRouter>
     );
+    expect(within(screen.getByRole('region', { name: '当前执行' })).getByText(/轮询异常/)).toBeInTheDocument();
   });
 
-  test('surfaces a normalized polling error instead of stale backend status', () => {
-    const task: NormalizedTaskStatus = {
-      ...activeTask,
-      uiStatus: 'polling_error'
-    };
+  test('uses the labelled frontend mock in production mode without a statistics request', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const runtimeConfig = resolveRuntimeConfig({ defaultLanguage: 'zh', enableMockFallback: false });
 
-    renderDashboard({ task });
+    renderDashboard({ runtimeConfig, task: null });
+    await Promise.resolve();
 
-    expect(within(screen.getByRole('region', { name: '当前执行' })).getByText(/轮询异常/))
-      .toBeInTheDocument();
+    expect(screen.getByText('演示数据 · 前端模拟')).toBeInTheDocument();
+    expect(screen.getByText('67.91%')).toBeInTheDocument();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    const currentRun = screen.getByRole('region', { name: '当前执行' });
+    expect(within(currentRun).getByText('暂无活动任务')).toBeInTheDocument();
+    expect(within(currentRun).getByText('0 / 0')).toBeInTheDocument();
   });
 
-  test('shows the approved mock quality, metrics, path, and activity values', () => {
-    const { container } = renderDashboard();
-
-    const quality = screen.getByRole('region', { name: '质量摘要' });
-    expect(within(quality).getByText('93.6')).toBeInTheDocument();
-    expect(within(quality).getAllByRole('listitem').map((item) => (
-      within(item).getByRole('heading', { level: 3 }).textContent
-    ))).toEqual(['基本功能', '性能测试', '场景化', 'DFX 测试']);
-
-    const metrics = container.querySelectorAll('.overview-metric-card');
-    expect(metrics).toHaveLength(3);
-    expect(container.querySelector('.overview-metrics svg')).not.toBeInTheDocument();
-    expect(container.querySelector('.overview-attention-card__heading svg')).not.toBeInTheDocument();
-    expect(Array.from(metrics).map((metric) => within(metric as HTMLElement).getByTestId('metric-value').textContent))
-      .toEqual(['24', '93.6%', '7']);
-
-    const executionPath = screen.getByRole('region', { name: '执行路径' });
-    const stages = within(executionPath).getAllByRole('listitem');
-    expect(stages.map((item) => within(item).getByTestId('path-stage-label').textContent)).toEqual([
-      '环境检查',
-      '脚本准备',
-      '保存接口',
-      '查询接口',
-      '汇总'
-    ]);
-    expect(stages[2]).toHaveAttribute('aria-current', 'step');
-    expect(within(stages[0]).getByText('已完成')).toHaveClass('sr-only');
-    expect(within(stages[2]).getByText('当前阶段')).toHaveClass('sr-only');
-    expect(within(stages[4]).getByText('待执行')).toHaveClass('sr-only');
-
-    const recentActivity = screen.getByRole('region', { name: '最近活动' });
-    expect(within(recentActivity).getAllByRole('listitem')).toHaveLength(3);
-    expect(within(recentActivity).getByText('保存接口任务已发起')).toBeInTheDocument();
-    expect(within(recentActivity).getByText('17 个回归已完成并生成摘要')).toBeInTheDocument();
-    expect(within(recentActivity).getByText('执行日志已导出')).toBeInTheDocument();
-  });
-
-  test('keeps presentation-only affordances focusable, disabled to assistive tech, and inert', async () => {
+  test('opens an accessible four-option selector and updates standard dimensions', async () => {
     const user = userEvent.setup();
     renderDashboard();
 
-    const viewAll = screen.getByRole('button', { name: '查看全部' });
-    const interactionGuide = screen.getByRole('button', { name: '查看交互说明' });
+    const trigger = screen.getByRole('button', { name: '选择质量维度: 基础功能' });
+    expect(trigger).toHaveAttribute('aria-haspopup', 'listbox');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
 
-    for (const button of [viewAll, interactionGuide]) {
-      expect(button).toHaveAttribute('type', 'button');
-      expect(button).toHaveAttribute('aria-disabled', 'true');
-      expect(button).not.toBeDisabled();
-      button.focus();
-      expect(button).toHaveFocus();
-      await user.keyboard('{Enter}');
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    const listbox = screen.getByRole('listbox', { name: '选择质量维度' });
+    const options = within(listbox).getAllByRole('option');
+    expect(options.map((option) => option.textContent)).toEqual(['基础功能', 'DFX', '场景化测试', '性能']);
+    expect(options[0]).toHaveAttribute('aria-selected', 'true');
+
+    await user.click(within(listbox).getByRole('option', { name: 'DFX' }));
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'DFX', level: 3 })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '选择质量维度: DFX' })).toHaveAttribute('aria-expanded', 'false');
+    const passed = screen.getByRole('region', { name: /PASSED TEST SCRIPTS/ });
+    expect(within(passed).getByText('118')).toBeInTheDocument();
+    expect(screen.getByText(/质量属性总体受控，可靠性问题需收敛/)).toBeInTheDocument();
+  });
+
+  test('supports arrow selection, Escape, and trigger focus return', async () => {
+    const user = userEvent.setup();
+    renderDashboard();
+
+    const trigger = screen.getByRole('button', { name: '选择质量维度: 基础功能' });
+    trigger.focus();
+    await user.keyboard('{ArrowDown}');
+    const dfxOption = await screen.findByRole('option', { name: 'DFX' });
+    await waitFor(() => expect(dfxOption).toHaveFocus());
+    await user.keyboard('{Enter}');
+    const dfxTrigger = screen.getByRole('button', { name: '选择质量维度: DFX' });
+    await waitFor(() => expect(dfxTrigger).toHaveFocus());
+
+    await user.click(dfxTrigger);
+    await waitFor(() => expect(screen.getByRole('option', { name: 'DFX' })).toHaveFocus());
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    await waitFor(() => expect(dfxTrigger).toHaveFocus());
+  });
+
+  test('renders Scenario-Based with the same three information zones', async () => {
+    const user = userEvent.setup();
+    renderDashboard();
+
+    await user.click(screen.getByRole('button', { name: /选择质量维度/ }));
+    await user.click(screen.getByRole('option', { name: '场景化测试' }));
+
+    expect(screen.getByRole('heading', { name: '场景化测试', level: 3 })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /PASSED TEST SCRIPTS/ })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /OVERALL QUALITY ASSESSMENT/ })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /ISSUES FOUND/ })).toBeInTheDocument();
+    expect(screen.getByText(/核心链路可用，复杂场景覆盖仍需加强/)).toBeInTheDocument();
+    expect(screen.getByText('9')).toBeInTheDocument();
+  });
+
+  test('adds the six-version trend and baseline comparison only for Performance', async () => {
+    const user = userEvent.setup();
+    renderDashboard();
+
+    await user.click(screen.getByRole('button', { name: /选择质量维度/ }));
+    await user.click(screen.getByRole('option', { name: '性能' }));
+
+    expect(screen.getByRole('heading', { name: '性能', level: 3 })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /性能趋势 · 最近 6 个版本/ })).toBeInTheDocument();
+    for (const version of ['v1.0', 'v1.1', 'v1.2', 'v1.3', 'v1.4', 'v1.5']) {
+      expect(screen.getByText(version)).toBeInTheDocument();
     }
+    expect(screen.getAllByText('412 ms')).toHaveLength(2);
+    expect(screen.getByText('450 ms')).toBeInTheDocument();
+    expect(screen.getByText(/较基线优化 38 ms · -8.4%/)).toBeInTheDocument();
+    expect(screen.getByText('通过 86 / 134')).toBeInTheDocument();
+    expect(screen.getByText('评级 A-')).toBeInTheDocument();
+    expect(screen.getByText('问题 4')).toBeInTheDocument();
 
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '测试看板' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '选择质量维度: 性能' }));
+    await user.click(screen.getByRole('option', { name: '基础功能' }));
+    expect(screen.queryByRole('img', { name: /性能趋势/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('450 ms')).not.toBeInTheDocument();
   });
 
-  test('renders truthful unavailable data when mock fallback is disabled and no task is active', () => {
-    vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise<Response>(() => undefined));
-    const runtimeConfig = resolveRuntimeConfig({ defaultLanguage: 'zh', enableMockFallback: false });
-    const { container } = renderDashboard({ runtimeConfig, task: null });
+  test('provides professional English terminology when language is switched', () => {
+    renderDashboard({ language: 'en' });
 
-    expect(screen.queryByText('93.6')).not.toBeInTheDocument();
-    expect(screen.queryByText('93.6%')).not.toBeInTheDocument();
-    expect(screen.queryByText('稳定')).not.toBeInTheDocument();
-    expect(screen.queryByText('保存接口任务已发起')).not.toBeInTheDocument();
-    expect(screen.queryByText('环境检查')).not.toBeInTheDocument();
-    expect(container.querySelectorAll('.overview-metric-card')).toHaveLength(3);
-    const currentRun = screen.getByRole('region', { name: '当前执行' });
-    expect(within(currentRun).queryByText(activeTask.task_id)).not.toBeInTheDocument();
-    expect(within(currentRun).queryByText(/pytest testcase\/save/i)).not.toBeInTheDocument();
-    expect(within(currentRun).getByText('暂无活动任务')).toBeInTheDocument();
-    expect(within(currentRun).getByText('0 / 0')).toBeInTheDocument();
-    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(4);
-  });
-
-  test('maps live Object-scoped statistics into the approved dashboard structure', async () => {
-    const runtimeConfig = resolveRuntimeConfig({ defaultLanguage: 'zh', enableMockFallback: false });
-    const selectedSut = runtimeConfig.sutTargets[0];
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        success: true,
-        message: 'ok',
-        data: {
-          summary: {
-            total_scripts: 10,
-            executed_scripts: 8,
-            unexecuted_scripts: 2,
-            pass_count: 6,
-            failed_count: 2,
-            running_count: 0,
-            pass_rate: '75.00%',
-            execution_rate: '80.00%'
-          },
-          breakdown: [
-            {
-              product: selectedSut.product,
-              scene: selectedSut.scene,
-              feature: 'Save API',
-              total_scripts: 4,
-              executed: 4,
-              unexecuted: 0,
-              pass: 3,
-              failed: 1,
-              running: 0
-            },
-            {
-              product: selectedSut.product,
-              scene: selectedSut.scene,
-              feature: 'Query API',
-              total_scripts: 6,
-              executed: 4,
-              unexecuted: 2,
-              pass: 3,
-              failed: 1,
-              running: 0
-            }
-          ],
-          filters: { product: selectedSut.product, scene: selectedSut.scene }
-        }
-      })
-    } as Response);
-
-    const { container } = renderDashboard({ runtimeConfig, selectedSut, task: null });
-
-    await waitFor(() => expect(fetchSpy).toHaveBeenCalledWith(
-      `/api/statistics/summary?product=${encodeURIComponent(selectedSut.product)}&scene=${encodeURIComponent(selectedSut.scene)}`,
-      { headers: { Accept: 'application/json' } }
-    ));
-    const quality = screen.getByRole('region', { name: '质量摘要' });
-    expect(await within(quality).findByText('75.00')).toBeInTheDocument();
-    expect(within(quality).getByRole('heading', { name: 'Save API' })).toBeInTheDocument();
-    expect(within(quality).getByRole('heading', { name: 'Query API' })).toBeInTheDocument();
-    expect(Array.from(container.querySelectorAll('.overview-metric-card')).map((metric) => (
-      within(metric as HTMLElement).getByTestId('metric-value').textContent
-    ))).toEqual(['8', '75.00%', '2']);
-  });
-
-  test('refetches statistics when the selected Object changes', async () => {
-    const runtimeConfig = resolveRuntimeConfig({ defaultLanguage: 'zh', enableMockFallback: false });
-    const firstTarget = runtimeConfig.sutTargets[0];
-    const secondTarget: SutTarget = {
-      ...firstTarget,
-      id: 'statistics-second-object',
-      name: 'Second statistics Object',
-      product: 'Second Product',
-      scene: 'UI',
-      apiBaseUrl: '/second-api'
-    };
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
-      const url = new URL(String(input), 'http://local.test');
-      const second = url.pathname.startsWith('/second-api/');
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        json: async () => ({
-          success: true,
-          message: 'ok',
-          data: {
-            summary: {
-              total_scripts: second ? 4 : 10,
-              executed_scripts: second ? 2 : 8,
-              unexecuted_scripts: 2,
-              pass_count: second ? 1 : 6,
-              failed_count: second ? 1 : 2,
-              running_count: 0,
-              pass_rate: second ? '50.00%' : '75.00%',
-              execution_rate: second ? '50.00%' : '80.00%'
-            },
-            breakdown: [],
-            filters: {
-              product: second ? secondTarget.product : firstTarget.product,
-              scene: second ? secondTarget.scene : firstTarget.scene
-            }
-          }
-        })
-      } as Response);
-    });
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-
-    function DashboardHarness() {
-      const [target, setTarget] = useState(firstTarget);
-      return (
-        <MemoryRouter>
-          <button type="button" onClick={() => setTarget(secondTarget)}>Switch Object</button>
-          <Dashboard
-            language="zh"
-            selectedSut={target}
-            activeTask={null}
-            runtimeConfig={runtimeConfig}
-          />
-        </MemoryRouter>
-      );
-    }
-
-    render(
-      <QueryClientProvider client={client}>
-        <DashboardHarness />
-      </QueryClientProvider>
-    );
-
-    expect(await screen.findByText('75.00')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Switch Object' }));
-    expect(await screen.findByText('50.00')).toBeInTheDocument();
-    expect(fetchSpy).toHaveBeenCalledWith(
-      '/second-api/statistics/summary?product=Second+Product&scene=UI',
-      { headers: { Accept: 'application/json' } }
-    );
+    expect(screen.getByText('Object-level L0 quality overview and L1 dimension-specific test execution analysis.'))
+      .toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Global quality' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Dimension-level quality assessment' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Select quality dimension: Basic Functionality' }))
+      .toBeInTheDocument();
   });
 });

@@ -227,11 +227,15 @@ describe('AppShell', () => {
     renderShell();
 
     expect(screen.getByRole('heading', { name: /测试看板/i })).toBeInTheDocument();
+    expect(screen.getByText('对象级 L0 质量总览与 L1 分维度测试执行分析')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: /当前执行/i })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: /质量摘要/i })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: /执行路径/i })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: /最近活动/i })).toBeInTheDocument();
-    expect(screen.getByRole('complementary', { name: /需要关注/i })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /全局质量/i })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /分维度质量评估/i })).toBeInTheDocument();
+    expect(screen.getByText('演示数据 · 前端模拟')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /选择质量维度: 基础功能/i })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: /执行路径/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: /最近活动/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('complementary', { name: /需要关注/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/执行焦点/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/L0 质量摘要/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/五分类责任分流/i)).not.toBeInTheDocument();
