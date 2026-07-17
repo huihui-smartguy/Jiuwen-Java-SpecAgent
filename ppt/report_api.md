@@ -13,8 +13,9 @@
 - [3. 报告详情](#3-报告详情)
 - [4. 下载报告](#4-下载报告)
 - [5. 删除报告](#5-删除报告)
-- [6. 数据结构说明](#6-数据结构说明)
-- [7. 通用约定](#7-通用约定)
+- [6. 趋势查询](#6-趋势查询)
+- [7. 数据结构说明](#7-数据结构说明)
+- [8. 通用约定](#8-通用约定)
 
 ---
 
@@ -31,9 +32,8 @@ Content-Type: application/json
 
 | 参数 | 类型 | 必填 | 说明 |
 |---|---|---|---|
-| `test_version` | string | 是 | 测试批次版本（如 `release1`/`dev`），对应执行记录的 `script_version` |
-| `software_version` | string | **是** | **被测软件版本/构建号**，由前端传入（如 `AgentPlatform 3.5.2 (build 20260712.1234)`） |
-| `scope` | object | 是 | 测试范围，见 [scope 结构](#61-scope测试范围) |
+| `software_version` | string | **是** | **被测软件版本/构建号**，由前端传入（如 `AgentPlatform 3.5.2 (build 20260712.1234)`）；同时作为执行记录的筛选条件（对应 `t_script_execution.script_version`） |
+| `scope` | object | 是 | 测试范围，见 [scope 结构](#71-scope测试范围) |
 | `title` | string | 否 | 报告标题；**缺省时自动按 `[软件版本 ]产品 场景 测试报告` 生成**（如 `AgentPlatform 3.5.2 高码java 场景用例 测试报告`） |
 | `time_window` | array | 否 | `[起, 止]` ISO 时间字符串，按用例 `started_at` 过滤；缺省或 `null` 表示不限 |
 | `created_by` | string | 否 | 生成人，默认 `system` |
@@ -44,7 +44,6 @@ Content-Type: application/json
 curl -X POST http://localhost:3000/api/reports \
   -H "Content-Type: application/json" \
   -d '{
-    "test_version": "release1",
     "software_version": "AgentPlatform 3.5.2 (build 20260712.1234)",
     "scope": {
       "product": "高码java",
@@ -74,7 +73,7 @@ curl -X POST http://localhost:3000/api/reports \
 
 | 状态码 | 场景 | 响应 |
 |---|---|---|
-| `400` | 缺少 `test_version`/`scope` | `{"success": false, "message": "缺少必填参数：test_version / scope"}` |
+| `400` | 缺少 `scope` | `{"success": false, "message": "缺少必填参数：scope"}` |
 | `400` | `scope` 非对象 | `{"success": false, "message": "参数 scope 必须为对象"}` |
 | `400` | 缺少 `software_version` | `{"success": false, "message": "缺少必填参数：software_version（被测软件版本）"}` |
 | `500` | 生成异常 | `{"success": false, "message": "生成报告失败: <原因>"}` |
@@ -96,15 +95,19 @@ GET /api/reports
 
 | 参数 | 类型 | 必填 | 默认 | 说明 |
 |---|---|---|---|---|
-| `software_version` | string | **是** | - | 按被测软件版本精确筛选 |
-| `test_version` | string | 否 | - | 按测试批次版本精确筛选 |
+| `software_version` | string | 否 | - | 按被测软件版本前缀模糊筛选（LIKE `xxx%`） |
+| `product` | string | 否 | - | 按产品名称筛选（scope JSON 字段） |
+| `scene` | string | 否 | - | 按场景名称筛选（scope JSON 字段） |
+| `feature` | string | 否 | - | 按特性名称筛选（scope JSON 字段） |
+| `from` | string | 否 | - | 创建时间起始（ISO datetime，如 `2026-07-01T00:00:00`） |
+| `to` | string | 否 | - | 创建时间截止（ISO datetime，如 `2026-07-15T23:59:59`） |
 | `limit` | int | 否 | 50 | 每页条数，范围 `1~200`（超出自动截断） |
 | `offset` | int | 否 | 0 | 偏移量 |
 
 ### 请求示例
 
 ```bash
-curl "http://localhost:3000/api/reports?software_version=AgentPlatform%203.5.2%20(build%2020260712.1234)&limit=20&offset=0"
+curl "http://localhost:3000/api/reports?product=%E9%AB%98%E7%A0%81java&scene=%E5%9C%BA%E6%99%AF%E7%94%A8%E4%BE%8B&software_version=AgentPlatform%203.5.2&limit=20&offset=0"
 ```
 
 ### 成功响应 `200`
@@ -118,7 +121,6 @@ curl "http://localhost:3000/api/reports?software_version=AgentPlatform%203.5.2%2
       "id": "3f2a8c1e-9b4d-4e7a-8c21-0a1b2c3d4e5f",
       "title": "AgentPlatform 3.5.2 高码java 场景用例测试报告",
       "software_version": "AgentPlatform 3.5.2 (build 20260712.1234)",
-      "test_version": "release1",
       "summary": {
         "total": 42, "pass": 38, "failed": 3, "skipped": 1,
         "success_rate": 92.68, "total_duration_seconds": 620
@@ -135,8 +137,7 @@ curl "http://localhost:3000/api/reports?software_version=AgentPlatform%203.5.2%2
 
 | 状态码 | 场景 | 响应 |
 |---|---|---|
-| `400` | 缺少 `software_version` | `{"success": false, "message": "缺少必填参数：software_version（被测软件版本）"}` |
-| `400` | `limit`/`offset` 非整数 | `{"success": false, "message": "参数 limit / offset 必须为整数"}` |
+| `400` | `limit`/`offset` 非整数或 `days` 超出范围 | `{"success": false, "message": "参数 limit / offset / days 不合法"}` |
 | `500` | 查询异常 | `{"success": false, "message": "查询报告列表失败: <原因>"}` |
 
 ---
@@ -170,15 +171,14 @@ curl "http://localhost:3000/api/reports/3f2a8c1e-9b4d-4e7a-8c21-0a1b2c3d4e5f"
     "id": "3f2a8c1e-9b4d-4e7a-8c21-0a1b2c3d4e5f",
     "title": "AgentPlatform 3.5.2 高码java 场景用例测试报告",
     "software_version": "AgentPlatform 3.5.2 (build 20260712.1234)",
-    "test_version": "release1",
     "scope": {
       "product": "高码java",
       "scenes": ["场景用例"],
       "features": [{"name": "工作流管理", "feature_version": "v2.3.1"}, {"name": "MCP服务"}],
-      "levels": ["L0", "L1", "L2"]
+      "levels": ["L0", "L1", "L2"],
+      "total_scripts": 45
     },
     "environment": {
-      "test_version": "release1",
       "execute_mode": "pytest",
       "env_vars": {"A2A_BASE_URL": "http://1.92.123.95:8190", "A2A_TRACE_DIR": "./trace"},
       "sut": {
@@ -237,7 +237,6 @@ curl "http://localhost:3000/api/reports/3f2a8c1e-9b4d-4e7a-8c21-0a1b2c3d4e5f"
         "error_message": "AssertionError: status 500",
         "failure_detail": "httpx.ConnectError: [Errno 111] Connection refused\n...(有界栈)",
         "failure_source": "log_file",
-        "log_file": "logs/高码java_场景用例_MCP服务_20260714/execution_20260714_101631.log",
         "log_download_url": "/api/download/高码java_场景用例_MCP服务_20260714/execution_20260714_101631.log",
         "task_id": "task-8b04c0a7"
       }
@@ -329,9 +328,76 @@ curl -X DELETE "http://localhost:3000/api/reports/3f2a8c1e-9b4d-4e7a-8c21-0a1b2c
 
 ---
 
-## 6. 数据结构说明
+## 6. 趋势查询
 
-### 6.1 scope（测试范围）
+查询指定时间窗口内每日通过率趋势，用于前端绘制趋势图。
+
+```
+GET /api/reports/trend
+```
+
+### 查询参数（query）
+
+| 参数 | 类型 | 必填 | 默认 | 说明 |
+|---|---|---|---|---|
+| `product` | string | 否 | - | 按产品名称筛选（scope JSON 字段） |
+| `scene` | string | 否 | - | 按场景名称筛选（scope JSON 字段） |
+| `feature` | string | 否 | - | 按特性名称筛选（scope JSON 字段） |
+| `software_version` | string | 否 | - | 按被测软件版本前缀模糊筛选（LIKE `xxx%`） |
+| `days` | int | 否 | 7 | 回溯天数，范围 `1~90`（超出自动截断） |
+| `aggregation` | string | 否 | `latest` | 聚合策略：`latest`=每日取最新一份报告；`avg`=每日所有报告取均值 |
+
+### 请求示例
+
+```bash
+curl "http://localhost:3000/api/reports/trend?product=%E9%AB%98%E7%A0%81java&scene=%E5%9C%BA%E6%99%AF%E7%94%A8%E4%BE%8B&days=14&aggregation=latest"
+```
+
+### 成功响应 `200`
+
+```json
+{
+  "success": true,
+  "trend": [
+    {
+      "date": "2026-07-14",
+      "report_count": 2,
+      "total_scripts": 38,
+      "pass": 35,
+      "failed": 2,
+      "skipped": 1,
+      "success_rate": 92.1,
+      "total_duration_seconds": 620
+    },
+    {
+      "date": "2026-07-15",
+      "report_count": 1,
+      "total_scripts": 40,
+      "pass": 38,
+      "failed": 1,
+      "skipped": 1,
+      "success_rate": 95.0,
+      "total_duration_seconds": 580
+    }
+  ]
+}
+```
+
+> `total_scripts` 为 scope 中登记的脚本总数（来自 `t_script`），区别于 `summary.total`（实际执行数），
+> 两者差值揭示未被测试覆盖的脚本。
+
+### 失败响应
+
+| 状态码 | 场景 | 响应 |
+|---|---|---|
+| `400` | `days` 超出范围或参数类型错误 | `{"success": false, "message": "参数 days 不合法（1~90）"}` |
+| `500` | 查询异常 | `{"success": false, "message": "查询趋势数据失败: <原因>"}` |
+
+---
+
+## 7. 数据结构说明
+
+### 7.1 scope（测试范围）
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
@@ -339,8 +405,13 @@ curl -X DELETE "http://localhost:3000/api/reports/3f2a8c1e-9b4d-4e7a-8c21-0a1b2c
 | `scenes` | string[] | 场景名称列表 |
 | `features` | array | 特性列表；元素可为字符串或 `{"name": ..., "feature_version": ...}` 对象；`feature_version` 可选 |
 | `levels` | string[] | 用例等级过滤（`L0`~`L4`）；缺省表示不按等级过滤 |
+| `total_scripts` | int | scope 内登记的脚本总数（来自 `t_script`），**由后端在生成报告时自动补全**；区别于 `summary.total`（实际执行数），差值揭示未被测试覆盖的脚本 |
 
-### 6.2 environment（测试环境）
+> **scope 自动补全**：报告生成时，后端会根据实际执行结果自动补全 `features`（从执行结果中提取，保留前端传入的 `feature_version`）、
+> `levels`（从执行结果中提取），以及 `total_scripts`（从 `t_script` 查询 scope 内登记的脚本数）。
+> 因此报告中保存的 `scope` 可能包含比请求参数更丰富的字段。
+
+### 7.2 environment（测试环境）
 
 区分**被测环境 `sut`** 与**测试执行环境 `test_runner`**：
 
@@ -351,7 +422,7 @@ curl -X DELETE "http://localhost:3000/api/reports/3f2a8c1e-9b4d-4e7a-8c21-0a1b2c
 | `test_runner` | `os`/`python_version`/`pytest_version`/`exec_host` | report 本机自采（report 与 testrun 同机） |
 | 顶层 | `env_vars` | env_config 环境变量，**敏感 key（token/secret/key/password 等）已脱敏为 `***`** |
 
-### 6.3 summary（结果汇总）
+### 7.3 summary（结果汇总）
 
 | 字段 | 说明 |
 |---|---|
@@ -361,7 +432,7 @@ curl -X DELETE "http://localhost:3000/api/reports/3f2a8c1e-9b4d-4e7a-8c21-0a1b2c
 | `total_duration_seconds` | 总耗时（秒） |
 | `by_feature` | 按特性分组的同结构统计 |
 
-### 6.4 conclusion（测试结论）
+### 7.4 conclusion（测试结论）
 
 | 字段 | 说明 |
 |---|---|
@@ -372,7 +443,7 @@ curl -X DELETE "http://localhost:3000/api/reports/3f2a8c1e-9b4d-4e7a-8c21-0a1b2c
 
 > 门禁规则可在 `config/report_config.json` 的 `gates` 配置（等级通过率 / 整体成功率 / 特性通过率 / 无高危）。
 
-### 6.5 risks（风险与建议）
+### 7.5 risks（风险与建议）
 
 数组，每项：
 
@@ -385,19 +456,21 @@ curl -X DELETE "http://localhost:3000/api/reports/3f2a8c1e-9b4d-4e7a-8c21-0a1b2c
 | `evidence[]` | 命中用例证据（最多 5 条） |
 | `recommendation` | 处置建议 |
 
-### 6.6 result_data（脚本级明细，仅详情接口返回）
+### 7.6 result_data（脚本级明细，仅详情接口返回）
 
-数组，字段见[报告详情响应示例](#成功响应-200-2)。其中：
-- `status`：`pass`/`failed`/`skipped`/`running`（pytest 判 SKIPPED 的用例归为 `skipped`）
+数组，**仅包含 `failed` 和 `skipped` 状态的用例完整明细**（用于问题定位与调试）。
+`pass` 用例不在 `result_data` 中出现，通过用例的统计信息仅存在于 `summary` 聚合中。
+字段见[报告详情响应示例](#成功响应-200-2)。其中：
+- `status`：`failed`/`skipped`（pytest 判 SKIPPED 的用例归为 `skipped`）
 - `failure_detail`：失败用例的有界调用栈摘要；`failure_source` 标注来源（`log_file`=日志抽取 / `error_message`=兜底）
-- `log_download_url`：完整日志下载路径
+- `log_download_url`：完整日志下载路径（`log_file` 字段已移除，仅保留下载 URL）
 
 ---
 
-## 7. 通用约定
+## 8. 通用约定
 
 1. **响应包裹**：所有 JSON 响应含 `success` 布尔字段；失败时含 `message`。
 2. **状态码**：`200` 成功；`400` 参数错误；`404` 资源不存在；`500` 服务端异常。
-3. **报告快照**：报告生成时冻结全部明细到 `result_data`，不受后续执行结果覆盖式更新影响，历史报告可复现。
+3. **报告快照**：报告生成时冻结失败/跳过明细到 `result_data`（pass 用例仅存于 `summary` 聚合），不受后续执行结果覆盖式更新影响，历史报告可复现。
 4. **前置条件**：需先创建报告表（`scripts/create_report_table.sql` 或 `report.models.create_report_table()`），且数据库连接可用（`DATABASE_ENABLED`）。
 5. **被测软件版本**：`software_version` 由前端在生成报告时传入并做必填校验，报告据此回答"测的是哪个版本、缺陷属于哪个版本"。
