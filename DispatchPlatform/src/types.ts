@@ -265,6 +265,7 @@ export interface StatisticsSummaryResponse {
 }
 
 export type TaskScriptExecutionStatus = 'todo' | 'pass' | 'failed' | 'running';
+export type TaskScriptActualStatus = 'PASSED' | 'FAILED' | 'SKIPPED' | 'ERROR';
 
 export interface TaskScriptStatus {
   script_id: string;
@@ -275,8 +276,8 @@ export interface TaskScriptStatus {
   completed_at: string | null;
   duration_seconds: number | null;
   error_message: string | null;
-  /** Newer testrun builds may expose the database status separately from the display status. */
-  actual_status?: TaskScriptExecutionStatus;
+  /** Raw pytest status exposed separately from the lowercase display status. */
+  actual_status?: TaskScriptActualStatus | null;
 }
 
 export interface TaskScriptStatusResponse {
@@ -288,7 +289,7 @@ export interface TaskScriptStatusResponse {
     pass_count: number;
     failed_count: number;
     running_count: number;
-    actual_status_distribution?: Partial<Record<TaskScriptExecutionStatus, number>>;
+    actual_status_distribution?: Record<TaskScriptActualStatus, number>;
   };
 }
 

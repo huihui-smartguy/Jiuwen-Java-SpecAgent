@@ -19,7 +19,7 @@ The task backend remains the sole authority for task lifecycle state. The report
 - Cancellation remains pending until the backend reports the actual terminal `cancelled` state.
 - One canonical execution version is used end-to-end: task `version` maps to report `software_version`. A same-value legacy `test_version` wire alias is sent only where older report deployments may still accept it; the UI does not expose a second version dimension.
 - Report creation uses one non-retried request with a bounded long timeout. A transport timeout is surfaced as an unknown outcome so the user can return to the persisted report list without accidentally creating a duplicate report.
-- Report listing scans backend pages for the exact canonical software version and Object (`product` plus `scene`), then performs exact client-side filtering and stable de-duplication to guard against prefix-matching and duplicate-page behavior.
+- Report listing scans backend pages with the canonical software version and Object (`product` plus `scene`). Because list rows do not repeat Object scope, the client can re-check the software version exactly and perform stable de-duplication; Object filtering remains the documented backend responsibility.
 - Zero executed rows are rendered as neutral no-match data, never as a passed run. Report detail distinguishes actual executed scripts from registered scripts in the selected scope and preserves the backend snapshot provenance.
 - Filesystem paths and undefined optional fields are not rendered. Only public report download URLs remain user-facing.
 
@@ -38,7 +38,7 @@ Automated browser geometry checks at `1440 × 1100` and `390 × 844` found no vi
 
 ## Verification before delivery
 
-- Full automated suite: 20 test files and 185/185 tests passed.
+- Full automated suite: 20 test files and 186/186 tests passed.
 - Production subpath build: `VITE_BASE_PATH=/testwise/ npm run build` passed (1,666 modules).
 - Whitespace validation: `git diff --check` passed.
 - Live-compatible local preview verified 126 scripts across 14 Object features, exact-version report listing, a persisted report detail refresh, long provenance values, zero-result neutrality, and explicit unbound Task association.
