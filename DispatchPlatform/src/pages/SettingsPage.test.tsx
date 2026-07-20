@@ -1,9 +1,13 @@
-import { act, render, screen, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { existsSync, readFileSync } from 'node:fs';
-import { MemoryRouter, useLocation } from 'react-router-dom';
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { MemoryRouter } from 'react-router-dom';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { resolveRuntimeConfig } from '../config/runtime';
+import {
+  CONSOLE_PREFERENCES_STORAGE_KEY,
+  type ConsolePreferencesV1
+} from '../preferences';
 import type { Language, SutTarget } from '../types';
 import { SettingsPage } from './SettingsPage';
 
@@ -36,22 +40,28 @@ const runtimeConfig = resolveRuntimeConfig({
   sutTargets: objects
 });
 
-function LocationProbe() {
-  return <span data-testid="location-path">{useLocation().pathname}</span>;
-}
+const markdownPreferences: ConsolePreferencesV1 = {
+  version: 1,
+  defaultSutId: 'object-next',
+  language: 'en',
+  reducedMotion: true,
+  reportDownloadFormat: 'md'
+};
 
 function renderSettings({
   language = 'zh',
   selectedSut = objects[0],
+  preferences,
   onObjectChange = vi.fn(),
   onLanguageChange = vi.fn(),
-  withLocationProbe = false
+  onPreferencesChange = vi.fn()
 }: {
   language?: Language;
   selectedSut?: SutTarget;
+  preferences?: ConsolePreferencesV1;
   onObjectChange?: (id: string) => void;
   onLanguageChange?: (language: Language) => void;
-  withLocationProbe?: boolean;
+  onPreferencesChange?: (preferences: ConsolePreferencesV1) => void;
 } = {}) {
   return render(
     <MemoryRouter initialEntries={['/settings']}>
@@ -59,64 +69,34 @@ function renderSettings({
         language={language}
         selectedSut={selectedSut}
         runtimeConfig={runtimeConfig}
+        preferences={preferences}
         onObjectChange={onObjectChange}
         onLanguageChange={onLanguageChange}
+        onPreferencesChange={onPreferencesChange}
       />
-      {withLocationProbe && <LocationProbe />}
     </MemoryRouter>
   );
 }
 
-function createReducedMotionQuery(initialMatches = false) {
-  const listeners = new Set<(event: MediaQueryListEvent) => void>();
-  const mediaQuery = {
-    matches: initialMatches,
-    media: '(prefers-reduced-motion: reduce)',
-    onchange: null,
-    addEventListener: vi.fn((_type: string, listener: (event: MediaQueryListEvent) => void) => {
-      listeners.add(listener);
-    }),
-    removeEventListener: vi.fn((_type: string, listener: (event: MediaQueryListEvent) => void) => {
-      listeners.delete(listener);
-    }),
-    addListener: vi.fn((listener: (event: MediaQueryListEvent) => void) => listeners.add(listener)),
-    removeListener: vi.fn((listener: (event: MediaQueryListEvent) => void) => listeners.delete(listener)),
-    dispatchEvent: vi.fn()
-  };
-
-  return {
-    mediaQuery,
-    setMatches(matches: boolean) {
-      mediaQuery.matches = matches;
-      const event = { matches, media: mediaQuery.media } as MediaQueryListEvent;
-      listeners.forEach((listener) => listener(event));
-    }
-  };
-}
+beforeEach(() => {
+  window.localStorage.clear();
+});
 
 afterEach(() => {
-  document.documentElement.classList.remove('settings-reduced-motion', 'settings-test-class');
+  vi.restoreAllMocks();
+  window.localStorage.clear();
   Object.defineProperty(navigator, 'clipboard', {
     configurable: true,
     value: undefined
   });
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
 });
 
-describe('approved Settings frame', () => {
-  test('renders the exact approved four-card composition, selected Object, and read-only runtime values', () => {
+describe('R8 Settings persistence', () => {
+  test('renders four roomy cards, read-only runtime values, and only supported controls', () => {
     const { container } = renderSettings();
 
-    const title = screen.getByRole('heading', { level: 1, name: '设置' });
-    const header = title.closest('.page-header');
-    expect(header).not.toBeNull();
-    expect(within(header as HTMLElement).getByText(
-      '管理对象连接、运行环境与控制台偏好，变更保持显式可审计。'
-    )).toBeInTheDocument();
-    const save = within(header as HTMLElement).getByRole('button', { name: '保存更改' });
-    expect(save).toHaveAttribute('aria-disabled', 'true');
-    expect(save).not.toBeDisabled();
+    const save = screen.getByRole('button', { name: '保存更改' });
+    expect(save).toBeDisabled();
 
     const cards = Array.from(container.querySelectorAll<HTMLElement>('.settings-grid > .settings-card'));
     expect(cards).toHaveLength(4);
@@ -127,106 +107,136 @@ describe('approved Settings frame', () => {
       '报告与日志'
     ]);
 
-    const objectCard = screen.getByRole('region', { name: 'Object 连接' });
-    expect(within(objectCard).getByText('Connected')).toBeInTheDocument();
-    expect(within(objectCard).getByText('合一版本 API', { selector: '.settings-select-object-name' }))
-      .toBeInTheDocument();
-    expect(within(objectCard).queryByText('Live')).not.toBeInTheDocument();
-    expect(within(objectCard).getByRole('combobox', { name: '默认 Object' })).toHaveValue(
-      'object-live'
-    );
+    expect(screen.queryByRole('switch', { name: '连接检查' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Retention' })).not.toBeInTheDocument();
 
     const runtimeCard = screen.getByRole('region', { name: '运行环境' });
-    expect(within(runtimeCard).getByText('只读配置')).toBeInTheDocument();
-    const deployment = within(runtimeCard).getByRole('textbox', { name: 'Deployment mode' });
-    const apiBase = within(runtimeCard).getByRole('textbox', { name: 'API base URL' });
-    expect(deployment).toHaveValue('Container');
-    expect(deployment).toHaveAttribute('readonly');
-    expect(apiBase).toHaveValue('/testwise/api');
-    expect(apiBase).toHaveAttribute('readonly');
-    expect(within(runtimeCard).getByRole('button', { name: '复制 API base URL' })).toBeInTheDocument();
+    expect(within(runtimeCard).getByRole('textbox', { name: '部署模式' }))
+      .toHaveAttribute('readonly');
+    expect(within(runtimeCard).getByRole('textbox', { name: '部署模式' }))
+      .toHaveValue('Container');
+    expect(within(runtimeCard).getByRole('textbox', { name: 'API base URL' }))
+      .toHaveAttribute('readonly');
+    expect(within(runtimeCard).getByRole('textbox', { name: 'API base URL' }))
+      .toHaveValue('/testwise/api');
+
+    const format = screen.getByRole('combobox', { name: '默认下载格式' });
+    expect(format).toHaveValue('html');
+    expect(within(format).getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'HTML',
+      'Markdown'
+    ]);
+    expect(screen.queryByText(/PDF|JSON/)).not.toBeInTheDocument();
   });
 
-  test('delegates Object and language changes only through the shared callbacks', async () => {
+  test('uses validated saved defaults instead of immediate header session overrides', () => {
+    window.localStorage.setItem(
+      CONSOLE_PREFERENCES_STORAGE_KEY,
+      JSON.stringify(markdownPreferences)
+    );
+
+    renderSettings({ language: 'zh', selectedSut: objects[0] });
+
+    expect(screen.getByRole('combobox', { name: '默认 Object' })).toHaveValue('object-next');
+    expect(screen.getByRole('combobox', { name: '语言' })).toHaveValue('en');
+    expect(screen.getByRole('switch', { name: '减少动态效果' }))
+      .toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('combobox', { name: '默认下载格式' })).toHaveValue('md');
+    expect(screen.getByRole('textbox', { name: 'API base URL' })).toHaveValue('/testwise/api');
+  });
+
+  test('stages every field and writes the complete object before applying it to the shell', async () => {
+    const callOrder: string[] = [];
+    const originalSetItem = Storage.prototype.setItem;
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function setItem(
+      this: Storage,
+      key: string,
+      value: string
+    ) {
+      callOrder.push('storage');
+      originalSetItem.call(this, key, value);
+    });
+    const onObjectChange = vi.fn(() => callOrder.push('object'));
+    const onLanguageChange = vi.fn(() => callOrder.push('language'));
+    const onPreferencesChange = vi.fn(() => callOrder.push('preferences'));
     const user = userEvent.setup();
-    const onObjectChange = vi.fn();
-    const onLanguageChange = vi.fn();
-    renderSettings({ onObjectChange, onLanguageChange });
+    renderSettings({ onObjectChange, onLanguageChange, onPreferencesChange });
 
     await user.selectOptions(screen.getByRole('combobox', { name: '默认 Object' }), 'object-next');
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Language' }), 'en');
+    await user.selectOptions(screen.getByRole('combobox', { name: '语言' }), 'en');
+    await user.click(screen.getByRole('switch', { name: '减少动态效果' }));
+    await user.selectOptions(screen.getByRole('combobox', { name: '默认下载格式' }), 'md');
 
-    expect(onObjectChange).toHaveBeenCalledTimes(1);
+    expect(onObjectChange).not.toHaveBeenCalled();
+    expect(onLanguageChange).not.toHaveBeenCalled();
+    expect(onPreferencesChange).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem(CONSOLE_PREFERENCES_STORAGE_KEY)).toBeNull();
+    expect(screen.getByRole('button', { name: '保存更改' })).toBeEnabled();
+
+    await user.click(screen.getByRole('button', { name: '保存更改' }));
+
+    const expectedPreferences: ConsolePreferencesV1 = {
+      version: 1,
+      defaultSutId: 'object-next',
+      language: 'en',
+      reducedMotion: true,
+      reportDownloadFormat: 'md'
+    };
+    expect(await screen.findByRole('status')).toHaveTextContent('设置已保存并应用。');
+    expect(JSON.parse(
+      window.localStorage.getItem(CONSOLE_PREFERENCES_STORAGE_KEY) ?? '{}'
+    )).toEqual(expectedPreferences);
+    expect(onPreferencesChange).toHaveBeenCalledWith(expectedPreferences);
     expect(onObjectChange).toHaveBeenCalledWith('object-next');
-    expect(onLanguageChange).toHaveBeenCalledTimes(1);
+    expect(onLanguageChange).toHaveBeenCalledWith('en');
+    expect(callOrder).toEqual(['storage', 'preferences', 'object', 'language']);
+    expect(screen.getByRole('button', { name: '保存更改' })).toBeDisabled();
+  });
+
+  test('retains the dirty draft and exposes an accessible retryable error when storage fails', async () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('denied', 'QuotaExceededError');
+    });
+    const onObjectChange = vi.fn();
+    const onLanguageChange = vi.fn();
+    const onPreferencesChange = vi.fn();
+    const user = userEvent.setup();
+    renderSettings({ onObjectChange, onLanguageChange, onPreferencesChange });
+
+    const format = screen.getByRole('combobox', { name: '默认下载格式' });
+    await user.selectOptions(format, 'md');
+    await user.click(screen.getByRole('button', { name: '保存更改' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('无法保存设置');
+    expect(format).toHaveValue('md');
+    expect(screen.getByRole('button', { name: '保存更改' })).toBeEnabled();
+    expect(onPreferencesChange).not.toHaveBeenCalled();
+    expect(onObjectChange).not.toHaveBeenCalled();
+    expect(onLanguageChange).not.toHaveBeenCalled();
+  });
+
+  test('updates a directly rendered Settings page for valid cross-tab changes', () => {
+    const onObjectChange = vi.fn();
+    const onLanguageChange = vi.fn();
+    const onPreferencesChange = vi.fn();
+    renderSettings({ onObjectChange, onLanguageChange, onPreferencesChange });
+
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', {
+        key: CONSOLE_PREFERENCES_STORAGE_KEY,
+        newValue: JSON.stringify(markdownPreferences)
+      }));
+    });
+
+    expect(screen.getByRole('combobox', { name: '默认 Object' })).toHaveValue('object-next');
+    expect(screen.getByRole('combobox', { name: '语言' })).toHaveValue('en');
+    expect(onPreferencesChange).toHaveBeenCalledWith(markdownPreferences);
+    expect(onObjectChange).toHaveBeenCalledWith('object-next');
     expect(onLanguageChange).toHaveBeenCalledWith('en');
   });
 
-  test('keeps connection, reduced-motion, format, and retention controls local to the current render', async () => {
-    const media = createReducedMotionQuery(false);
-    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue(media.mediaQuery));
-    const fetchSpy = vi.spyOn(globalThis, 'fetch');
-    const storageSpy = vi.spyOn(Storage.prototype, 'setItem');
-    const onObjectChange = vi.fn();
-    const onLanguageChange = vi.fn();
-    const user = userEvent.setup();
-    renderSettings({ onObjectChange, onLanguageChange });
-
-    const connection = screen.getByRole('switch', { name: '连接检查' });
-    const reducedMotion = screen.getByRole('switch', { name: 'Reduced motion' });
-    const format = screen.getByRole('combobox', { name: 'Default format' });
-    const retention = screen.getByRole('combobox', { name: 'Retention' });
-    expect(connection).toHaveAttribute('aria-checked', 'true');
-    expect(reducedMotion).toHaveAttribute('aria-checked', 'false');
-    expect(format).toHaveValue('pdf-json');
-    expect(retention).toHaveValue('30');
-
-    await user.click(connection);
-    await user.click(reducedMotion);
-    await user.selectOptions(format, 'pdf');
-    await user.selectOptions(retention, '90');
-
-    expect(connection).toHaveAttribute('aria-checked', 'false');
-    expect(reducedMotion).toHaveAttribute('aria-checked', 'true');
-    expect(format).toHaveValue('pdf');
-    expect(retention).toHaveValue('90');
-    expect(onObjectChange).not.toHaveBeenCalled();
-    expect(onLanguageChange).not.toHaveBeenCalled();
-    expect(fetchSpy).not.toHaveBeenCalled();
-    expect(storageSpy).not.toHaveBeenCalled();
-  });
-
-  test('combines the local reduced-motion control with system preference changes and cleans up only its root class', async () => {
-    const media = createReducedMotionQuery(false);
-    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue(media.mediaQuery));
-    document.documentElement.classList.add('settings-test-class');
-    const user = userEvent.setup();
-    const view = renderSettings();
-
-    expect(document.documentElement).not.toHaveClass('settings-reduced-motion');
-    expect(document.documentElement).toHaveClass('settings-test-class');
-
-    await user.click(screen.getByRole('switch', { name: 'Reduced motion' }));
-    expect(document.documentElement).toHaveClass('settings-reduced-motion');
-
-    await user.click(screen.getByRole('switch', { name: 'Reduced motion' }));
-    expect(document.documentElement).not.toHaveClass('settings-reduced-motion');
-
-    act(() => media.setMatches(true));
-    expect(document.documentElement).toHaveClass('settings-reduced-motion');
-    act(() => media.setMatches(false));
-    expect(document.documentElement).not.toHaveClass('settings-reduced-motion');
-
-    view.unmount();
-    expect(media.mediaQuery.removeEventListener).toHaveBeenCalledWith('change', expect.any(Function));
-    expect(document.documentElement).not.toHaveClass('settings-reduced-motion');
-    expect(document.documentElement).toHaveClass('settings-test-class');
-  });
-
-  test('copies exactly the displayed resolved API base without success or failure feedback', async () => {
-    const writeText = vi.fn()
-      .mockResolvedValueOnce(undefined)
-      .mockRejectedValueOnce(new Error('clipboard unavailable'));
+  test('copies the displayed resolved API base without coupling it to preference storage', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
     const user = userEvent.setup();
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
@@ -234,104 +244,41 @@ describe('approved Settings frame', () => {
     });
     renderSettings();
 
-    const copy = screen.getByRole('button', { name: '复制 API base URL' });
-    await user.click(copy);
-    await user.click(copy);
+    await user.click(screen.getByRole('button', { name: '复制 API base URL' }));
 
-    expect(writeText).toHaveBeenNthCalledWith(1, '/testwise/api');
-    expect(writeText).toHaveBeenNthCalledWith(2, '/testwise/api');
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(screen.queryByRole('status')).not.toBeInTheDocument();
-    expect(screen.queryByText(/已复制|复制失败|copied|copy failed/i)).not.toBeInTheDocument();
+    expect(writeText).toHaveBeenCalledWith('/testwise/api');
+    expect(window.localStorage.getItem(CONSOLE_PREFERENCES_STORAGE_KEY)).toBeNull();
   });
 
-  test('keeps Save focusable and entirely inert with zero persistence, navigation, overlays, or feedback', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch');
-    const storageSpy = vi.spyOn(Storage.prototype, 'setItem');
-    const writeText = vi.fn();
+  test('keeps feedback stable until the next edit and then returns to a normal dirty state', async () => {
     const user = userEvent.setup();
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText }
-    });
-    const { container } = renderSettings({ withLocationProbe: true });
-    const save = screen.getByRole('button', { name: '保存更改' });
+    renderSettings();
 
-    save.focus();
-    expect(save).toHaveFocus();
-    await user.click(save);
-    await user.keyboard('{Enter}');
+    await user.selectOptions(screen.getByRole('combobox', { name: '默认下载格式' }), 'md');
+    await user.click(screen.getByRole('button', { name: '保存更改' }));
+    expect(await screen.findByRole('status')).toBeInTheDocument();
 
-    expect(fetchSpy).not.toHaveBeenCalled();
-    expect(storageSpy).not.toHaveBeenCalled();
-    expect(writeText).not.toHaveBeenCalled();
-    expect(screen.getByTestId('location-path')).toHaveTextContent('/settings');
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByRole('combobox', { name: '默认下载格式' }), 'html');
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
-    expect(screen.queryByText(/保存成功|已保存|saved|success/i)).not.toBeInTheDocument();
-    expect(container.querySelector('form')).not.toBeInTheDocument();
-    expect(container.querySelector('footer')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '保存更改' })).toBeEnabled();
+
+    await user.selectOptions(screen.getByRole('combobox', { name: '默认下载格式' }), 'md');
+    await waitFor(() => expect(screen.getByRole('button', { name: '保存更改' })).toBeDisabled());
   });
+});
 
-  test('imports the dedicated stylesheet and encodes the approved flexible geometry and no-persistence boundary', () => {
-    expect(existsSync('src/styles/routes/settings.css')).toBe(true);
+describe('R8 Settings layout contract', () => {
+  test('preserves spacious responsive typography without body text below 13px', () => {
+    const css = readFileSync('src/styles/routes/settings.css', 'utf8');
 
-    const stylesIndex = readFileSync('src/styles.css', 'utf8');
-    const settingsCss = readFileSync('src/styles/routes/settings.css', 'utf8');
-    const settingsSource = readFileSync('src/pages/SettingsPage.tsx', 'utf8');
-
-    expect(stylesIndex).toContain("@import './styles/routes/settings.css';");
-    expect(settingsSource).not.toMatch(
-      /useQuery|useMutation|fetch\s*\(|localStorage|sessionStorage|<Link|<NavLink|useNavigate/
-    );
-    expect(settingsCss).toMatch(
-      /\.settings-page\s*\{[^}]*gap:\s*24px;/
-    );
-    expect(settingsCss).toMatch(
-      /\.settings-page > \.page-header\s*\{[^}]*height:\s*118px;[^}]*min-height:\s*118px;/
-    );
-    expect(settingsCss).toMatch(
-      /\.settings-page > \.page-header h1\s*\{[^}]*letter-spacing:\s*0;/
-    );
-    expect(settingsCss).toMatch(
-      /\.settings-page > \.page-header \.page-subtitle\s*\{[^}]*margin-top:\s*10px;/
-    );
-    expect(settingsCss).toMatch(/\.settings-save\s*\{[^}]*gap:\s*10px;/);
-    expect(settingsCss).toMatch(
-      /\.settings-runtime-pill\s*\{[^}]*width:\s*auto;[^}]*min-width:\s*96px;/
-    );
-    expect(settingsCss).toMatch(
-      /\.settings-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*636px\)\);[^}]*grid-auto-rows:\s*minmax\(310px,\s*auto\);[^}]*gap:\s*24px;/
-    );
-    expect(settingsCss).toMatch(
-      /\.settings-card\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*310px;[^}]*padding:\s*24px 28px;/
-    );
-    expect(settingsCss).toMatch(
-      /\.settings-card__description\s*\{[^}]*font-size:\s*14px;[^}]*line-height:\s*22px;[^}]*overflow-wrap:\s*anywhere;[^}]*white-space:\s*normal;/
-    );
-    expect(settingsCss).toMatch(
-      /\.settings-row\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*78px;/
-    );
-    expect(settingsCss).toMatch(
-      /\.settings-card--preferences \.settings-row,[\s\S]*\.settings-card--reports \.settings-row\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*91px;/
-    );
-    expect(settingsCss).toMatch(
-      /\.settings-row__label strong\s*\{[^}]*font-size:\s*14px;[^}]*line-height:\s*22px;[^}]*overflow-wrap:\s*anywhere;/
-    );
-    expect(settingsCss).toMatch(
-      /\.settings-row__label > span\s*\{[^}]*font-size:\s*12px;[^}]*line-height:\s*18px;[^}]*overflow-wrap:\s*anywhere;/
-    );
-    expect(settingsCss).toMatch(/\.settings-select-shell\s*\{[^}]*width:\s*250px;/);
-    expect(settingsCss).toMatch(/\.settings-control\s*\{[^}]*min-height:\s*48px;/);
-    expect(settingsCss).toMatch(
-      /\.settings-select-visual\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*48px;/
-    );
-    expect(settingsCss).not.toMatch(
-      /\.settings-card__description\s*\{[^}]*(?:overflow:\s*hidden|text-overflow:\s*ellipsis|white-space:\s*nowrap)/
-    );
-    expect(settingsCss).toMatch(
-      /@media \(max-width:\s*980px\)[\s\S]*\.settings-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/
-    );
+    expect(css).toMatch(/\.settings-page\s*\{[^}]*gap:\s*24px;/);
+    expect(css).toMatch(/\.settings-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*636px\)\);[^}]*gap:\s*24px;/);
+    expect(css).toMatch(/\.settings-card\s*\{[^}]*min-height:\s*300px;[^}]*padding:\s*26px 28px;/);
+    expect(css).toMatch(/\.settings-card__description\s*\{[^}]*font-size:\s*14px;[^}]*line-height:\s*22px;/);
+    expect(css).toMatch(/\.settings-row__label > span\s*\{[^}]*font-size:\s*13px;[^}]*line-height:\s*20px;/);
+    expect(css).toMatch(/\.settings-control\s*\{[^}]*min-height:\s*48px;/);
+    expect(css).toMatch(/@media \(max-width:\s*980px\)[\s\S]*\.settings-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/);
+    expect(css).toMatch(/@media \(max-width:\s*680px\)[\s\S]*\.settings-row\s*\{[^}]*min-height:\s*104px;/);
+    expect(css).not.toMatch(/font-size:\s*(?:9|10|11|12)px/);
   });
 });

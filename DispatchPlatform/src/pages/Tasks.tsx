@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import { useEffect, useMemo, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ApiError,
@@ -80,7 +80,6 @@ export function Tasks({
 }: TasksProps) {
   const t = getCopy(language);
   const navigate = useNavigate();
-  const firstConfigurationControlRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<TriggerType>('feature');
   const [selectedFeature, setSelectedFeature] = useState('');
   const [selectedLevel, setSelectedLevel] = useState('L1');
@@ -227,7 +226,14 @@ export function Tasks({
     },
     onSuccess: (task) => {
       onTaskCreated(task);
-      navigate('/observation');
+      navigate('/observation', {
+        state: {
+          testwiseLaunch: {
+            taskId: task.task_id,
+            apiBaseUrl: api.apiBaseUrl
+          }
+        }
+      });
     }
   });
 
@@ -258,17 +264,14 @@ export function Tasks({
     Boolean(selectedVersion) &&
     (mode !== 'scripts' || selectedScriptNames.length > 0) &&
     (!requiresFeature || Boolean(selectedFeature));
-  const objectPassed = selectedSut.status === 'healthy';
-  const scriptsPassed = scriptQuery.isSuccess && scripts.length > 0;
-  const credentialsPassed = runtimeConfig.enableMockFallback;
-  const guardrailsPassed = [objectPassed, scriptsPassed, credentialsPassed].filter(Boolean).length;
+  const launchScriptCount = mode === 'scripts' ? selectedScriptNames.length : scripts.length;
   const modeSummary = mode === 'feature'
-    ? `Feature · ${selectedFeature || '—'}`
+    ? `${t.feature} · ${selectedFeature || '—'}`
     : mode === 'level'
-      ? `Level · ${selectedLevel}`
+      ? `${t.level} · ${selectedLevel}`
       : mode === 'scripts'
-        ? `Scripts · ${selectedScriptNames.length}`
-        : 'Scene · All scripts';
+        ? `${t.byScripts} · ${selectedScriptNames.length} ${t.scriptsCount}`
+        : `${t.entireScene} · ${t.allScripts}`;
 
   const toggleScript = (name: string) => {
     setSelectedScriptNames((current) => (
@@ -288,32 +291,11 @@ export function Tasks({
     }
   };
 
-  const objectGuardrailLabel = selectedSut.status === 'healthy'
-    ? t.guardrailPassed
-    : selectedSut.status === 'degraded'
-      ? t.guardrailAttention
-      : t.guardrailUnavailable;
-  const scriptsGuardrailLabel = scriptQuery.isLoading
-    ? t.guardrailChecking
-    : scriptsPassed
-      ? t.guardrailPassed
-      : t.guardrailUnavailable;
-
   return (
     <div className="page-stack tasks-page">
       <PageHeader
         title={t.tasks}
         subtitle={t.tasksSubtitle}
-        action={(
-          <button
-            className="button button--primary tasks-create-task"
-            type="button"
-            onClick={() => firstConfigurationControlRef.current?.focus()}
-          >
-            {t.tasksPageAction}
-            <span aria-hidden="true">→</span>
-          </button>
-        )}
       />
 
       <div className="tasks-layout">
@@ -363,7 +345,6 @@ export function Tasks({
                 ] as const).map(([value, label, visibleLabel]) => (
                   <label key={value}>
                     <input
-                      ref={value === 'feature' ? firstConfigurationControlRef : undefined}
                       className="sr-only"
                       type="radio"
                       name="task-trigger-mode"
@@ -505,19 +486,31 @@ export function Tasks({
         <aside className="tasks-right-rail" aria-label={t.launchControls}>
           <section className="tasks-card tasks-launch-card" aria-labelledby="launch-summary-title">
             <div className="tasks-card-heading">
-              <h2 id="launch-summary-title">Launch summary</h2>
+              <h2 id="launch-summary-title">{t.launchSummary}</h2>
             </div>
             <dl className="tasks-launch-list">
               <div>
-                <dt>Object</dt>
-                <dd>
-                  {selectedSut.product} {selectedSut.scene} ·{' '}
-                  <span data-testid="task-version-summary">{selectedVersion || '—'}</span>
+                <dt>{t.launchObject}</dt>
+                <dd>{selectedSut.product} · {selectedSut.scene}</dd>
+              </div>
+              <div><dt>{t.launchMode}</dt><dd data-testid="task-mode-summary">{modeSummary}</dd></div>
+              <div><dt>{t.executionProfile}</dt><dd>{t.liveStandard}</dd></div>
+              <div>
+                <dt>{t.launchReportVersion}</dt>
+                <dd data-testid="task-version-summary">{selectedVersion || '—'}</dd>
+              </div>
+              <div><dt>{t.launchVersionSource}</dt><dd>{t.backendRegistry}</dd></div>
+              <div><dt>{t.launchScriptCount}</dt><dd>{launchScriptCount} {t.scriptsCount}</dd></div>
+              <div>
+                <dt>{t.launchEstimate}</dt>
+                <dd data-testid="launch-estimate">{launchScriptCount > 0 ? t.estimatedDuration : '—'}</dd>
+              </div>
+              <div>
+                <dt>{t.launchReadiness}</dt>
+                <dd className={canCreate ? 'is-ready' : 'is-incomplete'}>
+                  {canCreate ? t.ready : t.completeConfiguration}
                 </dd>
               </div>
-              <div><dt>Mode</dt><dd data-testid="task-mode-summary">{modeSummary}</dd></div>
-              <div><dt>Scripts</dt><dd>{scripts.length}</dd></div>
-              <div><dt>Estimated</dt><dd data-testid="launch-estimate">{runtimeConfig.enableMockFallback ? '~ 6 min' : '—'}</dd></div>
             </dl>
             {creation.isError && (
               <p className="tasks-inline-error tasks-creation-error" role="alert">
@@ -533,31 +526,6 @@ export function Tasks({
               {creation.isPending ? t.launchingExecution : t.launchExecution}
               <span aria-hidden="true">→</span>
             </button>
-          </section>
-
-          <section className="tasks-card tasks-guardrail-card" aria-labelledby="guardrail-title">
-            <div className="tasks-card-heading">
-              <h2 id="guardrail-title">{t.guardrails}</h2>
-              <span className={`tasks-guardrail-count ${guardrailsPassed === 3 ? 'is-complete' : ''}`}>
-                {guardrailsPassed} / 3
-              </span>
-            </div>
-            <dl className="tasks-guardrail-list">
-              <div>
-                <dt>{t.objectOnline}</dt>
-                <dd className={`is-${selectedSut.status === 'healthy' ? 'passed' : selectedSut.status}`}>{objectGuardrailLabel}</dd>
-              </div>
-              <div>
-                <dt>{t.scriptsAvailable}</dt>
-                <dd className={scriptsPassed ? 'is-passed' : undefined}>{scriptsGuardrailLabel}</dd>
-              </div>
-              <div data-testid="guardrail-credentials">
-                <dt>{t.credentialsValid}</dt>
-                <dd className={credentialsPassed ? 'is-passed' : undefined}>
-                  {credentialsPassed ? t.guardrailPassed : t.notVerified}
-                </dd>
-              </div>
-            </dl>
           </section>
         </aside>
       </div>

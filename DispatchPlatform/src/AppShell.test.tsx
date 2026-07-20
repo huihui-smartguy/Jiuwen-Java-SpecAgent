@@ -1,12 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { AppShell } from './AppShell';
 import { resolveRuntimeConfig } from './config/runtime';
 import { activeTask as mockActiveTask } from './data/mockData';
+import { CONSOLE_PREFERENCES_STORAGE_KEY } from './preferences';
 
 const englishNavigation = [
   ['Overview', '/'],
@@ -76,6 +77,8 @@ function renderNavigationShell(initialPath = '/') {
 }
 
 afterEach(() => {
+  window.localStorage.clear();
+  document.documentElement.classList.remove('settings-reduced-motion', 'lang-zh', 'lang-en');
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -213,7 +216,8 @@ describe('AppShell', () => {
       if (label === '设置') {
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-        expect(container.querySelector('form')).not.toBeInTheDocument();
+        expect(container.querySelector('#settings-preferences-form')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: '保存更改' })).toBeDisabled();
         expect(container.querySelector('footer')).not.toBeInTheDocument();
       }
 
@@ -279,6 +283,42 @@ describe('AppShell', () => {
     expect(within(navigation).getAllByRole('link').map((link) => link.textContent)).toEqual(
       englishNavigation.map(([label]) => label)
     );
+    expect(window.localStorage.getItem(CONSOLE_PREFERENCES_STORAGE_KEY)).toBeNull();
+  });
+
+  test('loads saved defaults and applies valid cross-tab preference changes to the shell', async () => {
+    window.localStorage.setItem(CONSOLE_PREFERENCES_STORAGE_KEY, JSON.stringify({
+      version: 1,
+      defaultSutId: 'python-sut',
+      language: 'en',
+      reducedMotion: true,
+      reportDownloadFormat: 'md'
+    }));
+    renderShell('/settings', { defaultLanguage: 'zh' });
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
+    expect(within(screen.getByTestId('object-control')).getByLabelText('Object')).toHaveValue('python-sut');
+    expect(screen.getByRole('combobox', { name: 'Language' })).toHaveValue('en');
+    expect(screen.getByRole('combobox', { name: 'Default download format' })).toHaveValue('md');
+    expect(document.documentElement).toHaveClass('settings-reduced-motion');
+
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', {
+        key: CONSOLE_PREFERENCES_STORAGE_KEY,
+        newValue: JSON.stringify({
+          version: 1,
+          defaultSutId: 'java-sut',
+          language: 'zh',
+          reducedMotion: false,
+          reportDownloadFormat: 'html'
+        })
+      }));
+    });
+
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: '设置' })).toBeInTheDocument());
+    expect(within(screen.getByTestId('object-control')).getByLabelText('Object')).toHaveValue('java-sut');
+    expect(screen.getByRole('combobox', { name: '默认下载格式' })).toHaveValue('html');
+    expect(document.documentElement).not.toHaveClass('settings-reduced-motion');
   });
 
   test('provides the same seven links and required controls in the accessible drawer', async () => {
@@ -397,7 +437,7 @@ describe('AppShell', () => {
       .toBeInTheDocument();
   });
 
-  test('shares AppShell-owned Object and language state with Settings without persistence', async () => {
+  test('stages Settings edits, persists the complete preference object, then applies them to the shell', async () => {
     const user = userEvent.setup();
     const storageSpy = vi.spyOn(Storage.prototype, 'setItem');
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
@@ -433,17 +473,34 @@ describe('AppShell', () => {
     expect(headerObject).toHaveValue('object-one');
 
     await user.selectOptions(settingsObject, 'object-two');
-    expect(headerObject).toHaveValue('object-two');
+    expect(headerObject).toHaveValue('object-one');
     expect(settingsObject).toHaveValue('object-two');
-    expect(screen.getByRole('textbox', { name: 'API base URL' })).toHaveValue('/object-two-api');
+    expect(screen.getByRole('textbox', { name: 'API base URL' })).toHaveValue('/object-one-api');
     expect(within(screen.getByRole('region', { name: 'Object 连接' })).getByText('关注'))
       .toBeInTheDocument();
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Language' }), 'en');
+    await user.selectOptions(screen.getByRole('combobox', { name: '语言' }), 'en');
+    expect(screen.getByRole('heading', { level: 1, name: '设置' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: '语言' })).toHaveValue('en');
+    expect(storageSpy).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: '保存更改' }));
+
     expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /switch to chinese/i })).toHaveTextContent('中');
     expect(screen.getByRole('combobox', { name: 'Language' })).toHaveValue('en');
-    expect(storageSpy).not.toHaveBeenCalled();
+    expect(headerObject).toHaveValue('object-two');
+    expect(storageSpy).toHaveBeenCalledWith(
+      CONSOLE_PREFERENCES_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        defaultSutId: 'object-two',
+        language: 'en',
+        reducedMotion: false,
+        reportDownloadFormat: 'html'
+      })
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('Settings saved and applied.');
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
@@ -510,10 +567,13 @@ describe('AppShell', () => {
     expect(screen.queryByRole('button', { name: /暂停|继续|清空|全部日志级别/i })).not.toBeInTheDocument();
   });
 
-  test('keeps live mode free of a fabricated active task on the Observe route', () => {
+  test('keeps live mode free of a fabricated active task on the Observe route', async () => {
     renderShell('/observation', { enableMockFallback: false });
 
-    expect(screen.getByRole('heading', { name: /任务调度/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /执行观测/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '执行任务' })).toBeInTheDocument();
+    expect(await screen.findByText('当前没有活动任务')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /前往任务调度/ })).toHaveAttribute('href', '/tasks');
     expect(screen.queryByText(mockActiveTask.task_id)).not.toBeInTheDocument();
     expect(screen.queryByText(/Environment validation passed/i)).not.toBeInTheDocument();
   });

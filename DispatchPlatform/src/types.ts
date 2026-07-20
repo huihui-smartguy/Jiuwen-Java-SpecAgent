@@ -103,6 +103,62 @@ export type BackendTaskStatus =
   | 'failed'
   | 'cancelled';
 
+export type ActiveBackendTaskStatus = Extract<
+  BackendTaskStatus,
+  'queued' | 'pending' | 'running'
+>;
+
+/** Safe allowlisted task summary returned by GET /api/tasks. */
+export interface TaskListWireTask {
+  task_id: string;
+  product: string;
+  scene: string;
+  feature?: string | null;
+  execute_mode?: string | null;
+  version?: string | null;
+  status: BackendTaskStatus;
+  progress: number;
+  total_scripts: number;
+  executed_scripts: number;
+  failed_scripts: number;
+  queue_position: number;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface TaskListWireResponse {
+  success: boolean;
+  total: number;
+  limit: number;
+  offset: number;
+  tasks: TaskListWireTask[];
+}
+
+/** A task summary pinned to the backend that supplied it. */
+export interface TaskListTask extends Omit<
+  TaskListWireTask,
+  'feature' | 'execute_mode' | 'version'
+> {
+  feature?: string;
+  execute_mode?: string;
+  version?: string;
+  sourceApiBaseUrl: string;
+}
+
+export interface TaskListResponse
+  extends Omit<TaskListWireResponse, 'tasks'> {
+  tasks: TaskListTask[];
+}
+
+export interface TaskListQuery {
+  product?: string;
+  scene?: string;
+  statuses?: readonly BackendTaskStatus[];
+  limit?: number;
+  offset?: number;
+}
+
 export interface TaskCreateResponse {
   success: boolean;
   task_id: string;

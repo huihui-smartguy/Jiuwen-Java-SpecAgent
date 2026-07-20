@@ -2,10 +2,17 @@ import { readFileSync } from 'node:fs';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { resolveRuntimeConfig } from '../config/runtime';
 import { activeTask, mockObservationEvents } from '../data/mockData';
-import type { Language, NormalizedTaskStatus, RuntimeConfig, SutTarget } from '../types';
+import type {
+  Language,
+  NormalizedTaskStatus,
+  RuntimeConfig,
+  SutTarget,
+  TaskListWireTask
+} from '../types';
 import { Observation } from './Observation';
 
 function mockJson(body: unknown, ok = true, status = 200) {
@@ -16,16 +23,97 @@ function mockJson(body: unknown, ok = true, status = 200) {
   } as Response);
 }
 
+function listTask(
+  taskId: string,
+  overrides: Partial<TaskListWireTask> = {}
+): TaskListWireTask {
+  return {
+    task_id: taskId,
+    product: '合一版本',
+    scene: 'API',
+    feature: '工作流管理',
+    execute_mode: 'pytest',
+    version: 'release1',
+    status: 'running',
+    progress: 40,
+    total_scripts: 10,
+    executed_scripts: 4,
+    failed_scripts: 0,
+    queue_position: -1,
+    created_at: '2026-07-20T09:00:00',
+    started_at: '2026-07-20T09:00:02',
+    completed_at: null,
+    ...overrides
+  };
+}
+
+function listEnvelope(tasks: TaskListWireTask[]) {
+  return {
+    success: true,
+    total: tasks.length,
+    limit: 100,
+    offset: 0,
+    tasks
+  };
+}
+
+function liveDetail(task: TaskListWireTask) {
+  return {
+    success: true,
+    task: {
+      id: task.task_id,
+      status: task.status,
+      progress: task.progress,
+      total_scripts: task.total_scripts,
+      executed_scripts: task.executed_scripts,
+      failed_scripts: task.failed_scripts,
+      queue_position: task.queue_position,
+      started_at: task.started_at,
+      completed_at: task.completed_at,
+      version: task.version
+    }
+  };
+}
+
 function mockTaskApi(
   statusResponses: unknown[],
   cancellationResponses: unknown[] = [],
-  scriptStatusResponses: unknown[] = []
+  scriptStatusResponses: unknown[] = [],
+  listResponses: unknown[] = [{
+    success: true,
+    total: 1,
+    limit: 100,
+    offset: 0,
+    tasks: [{
+      task_id: activeTask.task_id,
+      product: '高码java',
+      scene: '场景',
+      feature: '保存接口',
+      execute_mode: 'pytest',
+      version: 'release1',
+      status: 'running',
+      progress: 40,
+      total_scripts: 5,
+      executed_scripts: 2,
+      failed_scripts: 0,
+      queue_position: -1,
+      created_at: '2026-07-20T09:00:00',
+      started_at: '2026-07-20T09:00:01',
+      completed_at: null
+    }]
+  }]
 ) {
   let statusIndex = 0;
   let cancellationIndex = 0;
   let scriptStatusIndex = 0;
+  let listIndex = 0;
   return vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
     const url = String(input);
+    if (/\/tasks\?/.test(url)) {
+      const response = listResponses[Math.min(listIndex, listResponses.length - 1)];
+      listIndex += 1;
+      return mockJson(response);
+    }
     if (url.endsWith('/logs')) {
       return mockJson({ success: true, total: 0, logs: [] });
     }
@@ -60,10 +148,11 @@ function countScriptStatusRequests(fetchSpy: ReturnType<typeof vi.spyOn>, taskId
 }
 
 type ObservationOverrides = {
-  task?: NormalizedTaskStatus;
+  task?: NormalizedTaskStatus | null;
   language?: Language;
   runtimeOverrides?: Partial<RuntimeConfig>;
   selectedSut?: SutTarget;
+  launchedTask?: { taskId: string; apiBaseUrl: string };
   onTaskStatusChange?: ReturnType<typeof vi.fn>;
 };
 
@@ -74,18 +163,21 @@ function renderObservation(overrides: ObservationOverrides = {}) {
   const renderPage = (nextOverrides: ObservationOverrides = {}) => {
     const merged = { ...overrides, ...nextOverrides };
     const runtimeConfig = resolveRuntimeConfig(merged.runtimeOverrides);
-    const task = merged.task ?? activeTask;
+    const task = merged.task === undefined ? activeTask : merged.task;
 
     return (
-      <QueryClientProvider client={client}>
-        <Observation
-          language={merged.language ?? 'en'}
-          selectedSut={merged.selectedSut ?? runtimeConfig.sutTargets[0]}
-          activeTask={task}
-          runtimeConfig={runtimeConfig}
-          onTaskStatusChange={merged.onTaskStatusChange ?? vi.fn()}
-        />
-      </QueryClientProvider>
+      <MemoryRouter>
+        <QueryClientProvider client={client}>
+          <Observation
+            language={merged.language ?? 'en'}
+            selectedSut={merged.selectedSut ?? runtimeConfig.sutTargets[0]}
+            activeTask={task}
+            runtimeConfig={runtimeConfig}
+            launchedTask={merged.launchedTask}
+            onTaskStatusChange={merged.onTaskStatusChange ?? vi.fn()}
+          />
+        </QueryClientProvider>
+      </MemoryRouter>
     );
   };
   const result = render(renderPage());
@@ -105,6 +197,408 @@ afterEach(() => {
 });
 
 describe('Observation', () => {
+  test('keeps direct Observation navigation visible with a scheduling link when no task exists', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      if (String(input).includes('/tasks?')) {
+        return mockJson(listEnvelope([]));
+      }
+      return mockJson({ success: true, total: 0, logs: [] });
+    });
+
+    renderObservation({
+      task: null,
+      runtimeOverrides: { enableMockFallback: false }
+    });
+
+    expect(screen.getByRole('heading', { name: 'Observe' })).toBeInTheDocument();
+    expect(await screen.findByText('No active tasks')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /go to task scheduling/i })).toHaveAttribute('href', '/tasks');
+    expect(screen.queryByRole('region', { name: 'Observation metrics' })).not.toBeInTheDocument();
+    expect(fetchSpy.mock.calls.filter(([input]) => String(input).includes('/tasks?'))).toHaveLength(1);
+  });
+
+  test('merges tasks from unique backends, selects the newest directly, and switches pinned detail sources', async () => {
+    const alphaTarget: SutTarget = {
+      id: 'alpha',
+      name: 'Alpha object',
+      product: 'Alpha product',
+      scene: 'API',
+      version: 'alpha-v1',
+      apiBaseUrl: '/alpha-api',
+      status: 'healthy'
+    };
+    const betaTarget: SutTarget = {
+      id: 'beta',
+      name: 'Beta object',
+      product: 'Beta product',
+      scene: 'API',
+      version: 'beta-v2',
+      apiBaseUrl: '/beta-api',
+      status: 'healthy'
+    };
+    const alphaTask = listTask('task-alpha', {
+      product: alphaTarget.product,
+      created_at: '2026-07-20T09:00:00'
+    });
+    const betaTask = listTask('task-beta', {
+      product: betaTarget.product,
+      created_at: '2026-07-20T10:00:00'
+    });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = String(input);
+      if (url.includes('/alpha-api/tasks?')) {
+        return mockJson(listEnvelope([alphaTask]));
+      }
+      if (url.includes('/beta-api/tasks?')) {
+        return mockJson(listEnvelope([betaTask]));
+      }
+      if (url.endsWith('/logs')) {
+        return mockJson({ success: true, total: 0, logs: [] });
+      }
+      return mockJson(liveDetail(url.includes('task-alpha') ? alphaTask : betaTask));
+    });
+
+    renderObservation({
+      task: null,
+      selectedSut: alphaTarget,
+      runtimeOverrides: {
+        enableMockFallback: false,
+        sutTargets: [alphaTarget, betaTarget]
+      }
+    });
+
+    await screen.findByRole('region', { name: 'Observation metrics' });
+    const taskTable = screen.getByRole('table', { name: 'Execution tasks' });
+    expect(within(taskTable).getByText('task-alpha')).toBeInTheDocument();
+    expect(within(taskTable).getByText('task-beta')).toBeInTheDocument();
+    const betaRow = within(taskTable).getByText('task-beta').closest('tr') as HTMLTableRowElement;
+    expect(within(betaRow).getByRole('button', { name: 'Viewing' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(screen.getByRole('article', { name: 'Object' })).getByText('Beta object')).toBeInTheDocument();
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledWith(
+      '/beta-api/tasks/task-beta',
+      expect.any(Object)
+    ));
+
+    const alphaRow = within(taskTable).getByText('task-alpha').closest('tr') as HTMLTableRowElement;
+    await userEvent.click(within(alphaRow).getByRole('button', { name: 'View' }));
+
+    expect(within(screen.getByRole('article', { name: 'Object' })).getByText('Alpha object')).toBeInTheDocument();
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledWith(
+      '/alpha-api/tasks/task-alpha',
+      expect.any(Object)
+    ));
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/alpha-api/tasks/task-alpha/logs',
+      expect.any(Object)
+    );
+  });
+
+  test('keeps an unknown backend-wide task mapped to its own Object instead of a configured lookalike', async () => {
+    const configuredTarget: SutTarget = {
+      id: 'configured-object',
+      name: 'Configured Object',
+      product: 'Configured product',
+      scene: 'API',
+      version: 'configured-v1',
+      apiBaseUrl: '/shared-executor',
+      status: 'healthy'
+    };
+    const discovered = listTask('task-outside-config', {
+      product: 'External product',
+      scene: 'Workflow',
+      feature: null,
+      version: 'release-external'
+    });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = String(input);
+      if (url.includes('/shared-executor/tasks?')) {
+        return mockJson(listEnvelope([discovered]));
+      }
+      if (url.endsWith('/logs')) {
+        return mockJson({ success: true, total: 0, logs: [] });
+      }
+      return mockJson(liveDetail(discovered));
+    });
+
+    renderObservation({
+      task: null,
+      selectedSut: configuredTarget,
+      runtimeOverrides: {
+        enableMockFallback: false,
+        sutTargets: [configuredTarget]
+      }
+    });
+
+    const objectMetric = await screen.findByRole('article', { name: 'Object' });
+    expect(within(objectMetric).getByText('External product Workflow')).toBeInTheDocument();
+    expect(within(objectMetric).queryByText('Configured Object')).not.toBeInTheDocument();
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/shared-executor/tasks/task-outside-config',
+      expect.any(Object)
+    );
+  });
+
+  test('a fresh Observation mount ignores a terminal shell task and selects the newest active row', async () => {
+    const terminalParent: NormalizedTaskStatus = {
+      ...activeTask,
+      status: 'success',
+      uiStatus: 'success',
+      isTerminal: true,
+      completed_at: '2026-07-20T08:00:00'
+    };
+    const newest = listTask('task-newest-after-leave', {
+      product: '高码java',
+      scene: '场景',
+      created_at: '2026-07-20T11:00:00'
+    });
+    mockTaskApi(
+      [liveDetail(newest)],
+      [],
+      [],
+      [listEnvelope([newest])]
+    );
+
+    renderObservation({ task: terminalParent });
+
+    await screen.findByRole('table', { name: 'Execution tasks' });
+    await waitFor(() => {
+      const newestRow = screen.getByText(newest.task_id).closest('tr') as HTMLTableRowElement;
+      expect(within(newestRow).getByRole('button', { name: 'Viewing' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      );
+    });
+    expect(screen.queryByText(terminalParent.task_id)).not.toBeInTheDocument();
+  });
+
+  test('keeps a newly launched shell task selected when discovery returns a newer active row', async () => {
+    const newer = listTask('task-newer-discovered', {
+      created_at: '2026-07-20T12:00:00'
+    });
+    mockTaskApi(
+      [liveDetail(listTask(activeTask.task_id))],
+      [],
+      [],
+      [listEnvelope([newer, listTask(activeTask.task_id, {
+        created_at: '2026-07-20T09:00:00'
+      })])]
+    );
+
+    renderObservation({
+      launchedTask: { taskId: activeTask.task_id, apiBaseUrl: '/api' }
+    });
+
+    const taskTable = await screen.findByRole('table', { name: 'Execution tasks' });
+    await waitFor(() => {
+      const launchedRow = within(taskTable).getByText(activeTask.task_id).closest('tr') as HTMLTableRowElement;
+      expect(within(launchedRow).getByRole('button', { name: 'Viewing' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      );
+    });
+    const newerRow = within(taskTable).getByText(newer.task_id).closest('tr') as HTMLTableRowElement;
+    expect(within(newerRow).getByRole('button', { name: 'View' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    );
+  });
+
+  test('direct navigation prefers the newest active row over an older nonterminal shell task', async () => {
+    const olderShellTask = {
+      ...activeTask,
+      started_at: '2026-07-20T08:00:00'
+    };
+    const newer = listTask('task-newest-direct-visit', {
+      created_at: '2026-07-20T12:00:00'
+    });
+    mockTaskApi([liveDetail(newer)], [], [], [listEnvelope([newer])]);
+
+    renderObservation({
+      task: olderShellTask,
+      runtimeOverrides: { enableMockFallback: false }
+    });
+
+    await waitFor(() => {
+      const newestRow = screen.getByText(newer.task_id).closest('tr') as HTMLTableRowElement;
+      expect(within(newestRow).getByRole('button', { name: 'Viewing' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      );
+    });
+  });
+
+  test('retains successful backend rows during a partial failure and exposes a retry action', async () => {
+    const alphaTarget: SutTarget = {
+      id: 'alpha-partial',
+      name: 'Alpha partial',
+      product: 'Alpha product',
+      scene: 'API',
+      version: 'v1',
+      apiBaseUrl: '/alpha-partial-api',
+      status: 'healthy'
+    };
+    const betaTarget: SutTarget = {
+      ...alphaTarget,
+      id: 'beta-partial',
+      name: 'Beta partial',
+      product: 'Beta product',
+      apiBaseUrl: '/beta-partial-api'
+    };
+    const alphaTask = listTask('task-partial-success', { product: alphaTarget.product });
+    let betaAttempts = 0;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = String(input);
+      if (url.includes('/alpha-partial-api/tasks?')) {
+        return mockJson(listEnvelope([alphaTask]));
+      }
+      if (url.includes('/beta-partial-api/tasks?')) {
+        betaAttempts += 1;
+        return Promise.reject(new Error('beta unavailable'));
+      }
+      if (url.endsWith('/logs')) {
+        return mockJson({ success: true, total: 0, logs: [] });
+      }
+      return mockJson(liveDetail(alphaTask));
+    });
+
+    renderObservation({
+      task: null,
+      selectedSut: alphaTarget,
+      runtimeOverrides: {
+        enableMockFallback: false,
+        sutTargets: [alphaTarget, betaTarget]
+      }
+    });
+
+    await screen.findByRole('region', { name: 'Observation metrics' });
+    expect(screen.getByText('task-partial-success')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(/some execution backends are unavailable/i);
+    expect(screen.getByRole('alert')).toHaveTextContent(/1 responding backends/i);
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(betaAttempts).toBe(2));
+    expect(fetchSpy.mock.calls.some(([input]) => String(input).includes('/alpha-partial-api/tasks?'))).toBe(true);
+  });
+
+  test('keeps the page and empty guidance visible when every backend fails', async () => {
+    const alphaTarget: SutTarget = {
+      id: 'alpha-total',
+      name: 'Alpha total',
+      product: 'Alpha product',
+      scene: 'API',
+      version: 'v1',
+      apiBaseUrl: '/alpha-total-api',
+      status: 'offline'
+    };
+    const betaTarget: SutTarget = {
+      ...alphaTarget,
+      id: 'beta-total',
+      name: 'Beta total',
+      apiBaseUrl: '/beta-total-api'
+    };
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('offline'));
+
+    renderObservation({
+      task: null,
+      selectedSut: alphaTarget,
+      runtimeOverrides: {
+        enableMockFallback: false,
+        sutTargets: [alphaTarget, betaTarget]
+      }
+    });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/no execution backend can be reached/i);
+    expect(screen.getByText('No active tasks')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /go to task scheduling/i })).toHaveAttribute('href', '/tasks');
+    expect(screen.getByRole('heading', { name: 'Observe' })).toBeInTheDocument();
+  });
+
+  test('polls every unique configured backend for active tasks every five seconds', async () => {
+    vi.useFakeTimers();
+    const alphaTarget: SutTarget = {
+      id: 'alpha-poll',
+      name: 'Alpha poll',
+      product: 'Alpha product',
+      scene: 'API',
+      version: 'v1',
+      apiBaseUrl: '/alpha-poll-api',
+      status: 'healthy'
+    };
+    const betaTarget: SutTarget = {
+      ...alphaTarget,
+      id: 'beta-poll',
+      name: 'Beta poll',
+      apiBaseUrl: '/beta-poll-api'
+    };
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      await mockJson(listEnvelope([]))
+    );
+
+    renderObservation({
+      task: null,
+      selectedSut: alphaTarget,
+      runtimeOverrides: {
+        enableMockFallback: false,
+        sutTargets: [alphaTarget, betaTarget]
+      }
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const listRequestCount = () => fetchSpy.mock.calls.filter(([input]) => String(input).includes('/tasks?')).length;
+    expect(listRequestCount()).toBe(2);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(4999); });
+    expect(listRequestCount()).toBe(2);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(listRequestCount()).toBe(4);
+    expect(fetchSpy.mock.calls.some(([input]) => String(input).startsWith('/alpha-poll-api/tasks?'))).toBe(true);
+    expect(fetchSpy.mock.calls.some(([input]) => String(input).startsWith('/beta-poll-api/tasks?'))).toBe(true);
+  });
+
+  test('removes a terminal task from the active list while retaining its completed detail', async () => {
+    const running = listTask('task-terminal-retained');
+    const completed = listTask('task-terminal-retained', {
+      status: 'completed',
+      progress: 100,
+      executed_scripts: 10,
+      completed_at: '2026-07-20T09:02:00'
+    });
+    let listRequest = 0;
+    let detailRequest = 0;
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = String(input);
+      if (url.includes('/tasks?')) {
+        const response = listRequest === 0 ? listEnvelope([running]) : listEnvelope([]);
+        listRequest += 1;
+        return mockJson(response);
+      }
+      if (url.endsWith('/logs')) {
+        return mockJson({ success: true, total: 0, logs: [] });
+      }
+      detailRequest += 1;
+      return mockJson(liveDetail(detailRequest === 1 ? running : completed));
+    });
+
+    const { client } = renderObservation({
+      task: null,
+      runtimeOverrides: { enableMockFallback: false }
+    });
+
+    await screen.findByRole('region', { name: 'Observation metrics' });
+    expect(screen.getByText('task-terminal-retained')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByText('Running').length).toBeGreaterThan(0));
+    await act(async () => {
+      await client.refetchQueries({ queryKey: ['active-task-list'] });
+      await client.refetchQueries({ queryKey: ['task-status'] });
+    });
+
+    expect(await screen.findByText('No active tasks')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByText('Success').length).toBeGreaterThan(0));
+    expect(screen.getByRole('region', { name: 'Observation metrics' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /cancel task/i })).toBeDisabled();
+  });
+
   test('keeps polling, logs, cancellation, and Object identity bound to the task origin', async () => {
     const user = userEvent.setup();
     const originSut: SutTarget = {
@@ -138,6 +632,7 @@ describe('Observation', () => {
     renderObservation({
       task: originTask,
       selectedSut: newlySelectedSut,
+      launchedTask: { taskId: originTask.task_id, apiBaseUrl: originSut.apiBaseUrl },
       runtimeOverrides: {
         enableMockFallback: false,
         sutTargets: [originSut, newlySelectedSut]
@@ -148,6 +643,10 @@ describe('Observation', () => {
       `/origin-api/tasks/${activeTask.task_id}`,
       expect.any(Object)
     ));
+    expect(fetchSpy).toHaveBeenCalledWith(
+      `/origin-api/tasks/${activeTask.task_id}/logs`,
+      expect.any(Object)
+    );
     expect(screen.getByText('Origin Object')).toBeInTheDocument();
     expect(screen.queryByText('New Object')).not.toBeInTheDocument();
 
@@ -165,11 +664,13 @@ describe('Observation', () => {
     const { container } = renderObservation();
     const page = container.querySelector('.observation-page');
     const header = container.querySelector('.page-header');
+    const taskList = container.querySelector('.observation-task-list-card');
     const metrics = container.querySelector('.observation-metrics');
     const observeCss = readFileSync('src/styles/routes/observe.css', 'utf8');
 
     expect(page?.firstElementChild).toBe(header);
-    expect(header?.nextElementSibling).toBe(metrics);
+    expect(header?.nextElementSibling).toBe(taskList);
+    expect(taskList?.nextElementSibling).toBe(metrics);
     expect(observeCss).toMatch(
       /\.observation-page\s*>\s*\.page-header\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*112px;[^}]*margin-bottom:\s*24px;/
     );
@@ -193,6 +694,20 @@ describe('Observation', () => {
     );
     expect(observeCss).toMatch(
       /@media \(max-width:\s*980px\)[\s\S]*?\.observation-page\s*>\s*\.page-header\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*118px;/
+    );
+  });
+
+  test('turns the execution table into spacious task cards without sub-13px body copy', () => {
+    const observeCss = readFileSync('src/styles/routes/observe.css', 'utf8');
+
+    expect(observeCss).toMatch(
+      /@media \(max-width:\s*760px\)[\s\S]*?\.observation-task-table-scroll tbody tr\s*\{[^}]*padding:\s*18px;[^}]*border-radius:\s*18px;/
+    );
+    expect(observeCss).toMatch(
+      /@media \(max-width:\s*760px\)[\s\S]*?\.observation-task-table-scroll td::before\s*\{[^}]*font-size:\s*13px;[^}]*line-height:\s*20px;/
+    );
+    expect(observeCss).not.toMatch(
+      /@media \(max-width:\s*760px\)[\s\S]*?\.observation-task-(?:table|list)[^{]*\{[^}]*font-size:\s*(?:[0-9]|1[0-2])px;/
     );
   });
 
@@ -613,7 +1128,10 @@ describe('Observation', () => {
         : mockJson({ success: false, message: 'Status unavailable' }, false, 503);
     });
 
-    const { client } = renderObservation({ runtimeOverrides: { enableMockFallback: false } });
+    const { client } = renderObservation({
+      launchedTask: { taskId: activeTask.task_id, apiBaseUrl: '/api' },
+      runtimeOverrides: { enableMockFallback: false }
+    });
     expect(await screen.findByText('4 / 7')).toBeInTheDocument();
     expect(screen.getByText('release2')).toBeInTheDocument();
 
@@ -801,31 +1319,49 @@ describe('Observation', () => {
 
   test('does not poll case status after the parent task reaches a terminal state', async () => {
     vi.useFakeTimers();
-    const task: NormalizedTaskStatus = {
+    const terminalTask: NormalizedTaskStatus = {
       ...activeTask,
       status: 'success',
       uiStatus: 'success',
       isTerminal: true,
       version: 'release1'
     };
-    const fetchSpy = mockTaskApi([task], [], [{
+    const runningEnvelope = {
       success: true,
-      task_id: task.task_id,
+      task: {
+        id: activeTask.task_id,
+        status: 'running',
+        progress: 40,
+        total_scripts: 5,
+        executed_scripts: 2,
+        failed_scripts: 0,
+        queue_position: -1,
+        version: 'release1'
+      }
+    };
+    const fetchSpy = mockTaskApi([runningEnvelope, terminalTask], [], [{
+      success: true,
+      task_id: activeTask.task_id,
       scripts_status: [],
       summary: { todo_count: 0, pass_count: 0, failed_count: 0, running_count: 0 }
     }]);
 
-    renderObservation({ task });
+    renderObservation();
     fireEvent.click(screen.getByRole('button', { name: 'View case status' }));
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(countScriptStatusRequests(fetchSpy, task.task_id)).toBe(1);
+    expect(countScriptStatusRequests(fetchSpy, activeTask.task_id)).toBe(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    const requestsAtTerminal = countScriptStatusRequests(fetchSpy, activeTask.task_id);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(10_000);
     });
-    expect(countScriptStatusRequests(fetchSpy, task.task_id)).toBe(1);
+    expect(countScriptStatusRequests(fetchSpy, activeTask.task_id)).toBe(requestsAtTerminal);
   });
 });

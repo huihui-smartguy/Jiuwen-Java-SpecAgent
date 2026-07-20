@@ -88,21 +88,21 @@ function QualityRing({
       role="img"
       aria-label={`${label} ${boundedScore.toFixed(2)}`}
     >
-      <svg viewBox="0 0 106 106" aria-hidden="true">
-        <circle className="overview-quality-ring__track" cx="53" cy="53" r="44" pathLength="100" />
-        <circle
-          className="overview-quality-ring__value"
-          cx="53"
-          cy="53"
-          r="44"
-          pathLength="100"
-          strokeDasharray={`${boundedScore} 100`}
-        />
-      </svg>
-      <div className="overview-quality-ring__copy">
+      <div className="overview-quality-ring__visual" aria-hidden="true">
+        <svg viewBox="0 0 106 106">
+          <circle className="overview-quality-ring__track" cx="53" cy="53" r="44" pathLength="100" />
+          <circle
+            className="overview-quality-ring__value"
+            cx="53"
+            cy="53"
+            r="44"
+            pathLength="100"
+            strokeDasharray={`${boundedScore} 100`}
+          />
+        </svg>
         <strong>{boundedScore.toFixed(2)}</strong>
-        <span>{label}</span>
       </div>
+      <span className="overview-quality-ring__caption">{label}</span>
     </div>
   );
 }

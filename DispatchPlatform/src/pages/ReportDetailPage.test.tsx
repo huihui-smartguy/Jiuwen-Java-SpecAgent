@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { resolveRuntimeConfig } from '../config/runtime';
+import type { ReportDownloadFormat } from '../types';
 import { ReportDetailPage } from './ReportDetailPage';
 
 function json(body: unknown, status = 200) {
@@ -18,7 +19,10 @@ function LocationProbe() {
   return <output data-testid="location-path">{useLocation().pathname}</output>;
 }
 
-function renderDetail(runtimeConfig = resolveRuntimeConfig({ enableMockFallback: false })) {
+function renderDetail(
+  runtimeConfig = resolveRuntimeConfig({ enableMockFallback: false }),
+  reportDownloadFormat: ReportDownloadFormat = 'html'
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
@@ -31,6 +35,7 @@ function renderDetail(runtimeConfig = resolveRuntimeConfig({ enableMockFallback:
                 language="en"
                 selectedSut={runtimeConfig.sutTargets[0]}
                 runtimeConfig={runtimeConfig}
+                reportDownloadFormat={reportDownloadFormat}
               />
             )}
           />
@@ -173,15 +178,27 @@ describe('Report detail', () => {
       'href',
       '/testwise/api/reports/report-detail-1/download?format=md'
     );
+    expect(screen.getByRole('link', { name: 'Download Markdown' })).toHaveClass('button--secondary');
     expect(screen.getByRole('link', { name: 'Download HTML' })).toHaveAttribute(
       'href',
       '/testwise/api/reports/report-detail-1/download?format=html'
     );
+    expect(screen.getByRole('link', { name: 'Download HTML' })).toHaveClass('button--primary');
     expect(screen.getByRole('link', { name: 'Download case log' })).toHaveAttribute(
       'href',
       '/testwise/api/download/public/execution.log'
     );
     expect(screen.queryByText('/srv/private/results/execution.log')).not.toBeInTheDocument();
+  });
+
+  test('keeps both formats available and makes the saved Markdown preference primary', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => json(reportResponse));
+
+    renderDetail(resolveRuntimeConfig({ enableMockFallback: false }), 'md');
+
+    expect(await screen.findByRole('heading', { name: 'Release verification report' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Download Markdown' })).toHaveClass('button--primary');
+    expect(screen.getByRole('link', { name: 'Download HTML' })).toHaveClass('button--secondary');
   });
 
   test('treats a zero-row report as neutral even when the backend verdict says passed', async () => {

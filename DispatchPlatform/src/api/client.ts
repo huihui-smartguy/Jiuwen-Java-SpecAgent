@@ -14,6 +14,11 @@ import type {
   TaskLogLevel,
   TaskLogSnapshot,
   TaskLogsWireResponse,
+  TaskListQuery,
+  TaskListResponse,
+  TaskListWireResponse,
+  TaskListWireTask,
+  TaskListTask,
   TriggerType,
   CreateReportRequest,
   CreateReportResponse,
@@ -99,6 +104,15 @@ interface LiveTaskStatusEnvelope {
   success: boolean;
   task: LiveTask;
 }
+
+const backendTaskStatuses = new Set<BackendTaskStatus>([
+  'queued',
+  'pending',
+  'running',
+  'completed',
+  'failed',
+  'cancelled'
+]);
 
 export class ApiError extends Error {
   readonly code?: string;
@@ -505,6 +519,107 @@ export async function cancelTask(
     headers: { Accept: 'application/json' }
   });
   return readJson<TaskCancelResponse>(response);
+}
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === 'string';
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return Number.isSafeInteger(value) && Number(value) >= 0;
+}
+
+function isTaskListWireTask(value: unknown): value is TaskListWireTask {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const task = value as Partial<TaskListWireTask>;
+  return typeof task.task_id === 'string'
+    && task.task_id.length > 0
+    && typeof task.product === 'string'
+    && typeof task.scene === 'string'
+    && (task.feature === undefined || isNullableString(task.feature))
+    && (task.execute_mode === undefined || isNullableString(task.execute_mode))
+    && (task.version === undefined || isNullableString(task.version))
+    && typeof task.status === 'string'
+    && backendTaskStatuses.has(task.status as BackendTaskStatus)
+    && typeof task.progress === 'number'
+    && Number.isFinite(task.progress)
+    && task.progress >= 0
+    && task.progress <= 100
+    && isNonNegativeInteger(task.total_scripts)
+    && isNonNegativeInteger(task.executed_scripts)
+    && isNonNegativeInteger(task.failed_scripts)
+    && Number.isSafeInteger(task.queue_position)
+    && typeof task.created_at === 'string'
+    && isNullableString(task.started_at)
+    && isNullableString(task.completed_at);
+}
+
+function normalizeTaskListTask(
+  task: TaskListWireTask,
+  sourceApiBaseUrl: string
+): TaskListTask {
+  // Keep this as an explicit allowlist. Detail-only fields such as logs, script IDs,
+  // download URLs, and server filesystem paths must never leak into discovery state.
+  return {
+    task_id: task.task_id,
+    product: task.product,
+    scene: task.scene,
+    ...(task.feature == null ? {} : { feature: task.feature }),
+    ...(task.execute_mode == null ? {} : { execute_mode: task.execute_mode }),
+    ...(task.version == null ? {} : { version: task.version }),
+    status: task.status,
+    progress: task.progress,
+    total_scripts: task.total_scripts,
+    executed_scripts: task.executed_scripts,
+    failed_scripts: task.failed_scripts,
+    queue_position: task.queue_position,
+    created_at: task.created_at,
+    started_at: task.started_at,
+    completed_at: task.completed_at,
+    sourceApiBaseUrl
+  };
+}
+
+export async function listTasks(
+  context: ApiContext,
+  query: TaskListQuery = {}
+): Promise<TaskListResponse> {
+  const statuses = query.statuses?.join(',');
+  const response = await fetch(buildApiUrl(context.apiBaseUrl, '/tasks', {
+    product: query.product,
+    scene: query.scene,
+    status: statuses,
+    limit: query.limit,
+    offset: query.offset
+  }), {
+    headers: { Accept: 'application/json' }
+  });
+  const body = await readJson<TaskListWireResponse>(response);
+
+  if (
+    !Array.isArray(body.tasks)
+    || !isNonNegativeInteger(body.total)
+    || !isNonNegativeInteger(body.limit)
+    || !isNonNegativeInteger(body.offset)
+    || body.tasks.some((task) => !isTaskListWireTask(task))
+  ) {
+    throw new ApiError('The task list response is malformed', {
+      code: 'INVALID_TASK_LIST_RESPONSE',
+      status: response.status,
+      details: body
+    });
+  }
+
+  return {
+    success: body.success,
+    total: body.total,
+    limit: body.limit,
+    offset: body.offset,
+    tasks: body.tasks.map((task) => normalizeTaskListTask(task, context.apiBaseUrl))
+  };
 }
 
 export async function getTaskStatus(

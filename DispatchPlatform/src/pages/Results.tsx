@@ -33,6 +33,7 @@ interface ResultsProps {
 type ResultTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
 
 interface ReportRow {
+  rowKey: string;
   title: string;
   id: string;
   object: string;
@@ -64,6 +65,15 @@ interface ResultsViewModel {
   failures: FailureRow[];
   failureTotal: number;
   reports: ReportRow[];
+}
+
+function canonicalTaskSource(task: NormalizedTaskStatus, fallbackApiBaseUrl: string) {
+  const source = (task.sourceSut?.apiBaseUrl || fallbackApiBaseUrl || '/api').trim();
+  return source === '/' ? source : source.replace(/\/+$/, '');
+}
+
+function resultTaskIdentity(task: NormalizedTaskStatus, fallbackApiBaseUrl: string) {
+  return `${canonicalTaskSource(task, fallbackApiBaseUrl)}\u0000${task.task_id}`;
 }
 
 const mockTrendValues = [88.4, 89.7, 90.5, 89.9, 91.2, 90.8, 91.8];
@@ -116,6 +126,7 @@ function mockViewModel(language: Language): ResultsViewModel {
     })),
     failureTotal: 7,
     reports: ids.map((id, index) => ({
+      rowKey: id,
       title: reportTitles[index],
       id,
       object: '合一版本 API',
@@ -131,21 +142,23 @@ function mockViewModel(language: Language): ResultsViewModel {
 
 function uniqueTasks(
   sessionTasks: NormalizedTaskStatus[],
-  activeTask: NormalizedTaskStatus | null
+  activeTask: NormalizedTaskStatus | null,
+  fallbackApiBaseUrl: string
 ): NormalizedTaskStatus[] {
   const seen = new Set<string>();
   const tasks: NormalizedTaskStatus[] = [];
 
   if (activeTask?.task_id) {
-    seen.add(activeTask.task_id);
+    seen.add(resultTaskIdentity(activeTask, fallbackApiBaseUrl));
     tasks.push(activeTask);
   }
 
   for (const task of sessionTasks) {
-    if (!task.task_id || seen.has(task.task_id)) {
+    const taskIdentity = resultTaskIdentity(task, fallbackApiBaseUrl);
+    if (!task.task_id || seen.has(taskIdentity)) {
       continue;
     }
-    seen.add(task.task_id);
+    seen.add(taskIdentity);
     tasks.push(task);
   }
 
@@ -249,6 +262,7 @@ function formatDuration(seconds: number | undefined): string {
 function liveViewModel(
   tasks: NormalizedTaskStatus[],
   selectedSut: SutTarget,
+  fallbackApiBaseUrl: string,
   labels: Record<UiTaskStatus | 'partial' | 'no_results', string>,
   notes: {
     session: string;
@@ -264,6 +278,7 @@ function liveViewModel(
     const sourceTime = task.completed_at;
     const taskSut = task.sourceSut ?? selectedSut;
     return {
+      rowKey: resultTaskIdentity(task, fallbackApiBaseUrl),
       title: `${notes.reportPrefix} · ${task.task_id}`,
       id: task.task_id,
       object: `${taskSut.product} ${taskSut.scene}`.trim(),
@@ -446,9 +461,10 @@ export function Results({
   const t = getCopy(language);
   const navigate = useNavigate();
   const generateButtonRef = useRef<HTMLButtonElement>(null);
+  const sessionFallbackApiBaseUrl = selectedSut.apiBaseUrl || runtimeConfig.apiBaseUrl;
   const sessionTaskSnapshot = useMemo(
-    () => uniqueTasks(sessionTasks, activeTask),
-    [activeTask, sessionTasks]
+    () => uniqueTasks(sessionTasks, activeTask, sessionFallbackApiBaseUrl),
+    [activeTask, sessionFallbackApiBaseUrl, sessionTasks]
   );
   const hasSessionRows = runtimeConfig.enableMockFallback || sessionTaskSnapshot.length > 0;
   const [activeTab, setActiveTab] = useState<ResultsTab>(() => (
@@ -471,14 +487,14 @@ export function Results({
   }), [resolvedApiBaseUrl, selectedSut.id, selectedSut.product, selectedSut.scene]);
   const api = useMemo(() => ({ apiBaseUrl: targetIdentity.apiBaseUrl }), [targetIdentity.apiBaseUrl]);
   const preferredTaskVersion = useMemo(() => {
-    const candidates = uniqueTasks(sessionTasks, activeTask);
+    const candidates = uniqueTasks(sessionTasks, activeTask, sessionFallbackApiBaseUrl);
     return candidates.find((task) => {
       if (!task.version) {
         return false;
       }
       return !task.sourceSut || task.sourceSut.id === selectedSut.id;
     })?.version ?? '';
-  }, [activeTask, selectedSut.id, sessionTasks]);
+  }, [activeTask, selectedSut.id, sessionFallbackApiBaseUrl, sessionTasks]);
   const versionsQuery = useQuery({
     queryKey: ['versions', targetIdentity],
     queryFn: () => getVersions(api),
@@ -562,6 +578,7 @@ export function Results({
     return liveViewModel(
       sessionTaskSnapshot,
       selectedSut,
+      sessionFallbackApiBaseUrl,
       {
         success: t.success,
         failed: t.failed,
@@ -580,7 +597,7 @@ export function Results({
         reportPrefix: language === 'zh' ? '报告' : 'Report'
       }
     );
-  }, [language, runtimeConfig.enableMockFallback, selectedSut, sessionTaskSnapshot, t]);
+  }, [language, runtimeConfig.enableMockFallback, selectedSut, sessionFallbackApiBaseUrl, sessionTaskSnapshot, t]);
   const normalizedSearch = reportSearch.trim().toLocaleLowerCase();
   const filteredReports = normalizedSearch
     ? sessionViewModel.reports.filter((report) => (
@@ -830,7 +847,7 @@ export function Results({
               </thead>
               <tbody>
                 {filteredReports.map((report) => (
-                  <tr key={report.id}>
+                  <tr key={report.rowKey}>
                     <td className="results-report-title">{report.title}</td>
                     <td>{report.object}</td>
                     <td className="results-report-id">{report.id}</td>

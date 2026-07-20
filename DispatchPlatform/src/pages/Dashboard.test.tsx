@@ -39,7 +39,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('Overview dashboard R7', () => {
+describe('Overview dashboard R8', () => {
   test('encodes the approved flexible desktop geometry, hierarchy gap, and single-line action', () => {
     expect(foundationStyles).toMatch(/--radius-card:\s*24px;/);
     expect(primitiveStyles).toMatch(
@@ -52,7 +52,19 @@ describe('Overview dashboard R7', () => {
       /\.overview-quality-hierarchy\s*\{[^}]*gap:\s*48px;/s
     );
     expect(overviewStyles).toMatch(
-      /\.overview-l0-card\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*210px;[^}]*grid-template-columns:\s*300px 1px minmax\(0,\s*1fr\);/s
+      /\.overview-l0-card\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*252px;[^}]*grid-template-columns:\s*300px 1px minmax\(0,\s*1fr\);/s
+    );
+    expect(overviewStyles).toMatch(
+      /\.overview-quality-ring\.is-large\s*\{[^}]*width:\s*124px;[^}]*height:\s*148px;/s
+    );
+    expect(overviewStyles).toMatch(
+      /\.overview-quality-ring\.is-compact\s*\{[^}]*width:\s*116px;[^}]*height:\s*140px;/s
+    );
+    expect(overviewStyles).toMatch(
+      /\.overview-quality-ring__caption\s*\{[^}]*font-size:\s*13px;[^}]*line-height:\s*20px;[^}]*white-space:\s*normal;/s
+    );
+    expect(overviewStyles).toMatch(
+      /\.overview-quality-ring__visual strong\s*\{[^}]*font-size:\s*28px;[^}]*letter-spacing:\s*0;/s
     );
     expect(overviewStyles).toMatch(
       /\.overview-l1-card\s*\{[^}]*min-height:\s*350px;/s
@@ -134,6 +146,10 @@ describe('Overview dashboard R7', () => {
     expect(within(metrics[2]).getByText('42')).toBeInTheDocument();
     expect(within(metrics[2]).getByText('演示问题数据 · 前端模拟')).toBeInTheDocument();
     expect(screen.getByText('演示数据 · 前端模拟')).toBeInTheDocument();
+
+    const overallRing = screen.getByRole('img', { name: '综合质量 67.91' });
+    expect(within(overallRing).getByText('综合质量')).toHaveClass('overview-quality-ring__caption');
+    expect(overallRing.querySelector('.overview-quality-ring__visual')).not.toHaveTextContent('综合质量');
   });
 
   test('keeps the current-execution strip bound to the real task and Object', () => {
@@ -297,5 +313,8 @@ describe('Overview dashboard R7', () => {
     expect(screen.getByRole('region', { name: 'Dimension-level quality assessment' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Select quality dimension: Basic Functionality' }))
       .toBeInTheDocument();
+    const overallRing = screen.getByRole('img', { name: 'Overall quality 67.91' });
+    expect(within(overallRing).getByText('Overall quality')).toHaveClass('overview-quality-ring__caption');
+    expect(overallRing.querySelector('.overview-quality-ring__visual')).not.toHaveTextContent('Overall quality');
   });
 });

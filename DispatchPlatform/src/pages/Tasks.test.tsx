@@ -6,11 +6,10 @@ import { useState } from 'react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { resolveRuntimeConfig } from '../config/runtime';
-import type { Feature, Script, SutTarget, TaskCreateResponse } from '../types';
+import type { Feature, Language, Script, SutTarget, TaskCreateResponse } from '../types';
 import { Tasks } from './Tasks';
 
 const liveRuntimeConfig = resolveRuntimeConfig({ defaultLanguage: 'zh', enableMockFallback: false });
-const mockRuntimeConfig = resolveRuntimeConfig({ defaultLanguage: 'zh', enableMockFallback: true });
 const selectedSut = liveRuntimeConfig.sutTargets[0];
 const tasksStyles = readFileSync('src/styles/routes/tasks.css', 'utf8');
 
@@ -126,10 +125,20 @@ function mockTaskApi(options: {
 }
 
 function LocationProbe() {
-  return <output data-testid="location-path">{useLocation().pathname}</output>;
+  const location = useLocation();
+  const launch = (location.state as {
+    testwiseLaunch?: { taskId?: string; apiBaseUrl?: string };
+  } | null)?.testwiseLaunch;
+  return (
+    <output data-testid="location-path">
+      {location.pathname}
+      {launch ? `|${launch.taskId}|${launch.apiBaseUrl}` : ''}
+    </output>
+  );
 }
 
 function renderTasks(options: {
+  language?: Language;
   runtimeConfig?: typeof liveRuntimeConfig;
   onTaskCreated?: (task: TaskCreateResponse) => void;
   onRequestObjectChange?: () => void;
@@ -138,7 +147,7 @@ function renderTasks(options: {
     defaultOptions: { queries: { retry: false } }
   });
   const props = {
-    language: 'zh',
+    language: options.language ?? 'zh',
     selectedSut,
     runtimeConfig: options.runtimeConfig ?? liveRuntimeConfig,
     onTaskCreated: options.onTaskCreated ?? vi.fn(),
@@ -174,14 +183,14 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('approved Tasks composition', () => {
+describe('approved R8 Tasks composition', () => {
   test('renders the permanent one-page hierarchy and removes the queue, tabs, and wizard UI', async () => {
     mockTaskApi();
     const { container } = renderTasks();
 
     expect(screen.getByRole('heading', { level: 1, name: '任务调度' })).toBeInTheDocument();
     expect(screen.getByText('从测试对象到脚本范围，用清晰的三步流程发起可靠执行。')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '创建任务' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '创建任务' })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '配置新任务' })).toBeInTheDocument();
 
     const steps = screen.getByRole('list', { name: '任务配置步骤' });
@@ -213,15 +222,23 @@ describe('approved Tasks composition', () => {
     expect(screen.getByRole('searchbox', { name: '搜索脚本' })).toBeInTheDocument();
     expect(await screen.findByRole('table', { name: '脚本快照' })).toBeInTheDocument();
     expect(await screen.findByText('save_api_test')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Launch summary' })).toBeInTheDocument();
+    const launchSummary = screen.getByRole('region', { name: '启动摘要' });
+    expect(within(launchSummary).getByText('测试对象')).toBeInTheDocument();
+    expect(within(launchSummary).getByText('触发方式')).toBeInTheDocument();
+    expect(within(launchSummary).getByText('执行配置')).toBeInTheDocument();
+    expect(within(launchSummary).getByText('执行与报告版本')).toBeInTheDocument();
+    expect(within(launchSummary).getByText('版本来源')).toBeInTheDocument();
+    expect(within(launchSummary).getByText('脚本数量')).toBeInTheDocument();
+    expect(within(launchSummary).getByText('预计耗时')).toBeInTheDocument();
+    expect(within(launchSummary).getByText('准备状态')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '启动执行' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '执行护栏' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '执行护栏' })).not.toBeInTheDocument();
     expect(within(screen.getByRole('table', { name: '脚本快照' })).getAllByRole('columnheader').map(
       (header) => header.textContent
     )).toEqual(['脚本', 'Feature', '级别', '路径']);
     expect(container.querySelector('.tasks-config-heading p')).not.toBeInTheDocument();
     expect(container.querySelector('.tasks-ready-pill > span')).not.toBeInTheDocument();
-    expect(container.querySelector('.tasks-guardrail-count > span')).not.toBeInTheDocument();
+    expect(container.querySelector('.tasks-guardrail-card')).not.toBeInTheDocument();
     expect(container.querySelector('.tasks-script-search svg')).not.toBeInTheDocument();
     expect(container.querySelector('.tasks-launch-card .lucide-sparkles')).not.toBeInTheDocument();
     expect(container.querySelector('.tasks-level-pill')).not.toBeInTheDocument();
@@ -232,15 +249,13 @@ describe('approved Tasks composition', () => {
     expect(screen.queryByRole('button', { name: /上一步|下一步/ })).not.toBeInTheDocument();
   });
 
-  test('the page action focuses the first configuration control and change Object delegates to the shell', async () => {
+  test('removes the inert page action while Change Object still delegates to the shell', async () => {
     const user = userEvent.setup();
     const onRequestObjectChange = vi.fn();
     mockTaskApi();
     renderTasks({ onRequestObjectChange });
 
-    const firstControl = screen.getByRole('radio', { name: '按 Feature' });
-    await user.click(screen.getByRole('button', { name: '创建任务' }));
-    expect(firstControl).toHaveFocus();
+    expect(screen.queryByRole('button', { name: '创建任务' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '更换对象' }));
     expect(onRequestObjectChange).toHaveBeenCalledTimes(1);
@@ -339,24 +354,37 @@ describe('approved Tasks composition', () => {
     ))).toBe(false);
   });
 
-  test('shows mock-only credential and estimate values only when fallback mode is enabled', async () => {
-    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('offline'));
-    renderTasks({ runtimeConfig: mockRuntimeConfig });
-
-    expect(screen.getByText('~ 6 min')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByText('3 / 3')).toBeInTheDocument());
-    const credentials = screen.getByTestId('guardrail-credentials');
-    expect(credentials).toHaveTextContent('凭据有效');
-    expect(credentials).toHaveTextContent('Passed');
-  });
-
-  test('keeps unsupported credential and estimate claims unverified in live mode', async () => {
+  test('localizes the complete Chinese launch summary without unsupported guardrail claims', async () => {
     mockTaskApi();
     renderTasks();
 
-    expect(screen.getByText('Not verified')).toBeInTheDocument();
-    expect(screen.getByTestId('launch-estimate')).toHaveTextContent('—');
-    await waitFor(() => expect(screen.getByText('2 / 3')).toBeInTheDocument());
+    const summary = screen.getByRole('region', { name: '启动摘要' });
+    await waitFor(() => expect(within(summary).getByTestId('launch-estimate')).toHaveTextContent('约 3–5 分钟'));
+    expect(within(summary).getByText('实时 · 标准')).toBeInTheDocument();
+    expect(within(summary).getByText('后端版本注册表')).toBeInTheDocument();
+    expect(within(summary).getByText('已准备')).toBeInTheDocument();
+    expect(screen.queryByText(/Not verified|Passed|Execution guardrails/)).not.toBeInTheDocument();
+  });
+
+  test('renders the complete launch summary in English', async () => {
+    mockTaskApi();
+    renderTasks({ language: 'en' });
+
+    const summary = screen.getByRole('region', { name: 'Launch summary' });
+    await waitFor(() => expect(within(summary).getByTestId('launch-estimate')).toHaveTextContent('About 3–5 min'));
+    for (const label of [
+      'Object',
+      'Trigger mode',
+      'Execution profile',
+      'Execution & report version',
+      'Version source',
+      'Script count',
+      'Estimated time',
+      'Readiness'
+    ]) {
+      expect(within(summary).getByText(label)).toBeInTheDocument();
+    }
+    expect(within(summary).getByText('Ready')).toBeInTheDocument();
   });
 
   test('keeps responsive segmented choices and selectable rows at least 44px tall', () => {
@@ -384,6 +412,9 @@ describe('approved Tasks composition', () => {
     expect(tasksStyles.slice(compressedDesktopStart, stackedStart)).toMatch(
       /\.tasks-table-scroll\s*\{[^}]*width:\s*auto;/
     );
+    expect(tasksStyles.slice(compressedDesktopStart, stackedStart)).toMatch(
+      /\.tasks-fields\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/
+    );
     expect(tasksStyles.slice(stackedStart, tabletStart)).toMatch(
       /\.tasks-table-scroll\s*\{[^}]*width:\s*auto;/
     );
@@ -391,7 +422,7 @@ describe('approved Tasks composition', () => {
       /\.tasks-right-rail\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/
     );
     expect(tasksStyles.slice(tabletStart, mobileStart)).toMatch(
-      /\.tasks-launch-button,\s*\.tasks-guardrail-list\s*>\s*div\s*\{[^}]*width:\s*100%;/
+      /\.tasks-launch-button\s*\{[^}]*width:\s*100%;/
     );
   });
 
@@ -480,10 +511,10 @@ describe('approved Tasks composition', () => {
 
   test('encodes the approved spacious desktop Tasks geometry', () => {
     expect(tasksStyles).toMatch(/\.tasks-page \.page-header\s*\{[^}]*height:\s*118px;[^}]*min-height:\s*118px;[^}]*margin-bottom:\s*24px;/s);
-    expect(tasksStyles).toMatch(/\.tasks-create-task\s*\{[^}]*width:\s*142px;[^}]*height:\s*52px;/s);
+    expect(tasksStyles).not.toMatch(/\.tasks-create-task\s*\{/);
     expect(tasksStyles).toMatch(/\.tasks-layout\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*856px\) minmax\(0,\s*416px\);[^}]*gap:\s*24px;/s);
     expect(tasksStyles).toMatch(/\.tasks-left-column\s*\{[^}]*grid-template-rows:\s*auto minmax\(376px,\s*auto\);[^}]*gap:\s*24px;/s);
-    expect(tasksStyles).toMatch(/\.tasks-right-rail\s*\{[^}]*grid-template-rows:\s*minmax\(348px,\s*auto\) minmax\(382px,\s*auto\);[^}]*gap:\s*24px;/s);
+    expect(tasksStyles).toMatch(/\.tasks-right-rail\s*\{[^}]*grid-template-rows:\s*auto;[^}]*align-content:\s*start;/s);
     expect(tasksStyles).toMatch(/\.tasks-config-card\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*388px;[^}]*padding:\s*24px 28px;/s);
     expect(tasksStyles).toMatch(/\.tasks-steps\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*64px;[^}]*grid-template-columns:\s*repeat\(3,\s*260px\);[^}]*gap:\s*10px;/s);
     expect(tasksStyles).toMatch(/\.tasks-object-summary\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*64px;[^}]*border:\s*0;[^}]*background:\s*transparent;/s);
@@ -493,9 +524,9 @@ describe('approved Tasks composition', () => {
     expect(tasksStyles).toMatch(/\.tasks-script-search\s*\{[^}]*width:\s*330px;[^}]*height:\s*48px;[^}]*min-height:\s*48px;/s);
     expect(tasksStyles).toMatch(/\.tasks-table-scroll th\s*\{[^}]*height:\s*44px;/s);
     expect(tasksStyles).toMatch(/\.tasks-table-scroll td\s*\{[^}]*height:\s*68px;/s);
-    expect(tasksStyles).toMatch(/\.tasks-launch-card\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*348px;/s);
-    expect(tasksStyles).toMatch(/\.tasks-guardrail-card\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*382px;/s);
-    expect(tasksStyles).toMatch(/\.tasks-guardrail-list > div\s*\{[^}]*min-height:\s*80px;/s);
+    expect(tasksStyles).toMatch(/\.tasks-launch-card\s*\{[^}]*display:\s*flex;[^}]*height:\s*auto;[^}]*min-height:\s*634px;/s);
+    expect(tasksStyles).toMatch(/\.tasks-launch-list > div\s*\{[^}]*min-height:\s*52px;/s);
+    expect(tasksStyles).not.toMatch(/\.tasks-guardrail-card\s*\{/);
   });
 });
 
@@ -515,7 +546,9 @@ describe('task creation contracts', () => {
       feature: 'Save API',
       version: 'release1'
     });
-    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/observation'));
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent(
+      '/observation|task_feature|/api'
+    ));
     expect(fetchSpy.mock.calls.some(([input]) => {
       const url = new URL(String(input), 'http://local.test');
       return url.pathname.endsWith('/features') &&
@@ -589,7 +622,7 @@ describe('task creation contracts', () => {
         !url.searchParams.has('feature') &&
         !url.searchParams.has('level');
     })).toBe(false);
-    expect(screen.getByTestId('task-mode-summary')).toHaveTextContent('Scene');
+    expect(screen.getByTestId('task-mode-summary')).toHaveTextContent('整个场景 · 全部脚本');
     expect(screen.getByTestId('task-version-summary')).toHaveTextContent('release2');
     await user.click(screen.getByRole('button', { name: '启动执行' }));
 

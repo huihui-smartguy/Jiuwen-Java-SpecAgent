@@ -10,12 +10,19 @@ import {
 } from '../api/client';
 import { PageHeader } from '../components/PageHeader';
 import { reportOutcome } from '../reportSemantics';
-import type { Language, ReportFeatureScope, RuntimeConfig, SutTarget } from '../types';
+import type {
+  Language,
+  ReportDownloadFormat,
+  ReportFeatureScope,
+  RuntimeConfig,
+  SutTarget
+} from '../types';
 
 interface ReportDetailPageProps {
   language: Language;
   selectedSut: SutTarget;
   runtimeConfig: RuntimeConfig;
+  reportDownloadFormat?: ReportDownloadFormat;
 }
 
 function displayDate(value: string | null | undefined, fallback: string) {
@@ -41,7 +48,8 @@ function displayList(values: Array<string | null | undefined> | null | undefined
 export function ReportDetailPage({
   language,
   selectedSut,
-  runtimeConfig
+  runtimeConfig,
+  reportDownloadFormat = 'html'
 }: ReportDetailPageProps) {
   const isChinese = language === 'zh';
   const { reportId = '' } = useParams();
@@ -167,6 +175,18 @@ export function ReportDetailPage({
     && (report.summary.running ?? 0) === 0;
   const markdownUrl = getReportDownloadUrl(api, report.id, 'md');
   const htmlUrl = getReportDownloadUrl(api, report.id, 'html');
+  const downloads = {
+    html: {
+      url: htmlUrl,
+      label: isChinese ? '下载 HTML' : 'Download HTML'
+    },
+    md: {
+      url: markdownUrl,
+      label: isChinese ? '下载 Markdown' : 'Download Markdown'
+    }
+  } as const;
+  const primaryDownload = downloads[reportDownloadFormat];
+  const secondaryDownload = downloads[reportDownloadFormat === 'html' ? 'md' : 'html'];
 
   return (
     <div className="page-stack report-detail-page">
@@ -176,11 +196,11 @@ export function ReportDetailPage({
         subtitle={`${isChinese ? '执行/报告版本' : 'Execution/report version'}: ${reportVersion} · ${displayDate(report.created_at, notAvailable)}`}
         action={(
           <div className="report-detail-header-actions">
-            <a className="button button--secondary" href={markdownUrl} download>
-              {isChinese ? '下载 Markdown' : 'Download Markdown'}
+            <a className="button button--secondary" href={secondaryDownload.url} download>
+              {secondaryDownload.label}
             </a>
-            <a className="button button--primary" href={htmlUrl} download>
-              {isChinese ? '下载 HTML' : 'Download HTML'}
+            <a className="button button--primary" href={primaryDownload.url} download>
+              {primaryDownload.label}
             </a>
             <div className="report-detail-overflow">
               <button

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { Route, Routes, useLocation } from 'react-router-dom';
 import { normalizeCreatedTask } from './api/client';
 import { ConsoleHeader } from './components/ConsoleHeader';
 import { activeTask as initialActiveTask } from './data/mockData';
@@ -11,6 +11,12 @@ import { Results } from './pages/Results';
 import { Scripts } from './pages/Scripts';
 import { SettingsPage } from './pages/SettingsPage';
 import { Tasks } from './pages/Tasks';
+import {
+  applyReducedMotionPreference,
+  loadConsolePreferences,
+  subscribeToConsolePreferences,
+  type ConsolePreferencesV1
+} from './preferences';
 import type {
   Language,
   NormalizedTaskStatus,
@@ -19,10 +25,45 @@ import type {
   TaskCreateResponse
 } from './types';
 
+function taskSourceIdentity(task: NormalizedTaskStatus, fallbackApiBaseUrl: string) {
+  const source = (task.sourceSut?.apiBaseUrl || fallbackApiBaseUrl || '/api').trim();
+  return source === '/' ? source : source.replace(/\/+$/, '');
+}
+
+function isSameTask(
+  left: NormalizedTaskStatus,
+  right: NormalizedTaskStatus,
+  fallbackApiBaseUrl: string
+) {
+  return left.task_id === right.task_id
+    && taskSourceIdentity(left, fallbackApiBaseUrl) === taskSourceIdentity(right, fallbackApiBaseUrl);
+}
+
+function observationLaunchFromState(state: unknown) {
+  if (!state || typeof state !== 'object' || !('testwiseLaunch' in state)) {
+    return undefined;
+  }
+  const launch = (state as { testwiseLaunch?: unknown }).testwiseLaunch;
+  if (!launch || typeof launch !== 'object') {
+    return undefined;
+  }
+  const taskId = 'taskId' in launch ? (launch as { taskId?: unknown }).taskId : undefined;
+  const apiBaseUrl = 'apiBaseUrl' in launch
+    ? (launch as { apiBaseUrl?: unknown }).apiBaseUrl
+    : undefined;
+  return typeof taskId === 'string' && taskId.trim()
+    && typeof apiBaseUrl === 'string' && apiBaseUrl.trim()
+    ? { taskId, apiBaseUrl }
+    : undefined;
+}
+
 export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
   const location = useLocation();
-  const [language, setLanguage] = useState<Language>(runtimeConfig.defaultLanguage);
-  const [selectedSutId, setSelectedSutId] = useState(runtimeConfig.sutTargets[0].id);
+  const [preferences, setPreferences] = useState<ConsolePreferencesV1>(() => (
+    loadConsolePreferences(runtimeConfig)
+  ));
+  const [language, setLanguage] = useState<Language>(() => preferences.language);
+  const [selectedSutId, setSelectedSutId] = useState(() => preferences.defaultSutId);
   const [activeTask, setActiveTask] = useState<NormalizedTaskStatus | null>(() => (
     runtimeConfig.enableMockFallback
       ? { ...initialActiveTask, sourceSut: { ...runtimeConfig.sutTargets[0] } }
@@ -54,6 +95,16 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
     };
   }, [language]);
 
+  useEffect(() => (
+    applyReducedMotionPreference(preferences.reducedMotion)
+  ), [preferences.reducedMotion]);
+
+  useEffect(() => subscribeToConsolePreferences(runtimeConfig, (nextPreferences) => {
+    setPreferences(nextPreferences);
+    setSelectedSutId(nextPreferences.defaultSutId);
+    setLanguage(nextPreferences.language);
+  }), [runtimeConfig]);
+
   useEffect(() => {
     if (previousPathRef.current === location.pathname) {
       return;
@@ -64,16 +115,20 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
   }, [location.pathname]);
 
   const sharedProps = { language, selectedSut, activeTask, runtimeConfig };
+  const observationLaunch = observationLaunchFromState(location.state);
   const handleTaskCreated = useCallback((response: TaskCreateResponse) => {
     const task = {
       ...normalizeCreatedTask(response),
       sourceSut: { ...selectedSut }
     };
     setActiveTask(task);
-    setSessionTasks((current) => [task, ...current.filter((item) => item.task_id !== task.task_id)]);
-  }, [selectedSut]);
+    setSessionTasks((current) => [
+      task,
+      ...current.filter((item) => !isSameTask(item, task, runtimeConfig.apiBaseUrl))
+    ]);
+  }, [runtimeConfig.apiBaseUrl, selectedSut]);
   const handleTaskStatusChange = useCallback((task: NormalizedTaskStatus) => {
-    setActiveTask((current) => (current?.task_id === task.task_id
+    setActiveTask((current) => (current && isSameTask(current, task, runtimeConfig.apiBaseUrl)
       ? {
           ...task,
           version: task.version ?? current.version,
@@ -81,8 +136,8 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
         }
       : current));
     setSessionTasks((current) => {
-      const hasTask = current.some((item) => item.task_id === task.task_id);
-      const nextTasks = current.map((item) => (item.task_id === task.task_id
+      const hasTask = current.some((item) => isSameTask(item, task, runtimeConfig.apiBaseUrl));
+      const nextTasks = current.map((item) => (isSameTask(item, task, runtimeConfig.apiBaseUrl)
         ? {
             ...task,
             version: task.version ?? item.version,
@@ -91,9 +146,12 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
         : item));
       return hasTask ? nextTasks : [task, ...nextTasks];
     });
-  }, []);
+  }, [runtimeConfig.apiBaseUrl]);
   const handleRequestObjectChange = useCallback(() => {
     setObjectFocusRequest((current) => current + 1);
+  }, []);
+  const handlePreferencesChange = useCallback((nextPreferences: ConsolePreferencesV1) => {
+    setPreferences(nextPreferences);
   }, []);
 
   return (
@@ -135,16 +193,15 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
           />
           <Route
             path="/observation"
-            element={activeTask ? (
+            element={(
               <Observation
                 language={language}
                 selectedSut={selectedSut}
                 activeTask={activeTask}
                 runtimeConfig={runtimeConfig}
+                launchedTask={observationLaunch}
                 onTaskStatusChange={handleTaskStatusChange}
               />
-            ) : (
-              <Navigate to="/tasks" replace />
             )}
           />
           <Route
@@ -158,6 +215,7 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
                 language={language}
                 selectedSut={selectedSut}
                 runtimeConfig={runtimeConfig}
+                reportDownloadFormat={preferences.reportDownloadFormat}
               />
             )}
           />
@@ -170,8 +228,10 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
                 language={language}
                 selectedSut={selectedSut}
                 runtimeConfig={runtimeConfig}
+                preferences={preferences}
                 onObjectChange={setSelectedSutId}
                 onLanguageChange={setLanguage}
+                onPreferencesChange={handlePreferencesChange}
               />
             )}
           />

@@ -128,6 +128,87 @@ describe('Results', () => {
     expect(within(reports).queryByText('New product API')).not.toBeInTheDocument();
   });
 
+  test('retains same-named tasks from different source backends as distinct session evidence', () => {
+    const runtimeConfig = resolveRuntimeConfig({
+      enableMockFallback: false,
+      sutTargets: [
+        {
+          id: 'source-a',
+          name: 'Source A',
+          product: 'Product A',
+          scene: 'API',
+          version: 'v1',
+          apiBaseUrl: '/source-a-api',
+          status: 'healthy'
+        },
+        {
+          id: 'source-b',
+          name: 'Source B',
+          product: 'Product B',
+          scene: 'API',
+          version: 'v1',
+          apiBaseUrl: '/source-b-api',
+          status: 'healthy'
+        }
+      ]
+    });
+    const fromA = task('shared-task-id', { sourceSut: runtimeConfig.sutTargets[0] });
+    const fromB = task('shared-task-id', { sourceSut: runtimeConfig.sutTargets[1] });
+
+    renderResults({
+      runtimeConfig,
+      selectedSut: runtimeConfig.sutTargets[0],
+      activeTask: fromA,
+      sessionTasks: [fromA, fromB]
+    });
+
+    const reports = screen.getByRole('region', { name: '最近报告' });
+    expect(within(reports).getAllByText('报告 · shared-task-id')).toHaveLength(2);
+    expect(within(reports).getByText('Product A API')).toBeInTheDocument();
+    expect(within(reports).getByText('Product B API')).toBeInTheDocument();
+  });
+
+  test('uses the runtime fallback consistently when a task target omits its API base URL', () => {
+    const runtimeConfig = resolveRuntimeConfig({
+      apiBaseUrl: '/runtime-api',
+      enableMockFallback: false,
+      sutTargets: [
+        {
+          id: 'runtime-source',
+          name: 'Runtime source',
+          product: 'Runtime product',
+          scene: 'API',
+          version: 'v1',
+          apiBaseUrl: '',
+          status: 'healthy'
+        },
+        {
+          id: 'api-source',
+          name: 'API source',
+          product: 'API product',
+          scene: 'API',
+          version: 'v1',
+          apiBaseUrl: '/api',
+          status: 'healthy'
+        }
+      ]
+    });
+    const fromRuntime = task('shared-fallback-id', { sourceSut: runtimeConfig.sutTargets[0] });
+    const fromApi = task('shared-fallback-id', { sourceSut: runtimeConfig.sutTargets[1] });
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    renderResults({
+      runtimeConfig,
+      selectedSut: runtimeConfig.sutTargets[0],
+      activeTask: fromRuntime,
+      sessionTasks: [fromRuntime, fromApi]
+    });
+
+    const reports = screen.getByRole('region', { name: '最近报告' });
+    expect(within(reports).getAllByText('shared-fallback-id')).toHaveLength(2);
+    expect(consoleError.mock.calls.flat().join(' ')).not.toContain('same key');
+  });
+
   test('keeps Results level copy distinct from the existing log-level filter copy', () => {
     expect(copy.zh.allLevels).toBe('全部日志级别');
     expect(copy.zh.allResultLevels).toBe('全部级别');

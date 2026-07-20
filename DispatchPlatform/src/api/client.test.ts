@@ -15,6 +15,7 @@ import {
   getTaskScriptStatus,
   getTaskStatus,
   getVersions,
+  listTasks,
   listReports,
   normalizeCreatedTask,
   normalizeTaskStatus,
@@ -61,6 +62,160 @@ function reportListItem(
 }
 
 describe('execution API client', () => {
+  test('lists active tasks with encoded filters and pins each safe summary to its source backend', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      await mockJson({
+        success: true,
+        total: 1,
+        limit: 100,
+        offset: 0,
+        tasks: [{
+          task_id: 'task-list-1',
+          product: '合一版本',
+          scene: 'API',
+          feature: '工作流管理',
+          execute_mode: 'pytest',
+          version: 'release1',
+          status: 'running',
+          progress: 40,
+          total_scripts: 10,
+          executed_scripts: 4,
+          failed_scripts: 0,
+          queue_position: -1,
+          created_at: '2026-07-20T09:00:00',
+          started_at: '2026-07-20T09:00:02',
+          completed_at: null,
+          logs: ['must-not-survive'],
+          script_ids: ['must-not-survive'],
+          download_url: '/must-not-survive',
+          filesystem_path: '/must-not-survive'
+        }]
+      })
+    );
+
+    const result = await listTasks(
+      { apiBaseUrl: '/testwise/api' },
+      {
+        product: '合一版本',
+        scene: 'API',
+        statuses: ['queued', 'pending', 'running'],
+        limit: 100,
+        offset: 0
+      }
+    );
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/testwise/api/tasks?product=%E5%90%88%E4%B8%80%E7%89%88%E6%9C%AC&scene=API&status=queued%2Cpending%2Crunning&limit=100&offset=0',
+      { headers: { Accept: 'application/json' } }
+    );
+    expect(result.tasks[0]).toEqual({
+      task_id: 'task-list-1',
+      product: '合一版本',
+      scene: 'API',
+      feature: '工作流管理',
+      execute_mode: 'pytest',
+      version: 'release1',
+      status: 'running',
+      progress: 40,
+      total_scripts: 10,
+      executed_scripts: 4,
+      failed_scripts: 0,
+      queue_position: -1,
+      created_at: '2026-07-20T09:00:00',
+      started_at: '2026-07-20T09:00:02',
+      completed_at: null,
+      sourceApiBaseUrl: '/testwise/api'
+    });
+    expect(result.tasks[0]).not.toHaveProperty('logs');
+    expect(result.tasks[0]).not.toHaveProperty('script_ids');
+    expect(result.tasks[0]).not.toHaveProperty('download_url');
+    expect(result.tasks[0]).not.toHaveProperty('filesystem_path');
+  });
+
+  test('accepts legacy level and whole-scene summaries with nullable optional metadata', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      await mockJson({
+        success: true,
+        total: 2,
+        limit: 100,
+        offset: 0,
+        tasks: [
+          {
+            task_id: 'task-level',
+            product: '合一版本',
+            scene: 'API',
+            feature: null,
+            execute_mode: null,
+            version: 'release1',
+            status: 'pending',
+            progress: 0,
+            total_scripts: 4,
+            executed_scripts: 0,
+            failed_scripts: 0,
+            queue_position: 1,
+            created_at: '2026-07-20T09:00:00',
+            started_at: null,
+            completed_at: null
+          },
+          {
+            task_id: 'task-scene',
+            product: '合一版本',
+            scene: 'API',
+            feature: null,
+            execute_mode: 'pytest',
+            version: null,
+            status: 'running',
+            progress: 25,
+            total_scripts: 8,
+            executed_scripts: 2,
+            failed_scripts: 0,
+            queue_position: -1,
+            created_at: '2026-07-20T09:01:00',
+            started_at: '2026-07-20T09:01:02',
+            completed_at: null
+          }
+        ]
+      })
+    );
+
+    const result = await listTasks(api, { statuses: ['pending', 'running'] });
+
+    expect(result.tasks).toHaveLength(2);
+    expect(result.tasks[0]).not.toHaveProperty('feature');
+    expect(result.tasks[0]).not.toHaveProperty('execute_mode');
+    expect(result.tasks[1]).not.toHaveProperty('version');
+  });
+
+  test('rejects malformed task-list counts and statuses before they reach observation state', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      await mockJson({
+        success: true,
+        total: 1,
+        limit: 100,
+        offset: 0,
+        tasks: [{
+          task_id: 'task-list-invalid',
+          product: '合一版本',
+          scene: 'API',
+          status: 'mystery',
+          progress: 140,
+          total_scripts: -1,
+          executed_scripts: 4,
+          failed_scripts: 0,
+          queue_position: -1,
+          created_at: '2026-07-20T09:00:00',
+          started_at: null,
+          completed_at: null
+        }]
+      })
+    );
+
+    await expect(listTasks(api)).rejects.toMatchObject({
+      name: 'ApiError',
+      code: 'INVALID_TASK_LIST_RESPONSE'
+    });
+  });
+
   test('normalizes the observed live task log payload without inventing entries', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       await mockJson({

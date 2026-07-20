@@ -1,10 +1,12 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import {
   ApiError,
   cancelTask,
   getTaskScriptStatus,
   getTaskStatus,
+  listTasks,
   normalizeTaskStatus
 } from '../api/client';
 import { LiveLogConsole } from '../components/LiveLogConsole';
@@ -18,6 +20,7 @@ import type {
   NormalizedTaskStatus,
   RuntimeConfig,
   SutTarget,
+  TaskListTask,
   TaskScriptExecutionStatus,
   TaskScriptStatusResponse,
   UiTaskStatus
@@ -26,9 +29,15 @@ import type {
 interface PageProps {
   language: Language;
   selectedSut: SutTarget;
-  activeTask: NormalizedTaskStatus;
+  activeTask: NormalizedTaskStatus | null;
   runtimeConfig: RuntimeConfig;
+  launchedTask?: { taskId: string; apiBaseUrl: string };
   onTaskStatusChange: (task: NormalizedTaskStatus) => void;
+}
+
+interface ObservationDetailProps extends Omit<PageProps, 'activeTask' | 'launchedTask'> {
+  activeTask: NormalizedTaskStatus;
+  taskList: ReactNode;
 }
 
 type StageState = 'complete' | 'current' | 'error' | 'upcoming' | 'neutral';
@@ -36,6 +45,23 @@ type StageState = 'complete' | 'current' | 'error' | 'upcoming' | 'neutral';
 interface TaskStatusQueryResult {
   task: NormalizedTaskStatus;
   source: 'live' | 'fallback';
+}
+
+interface BackendTaskSource {
+  apiBaseUrl: string;
+  targets: SutTarget[];
+}
+
+interface TaskDiscoveryFailure {
+  apiBaseUrl: string;
+  message: string;
+}
+
+interface TaskDiscoveryResult {
+  tasks: TaskListTask[];
+  failures: TaskDiscoveryFailure[];
+  sourceCount: number;
+  successfulSourceCount: number;
 }
 
 function isPollingTask(task: NormalizedTaskStatus) {
@@ -90,6 +116,200 @@ function displayTime(value: string | undefined, fallback: string) {
   return value.match(/T(\d{2}:\d{2}:\d{2})/)?.[1] ?? value;
 }
 
+function canonicalApiBaseUrl(value: string) {
+  const trimmed = value.trim() || '/api';
+  return trimmed === '/' ? trimmed : trimmed.replace(/\/+$/, '');
+}
+
+function taskIdentity(sourceApiBaseUrl: string, taskId: string) {
+  return `${canonicalApiBaseUrl(sourceApiBaseUrl)}\u0000${taskId}`;
+}
+
+function sourceUrlForTask(
+  task: NormalizedTaskStatus,
+  selectedSut: SutTarget,
+  runtimeConfig: RuntimeConfig
+) {
+  return canonicalApiBaseUrl(
+    task.sourceSut?.apiBaseUrl || selectedSut.apiBaseUrl || runtimeConfig.apiBaseUrl
+  );
+}
+
+function configuredBackendSources(runtimeConfig: RuntimeConfig): BackendTaskSource[] {
+  const sources = new Map<string, BackendTaskSource>();
+
+  for (const target of runtimeConfig.sutTargets) {
+    const apiBaseUrl = canonicalApiBaseUrl(target.apiBaseUrl || runtimeConfig.apiBaseUrl);
+    const source = sources.get(apiBaseUrl);
+    if (source) {
+      source.targets.push(target);
+    } else {
+      sources.set(apiBaseUrl, { apiBaseUrl, targets: [target] });
+    }
+  }
+
+  if (!sources.size) {
+    const apiBaseUrl = canonicalApiBaseUrl(runtimeConfig.apiBaseUrl);
+    sources.set(apiBaseUrl, { apiBaseUrl, targets: [] });
+  }
+
+  return Array.from(sources.values());
+}
+
+function backendStatusToUi(status: TaskListTask['status']): NormalizedTaskStatus['status'] {
+  switch (status) {
+    case 'queued':
+    case 'pending':
+      return 'pending';
+    case 'running':
+      return 'running';
+    case 'completed':
+      return 'success';
+    case 'failed':
+      return 'failed';
+    case 'cancelled':
+      return 'cancelled';
+  }
+}
+
+function targetForSummary(
+  summary: TaskListTask,
+  sources: readonly BackendTaskSource[],
+  fallback: SutTarget
+): SutTarget {
+  const source = sources.find((candidate) => candidate.apiBaseUrl === summary.sourceApiBaseUrl);
+  const exact = source?.targets.find((target) => (
+    target.product === summary.product && target.scene === summary.scene
+  ));
+
+  if (exact) {
+    return { ...exact };
+  }
+
+  return {
+    id: `discovered:${summary.sourceApiBaseUrl}:${summary.product}:${summary.scene}`,
+    name: [summary.product, summary.scene].filter(Boolean).join(' ') || fallback.name,
+    product: summary.product || fallback.product,
+    scene: summary.scene || fallback.scene,
+    version: summary.version || '—',
+    apiBaseUrl: summary.sourceApiBaseUrl,
+    status: 'healthy'
+  };
+}
+
+function detailSeedForSummary(
+  summary: TaskListTask,
+  sources: readonly BackendTaskSource[],
+  fallback: SutTarget
+): NormalizedTaskStatus {
+  const status = backendStatusToUi(summary.status);
+  return {
+    ...normalizeTaskStatus({
+      success: true,
+      task_id: summary.task_id,
+      status,
+      trigger_type: 'feature',
+      backend_status: summary.status,
+      queue_position: summary.queue_position,
+      total_scripts: summary.total_scripts,
+      progress: {
+        total_commands: summary.total_scripts,
+        completed: summary.executed_scripts,
+        failed: summary.failed_scripts
+      },
+      result: status === 'success' || status === 'failed' || status === 'cancelled'
+        ? {
+            total_commands: summary.total_scripts,
+            success_count: Math.max(summary.executed_scripts - summary.failed_scripts, 0),
+            failed_count: summary.failed_scripts
+          }
+        : undefined,
+      started_at: summary.started_at ?? summary.created_at,
+      completed_at: summary.completed_at ?? undefined,
+      version: summary.version
+    }),
+    sourceSut: targetForSummary(summary, sources, fallback)
+  };
+}
+
+function summaryForSessionTask(
+  task: NormalizedTaskStatus,
+  selectedSut: SutTarget,
+  runtimeConfig: RuntimeConfig
+): TaskListTask {
+  const sourceSut = task.sourceSut ?? selectedSut;
+  const total = task.total_scripts ?? task.progress?.total_commands ?? task.result?.total_commands ?? 0;
+  const executed = task.progress?.completed ?? task.result?.total_commands ?? 0;
+  const failed = task.progress?.failed ?? task.result?.failed_count ?? 0;
+  const progress = total > 0 ? Math.min(Math.round((executed / total) * 100), 100) : 0;
+  const backendStatus = task.backend_status ?? (
+    task.status === 'success' ? 'completed' : task.status
+  );
+
+  return {
+    task_id: task.task_id,
+    product: sourceSut.product,
+    scene: sourceSut.scene,
+    execute_mode: task.trigger_type,
+    version: task.version ?? sourceSut.version,
+    status: backendStatus,
+    progress,
+    total_scripts: total,
+    executed_scripts: executed,
+    failed_scripts: failed,
+    queue_position: task.queue_position ?? -1,
+    created_at: task.started_at ?? '',
+    started_at: task.started_at ?? null,
+    completed_at: task.completed_at ?? null,
+    sourceApiBaseUrl: sourceUrlForTask(task, selectedSut, runtimeConfig)
+  };
+}
+
+function sortNewestFirst(tasks: TaskListTask[]) {
+  return tasks.sort((left, right) => {
+    const leftTime = Date.parse(left.created_at || left.started_at || '') || 0;
+    const rightTime = Date.parse(right.created_at || right.started_at || '') || 0;
+    return rightTime - leftTime || right.task_id.localeCompare(left.task_id);
+  });
+}
+
+function mergeTaskSummaries(tasks: readonly TaskListTask[]) {
+  const deduplicated = new Map<string, TaskListTask>();
+  for (const task of tasks) {
+    const identity = taskIdentity(task.sourceApiBaseUrl, task.task_id);
+    if (!deduplicated.has(identity)) {
+      deduplicated.set(identity, task);
+    }
+  }
+  return sortNewestFirst(Array.from(deduplicated.values()));
+}
+
+function taskListStatusLabel(task: TaskListTask, language: Language) {
+  const labels = language === 'zh'
+    ? {
+        queued: '排队中', pending: '等待中', running: '执行中', completed: '已完成',
+        failed: '失败', cancelled: '已取消'
+      }
+    : {
+        queued: 'Queued', pending: 'Pending', running: 'Running', completed: 'Completed',
+        failed: 'Failed', cancelled: 'Cancelled'
+      };
+  return labels[task.status];
+}
+
+function taskListTime(task: TaskListTask, language: Language) {
+  const value = task.started_at ?? task.created_at;
+  const formatted = value
+    ? value.replace('T', ' ').replace(/(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?$/, '').slice(0, 16)
+    : language === 'zh' ? '时间未知' : 'Time unavailable';
+  if ((task.status === 'queued' || task.status === 'pending') && task.queue_position > 0) {
+    return language === 'zh'
+      ? `队列 #${task.queue_position} · ${formatted}`
+      : `Queue #${task.queue_position} · ${formatted}`;
+  }
+  return formatted;
+}
+
 function isKnownUiStatus(status: string): status is UiTaskStatus {
   return status === 'pending'
     || status === 'running'
@@ -107,6 +327,173 @@ function scriptStatusLabel(
     ? { todo: '待执行', pass: '通过', failed: '失败', running: '执行中' }
     : { todo: 'Pending', pass: 'Passed', failed: 'Failed', running: 'Running' };
   return labels[status];
+}
+
+function ExecutionTasksCard({
+  language,
+  tasks,
+  selectedTask,
+  discovery,
+  isLoading,
+  isRefreshing,
+  onSelect,
+  onRetry
+}: {
+  language: Language;
+  tasks: readonly TaskListTask[];
+  selectedTask: NormalizedTaskStatus | null;
+  discovery?: TaskDiscoveryResult;
+  isLoading: boolean;
+  isRefreshing: boolean;
+  onSelect: (task: TaskListTask) => void;
+  onRetry: () => void;
+}) {
+  const selectedIdentity = selectedTask
+    ? taskIdentity(
+        selectedTask.sourceSut?.apiBaseUrl ?? '/api',
+        selectedTask.task_id
+      )
+    : undefined;
+  const copy = language === 'zh'
+    ? {
+        title: '执行任务',
+        subtitle: '跨已配置执行后端汇总正在排队、等待与运行的任务。',
+        count: `${tasks.length} 个活动任务`,
+        loading: '正在加载活动任务…',
+        emptyTitle: '当前没有活动任务',
+        emptyBody: '观测页会保持可用。创建任务后，最新执行会自动出现在这里。',
+        schedule: '前往任务调度',
+        partial: `部分执行后端暂不可用；已保留 ${discovery?.successfulSourceCount ?? 0} 个后端返回的任务。`,
+        total: '暂时无法连接任何执行后端。页面不会跳转，您可以在此重试。',
+        retry: isRefreshing ? '正在重试…' : '重试',
+        id: '任务 ID',
+        scope: '对象 / 范围',
+        version: '版本',
+        status: '状态',
+        progress: '进度',
+        time: '开始 / 排队时间',
+        action: '操作',
+        view: '查看',
+        viewing: '查看中',
+        scripts: '脚本'
+      }
+    : {
+        title: 'Execution tasks',
+        subtitle: 'Active queued, pending, and running tasks across configured execution backends.',
+        count: `${tasks.length} active`,
+        loading: 'Loading active tasks…',
+        emptyTitle: 'No active tasks',
+        emptyBody: 'Observation stays available. The newest execution will appear here after you launch it.',
+        schedule: 'Go to Task Scheduling',
+        partial: `Some execution backends are unavailable. Tasks from ${discovery?.successfulSourceCount ?? 0} responding backends are retained.`,
+        total: 'No execution backend can be reached right now. This page stays available so you can retry.',
+        retry: isRefreshing ? 'Retrying…' : 'Retry',
+        id: 'Task ID',
+        scope: 'Object / scope',
+        version: 'Version',
+        status: 'Status',
+        progress: 'Progress',
+        time: 'Started / queued',
+        action: 'Action',
+        view: 'View',
+        viewing: 'Viewing',
+        scripts: 'scripts'
+      };
+  const failures = discovery?.failures ?? [];
+  const totalFailure = Boolean(discovery?.sourceCount) && failures.length === discovery?.sourceCount;
+
+  return (
+    <section
+      className="observation-task-list-card"
+      aria-labelledby="execution-tasks-title"
+      aria-busy={isLoading || undefined}
+    >
+      <header className="observation-task-list-card__heading">
+        <div>
+          <h2 id="execution-tasks-title">{copy.title}</h2>
+          <p>{copy.subtitle}</p>
+        </div>
+        <span aria-live="polite">{copy.count}</span>
+      </header>
+
+      {failures.length ? (
+        <div className={`observation-task-list-warning${totalFailure ? ' is-total' : ''}`} role="alert">
+          <p>{totalFailure ? copy.total : copy.partial}</p>
+          <button type="button" onClick={onRetry} disabled={isRefreshing}>
+            {copy.retry}
+          </button>
+        </div>
+      ) : null}
+
+      {isLoading && !tasks.length ? (
+        <p className="observation-task-list-state" role="status">{copy.loading}</p>
+      ) : tasks.length ? (
+        <div className="observation-task-table-scroll">
+          <table aria-label={copy.title}>
+            <thead>
+              <tr>
+                <th>{copy.id}</th>
+                <th>{copy.scope}</th>
+                <th>{copy.version}</th>
+                <th>{copy.status}</th>
+                <th>{copy.progress}</th>
+                <th>{copy.time}</th>
+                <th>{copy.action}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tasks.map((task) => {
+                const identity = taskIdentity(task.sourceApiBaseUrl, task.task_id);
+                const selected = identity === selectedIdentity;
+                const progressLabel = `${task.executed_scripts} / ${task.total_scripts}`;
+                return (
+                  <tr key={identity} aria-current={selected ? 'true' : undefined}>
+                    <td data-label={copy.id}>
+                      <strong title={task.task_id}>{task.task_id}</strong>
+                      <small>{task.execute_mode ?? '—'}</small>
+                    </td>
+                    <td data-label={copy.scope}>
+                      <strong>{task.product}</strong>
+                      <small>{[task.scene, task.feature].filter(Boolean).join(' · ')}</small>
+                    </td>
+                    <td data-label={copy.version}>{task.version ?? '—'}</td>
+                    <td data-label={copy.status}>
+                      <span className={`observation-list-status is-${task.status}`}>
+                        {taskListStatusLabel(task, language)}
+                      </span>
+                    </td>
+                    <td data-label={copy.progress}>
+                      <div className="observation-list-progress">
+                        <progress value={task.progress} max="100" aria-label={`${copy.progress}: ${task.progress}%`} />
+                        <span>{task.progress}% · {progressLabel} {copy.scripts}</span>
+                      </div>
+                    </td>
+                    <td data-label={copy.time}>{taskListTime(task, language)}</td>
+                    <td data-label={copy.action}>
+                      <button
+                        type="button"
+                        className="observation-task-view"
+                        aria-pressed={selected}
+                        onClick={() => onSelect(task)}
+                      >
+                        {selected ? copy.viewing : copy.view}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="observation-task-list-empty">
+          <strong>{copy.emptyTitle}</strong>
+          <p>{copy.emptyBody}</p>
+          <Link to="/tasks">{copy.schedule} →</Link>
+        </div>
+      )}
+    </section>
+  );
 }
 
 function ObservationMetric({
@@ -127,13 +514,14 @@ function ObservationMetric({
   );
 }
 
-export function Observation({
+function ObservationDetail({
   language,
   selectedSut,
   activeTask,
   runtimeConfig,
-  onTaskStatusChange
-}: PageProps) {
+  onTaskStatusChange,
+  taskList
+}: ObservationDetailProps) {
   const t = getCopy(language);
   const [cancellationRequestedTaskId, setCancellationRequestedTaskId] = useState<string>();
   const [caseStatusOpen, setCaseStatusOpen] = useState(false);
@@ -342,6 +730,8 @@ export function Observation({
           </div>
         )}
       />
+
+      {taskList}
 
       <section className="observation-metrics" aria-label={t.observationMetrics}>
         <ObservationMetric
@@ -562,5 +952,180 @@ export function Observation({
         </div>
       ) : null}
     </div>
+  );
+}
+
+export function Observation({
+  language,
+  selectedSut,
+  activeTask,
+  runtimeConfig,
+  launchedTask,
+  onTaskStatusChange
+}: PageProps) {
+  const t = getCopy(language);
+  const sources = useMemo(
+    () => configuredBackendSources(runtimeConfig),
+    [runtimeConfig]
+  );
+  const launchedTaskIdentity = launchedTask
+    ? taskIdentity(launchedTask.apiBaseUrl, launchedTask.taskId)
+    : undefined;
+  const initialActiveTaskIdentity = activeTask
+    ? taskIdentity(sourceUrlForTask(activeTask, selectedSut, runtimeConfig), activeTask.task_id)
+    : undefined;
+  const [selectedTask, setSelectedTask] = useState<NormalizedTaskStatus | null>(() => (
+    activeTask
+      && !activeTask.isTerminal
+      && (runtimeConfig.enableMockFallback || initialActiveTaskIdentity === launchedTaskIdentity)
+      ? activeTask
+      : null
+  ));
+  const initialSelectionResolvedRef = useRef(false);
+  const incomingTaskIdentity = activeTask
+    ? taskIdentity(sourceUrlForTask(activeTask, selectedSut, runtimeConfig), activeTask.task_id)
+    : undefined;
+  const lastIncomingTaskIdentityRef = useRef(incomingTaskIdentity);
+  const discoveryQuery = useQuery<TaskDiscoveryResult>({
+    queryKey: ['active-task-list', sources.map((source) => source.apiBaseUrl).join('|')],
+    queryFn: async () => {
+      const results = await Promise.allSettled(sources.map(async (source) => (
+        listTasks(
+          { apiBaseUrl: source.apiBaseUrl },
+          { statuses: ['queued', 'pending', 'running'], limit: 100, offset: 0 }
+        )
+      )));
+      const tasks: TaskListTask[] = [];
+      const failures: TaskDiscoveryFailure[] = [];
+      let successfulSourceCount = 0;
+
+      results.forEach((result, index) => {
+        const source = sources[index];
+        if (!source) {
+          return;
+        }
+        if (result.status === 'fulfilled') {
+          successfulSourceCount += 1;
+          tasks.push(...result.value.tasks);
+        } else {
+          failures.push({
+            apiBaseUrl: source.apiBaseUrl,
+            message: result.reason instanceof Error ? result.reason.message : String(result.reason)
+          });
+        }
+      });
+
+      return {
+        tasks: mergeTaskSummaries(tasks),
+        failures,
+        sourceCount: sources.length,
+        successfulSourceCount
+      };
+    },
+    refetchInterval: 5000,
+    refetchIntervalInBackground: true,
+    retry: false
+  });
+  const discoveredTasks = discoveryQuery.data?.tasks ?? [];
+  const visibleTasks = useMemo(() => {
+    const sessionTask = activeTask && !activeTask.isTerminal
+      ? summaryForSessionTask(activeTask, selectedSut, runtimeConfig)
+      : undefined;
+    return mergeTaskSummaries(sessionTask
+      ? [...discoveredTasks, sessionTask]
+      : discoveredTasks);
+  }, [activeTask, discoveredTasks, runtimeConfig, selectedSut]);
+
+  useEffect(() => {
+    if (!activeTask || !incomingTaskIdentity) {
+      return;
+    }
+    const previousIncomingIdentity = lastIncomingTaskIdentityRef.current;
+    lastIncomingTaskIdentityRef.current = incomingTaskIdentity;
+    setSelectedTask((current) => {
+      const currentIdentity = current
+        ? taskIdentity(sourceUrlForTask(current, selectedSut, runtimeConfig), current.task_id)
+        : undefined;
+      if (activeTask.isTerminal) {
+        return currentIdentity === incomingTaskIdentity ? activeTask : current;
+      }
+      const isNewlyLaunchedTask = previousIncomingIdentity !== incomingTaskIdentity;
+      const isLaunchNavigation = incomingTaskIdentity === launchedTaskIdentity;
+      return currentIdentity === incomingTaskIdentity
+        || isNewlyLaunchedTask
+        || (!current && (isLaunchNavigation || runtimeConfig.enableMockFallback))
+        ? activeTask
+        : current;
+    });
+  }, [activeTask, incomingTaskIdentity, launchedTaskIdentity, runtimeConfig, selectedSut]);
+
+  useEffect(() => {
+    if (discoveryQuery.isPending || initialSelectionResolvedRef.current) {
+      return;
+    }
+    initialSelectionResolvedRef.current = true;
+    const newestTask = visibleTasks[0];
+    if (!newestTask) {
+      return;
+    }
+    setSelectedTask((current) => {
+      return current ?? detailSeedForSummary(newestTask, sources, selectedSut);
+    });
+  }, [discoveryQuery.isPending, runtimeConfig, selectedSut, sources, visibleTasks]);
+
+  const handleSelect = useCallback((summary: TaskListTask) => {
+    setSelectedTask(detailSeedForSummary(summary, sources, selectedSut));
+  }, [selectedSut, sources]);
+  const handleTaskStatusChange = useCallback((task: NormalizedTaskStatus) => {
+    const nextIdentity = taskIdentity(sourceUrlForTask(task, selectedSut, runtimeConfig), task.task_id);
+    setSelectedTask((current) => {
+      if (!current) {
+        return task;
+      }
+      const currentIdentity = taskIdentity(
+        sourceUrlForTask(current, selectedSut, runtimeConfig),
+        current.task_id
+      );
+      return currentIdentity === nextIdentity
+        ? {
+            ...task,
+            version: task.version ?? current.version,
+            sourceSut: task.sourceSut ?? current.sourceSut
+          }
+        : current;
+    });
+    onTaskStatusChange(task);
+  }, [onTaskStatusChange, runtimeConfig, selectedSut]);
+  const taskList = (
+    <ExecutionTasksCard
+      language={language}
+      tasks={visibleTasks}
+      selectedTask={selectedTask}
+      discovery={discoveryQuery.data}
+      isLoading={discoveryQuery.isPending}
+      isRefreshing={discoveryQuery.isFetching && !discoveryQuery.isPending}
+      onSelect={handleSelect}
+      onRetry={() => { void discoveryQuery.refetch(); }}
+    />
+  );
+
+  if (!selectedTask) {
+    return (
+      <div className="page-stack observation-page">
+        <PageHeader title={t.observation} subtitle={t.observationSubtitle} />
+        {taskList}
+      </div>
+    );
+  }
+
+  return (
+    <ObservationDetail
+      language={language}
+      selectedSut={selectedSut}
+      activeTask={selectedTask}
+      runtimeConfig={runtimeConfig}
+      onTaskStatusChange={handleTaskStatusChange}
+      taskList={taskList}
+    />
   );
 }

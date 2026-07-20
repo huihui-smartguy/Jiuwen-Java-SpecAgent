@@ -147,7 +147,7 @@
 .overview-l0-card {
   display: grid;
   height: auto;
-  min-height: 210px;
+  min-height: 252px;
   grid-template-columns: 300px 1px minmax(0, 1fr);
   gap: 24px;
   align-items: stretch;
@@ -222,25 +222,42 @@
 }
 
 .overview-quality-ring {
-  position: relative;
   display: grid;
   flex: 0 0 auto;
+  grid-template-rows: auto 20px;
+  justify-items: center;
+  gap: 4px;
+}
+
+.overview-quality-ring.is-large {
+  width: 124px;
+  height: 148px;
+}
+
+.overview-quality-ring.is-compact {
+  width: 116px;
+  height: 140px;
+}
+
+.overview-quality-ring__visual {
+  position: relative;
+  display: grid;
   place-items: center;
 }
 
-.overview-quality-ring.is-large,
+.overview-quality-ring.is-large .overview-quality-ring__visual,
 .overview-quality-ring.is-large svg {
-  width: 106px;
-  height: 106px;
+  width: 124px;
+  height: 124px;
 }
 
-.overview-quality-ring.is-compact,
+.overview-quality-ring.is-compact .overview-quality-ring__visual,
 .overview-quality-ring.is-compact svg {
-  width: 106px;
-  height: 106px;
+  width: 116px;
+  height: 116px;
 }
 
-.overview-quality-ring svg {
+.overview-quality-ring__visual svg {
   position: absolute;
   inset: 0;
   overflow: visible;
@@ -261,25 +278,29 @@
   stroke-linecap: butt;
 }
 
-.overview-quality-ring__copy {
+.overview-quality-ring__visual strong {
   position: relative;
-  display: grid;
-  justify-items: center;
-  gap: 0;
-}
-
-.overview-quality-ring__copy strong {
   color: var(--color-text-primary);
-  font-size: 27px;
+  font-size: 28px;
   font-weight: 700;
-  letter-spacing: -0.045em;
+  letter-spacing: 0;
   line-height: 34px;
+  white-space: nowrap;
 }
 
-.overview-quality-ring__copy span {
+.overview-quality-ring.is-compact .overview-quality-ring__visual strong {
+  font-size: 27px;
+}
+
+.overview-quality-ring__caption {
+  width: 100%;
   color: var(--color-text-secondary);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+  text-align: center;
+  white-space: normal;
 }
 
 .overview-l0-score-status,
@@ -304,8 +325,8 @@
 .overview-l0-score-status > span:last-child,
 .dimension-assessment__rating > span:last-child {
   color: var(--color-text-secondary);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: 13px;
+  line-height: 20px;
   overflow-wrap: anywhere;
   white-space: normal;
 }
@@ -689,7 +710,7 @@
   display: flex;
   min-width: 0;
   height: auto;
-  min-height: 112px;
+  min-height: 140px;
   align-items: center;
   gap: 20px;
 }
@@ -1016,8 +1037,8 @@
 
   .overview-l0-card {
     height: auto;
-    min-height: 210px;
-    grid-template-columns: 260px 1px minmax(0, 1fr);
+    min-height: 252px;
+    grid-template-columns: 286px 1px minmax(0, 1fr);
     gap: 18px;
     padding-inline: 20px;
   }
@@ -1044,7 +1065,7 @@
   }
 
   .overview-l0-score-zone {
-    min-height: 162px;
+    min-height: 204px;
   }
 
   .dimension-summary-grid,
@@ -1167,17 +1188,6 @@
 }
 
 @media (max-width: 440px) {
-  .overview-l0-score-summary,
-  .dimension-assessment {
-    align-items: flex-start;
-    flex-direction: column;
-    height: auto;
-  }
-
-  .overview-l0-score-zone {
-    min-height: 300px;
-  }
-
   .overview-l1-card__heading p,
   .overview-hierarchy-heading p,
   .dimension-summary-zone__eyebrow {
@@ -1193,5 +1203,18 @@
     flex-direction: column;
     gap: 3px;
     padding-block: 8px;
+  }
+}
+
+@media (max-width: 359px) {
+  .overview-l0-score-summary,
+  .dimension-assessment {
+    align-items: flex-start;
+    flex-direction: column;
+    height: auto;
+  }
+
+  .overview-l0-score-zone {
+    min-height: 326px;
   }
 }

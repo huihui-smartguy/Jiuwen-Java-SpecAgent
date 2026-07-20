@@ -3,11 +3,45 @@ import type {
   ReportResultRow,
   ReportRisk,
   StatisticsFilters,
+  TaskListQuery,
+  TaskListTask,
   TaskScriptActualStatus,
   TaskScriptStatusResponse
 } from './types';
 
 describe('backend contract types', () => {
+  test('models backend-wide task discovery with explicit source identity and bounded statuses', () => {
+    const query: TaskListQuery = {
+      statuses: ['queued', 'pending', 'running'],
+      limit: 100,
+      offset: 0
+    };
+    const task: TaskListTask = {
+      task_id: 'task-contract-list',
+      product: '合一版本',
+      scene: 'API',
+      feature: '工作流管理',
+      execute_mode: 'pytest',
+      version: 'release1',
+      status: 'running',
+      progress: 40,
+      total_scripts: 10,
+      executed_scripts: 4,
+      failed_scripts: 0,
+      queue_position: -1,
+      created_at: '2026-07-20T09:00:00',
+      started_at: '2026-07-20T09:00:02',
+      completed_at: null,
+      sourceApiBaseUrl: '/api'
+    };
+    // @ts-expect-error the task-list status is a documented backend state
+    const invalidQuery: TaskListQuery = { statuses: ['polling_error'] };
+
+    expect(query.statuses).toEqual(['queued', 'pending', 'running']);
+    expect(task.sourceApiBaseUrl).toBe('/api');
+    expect(invalidQuery.statuses).toEqual(['polling_error']);
+  });
+
   test('accepts only documented statistics filter combinations', () => {
     const all: StatisticsFilters = {};
     const product: StatisticsFilters = { product: '合一版本' };
