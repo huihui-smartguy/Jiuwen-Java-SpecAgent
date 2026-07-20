@@ -528,9 +528,13 @@
   width: 232px;
   height: auto;
   min-height: 48px;
-  grid-template-columns: auto minmax(0, 1fr) 16px;
+  grid-template-areas:
+    'label icon'
+    'value icon';
+  grid-template-columns: minmax(0, 1fr) 16px;
   align-items: center;
-  gap: 8px;
+  column-gap: 8px;
+  row-gap: 2px;
   padding: 10px 12px;
   border: 1px solid var(--color-outline);
   border-radius: 16px;
@@ -540,23 +544,26 @@
 }
 
 .dimension-selector__trigger > span {
+  grid-area: label;
   color: var(--color-text-secondary);
   font-size: 13px;
   font-weight: 400;
   line-height: 20px;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
   white-space: normal;
 }
 
 .dimension-selector__trigger > strong {
+  grid-area: value;
   font-size: 14px;
   font-weight: 500;
   line-height: 22px;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
   white-space: normal;
 }
 
 .dimension-selector__trigger > svg {
+  grid-area: icon;
   width: 16px;
   height: 16px;
   transition: transform var(--transition-fast);
