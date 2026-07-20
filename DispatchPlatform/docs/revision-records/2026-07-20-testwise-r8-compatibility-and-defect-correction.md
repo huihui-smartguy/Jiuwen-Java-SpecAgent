@@ -51,8 +51,27 @@ The new task-listing contract exposes active-task summaries only. Task detail, l
 
 ## Publication, deployment, and rollback
 
-Status: publication and deployment pending.
+Status: atomically deployed and verified at `2026-07-20T17:38:15+08:00`.
 
-This section will be updated with immutable frontend and backend commit IDs, release paths, checksums, rollback targets, and live smoke-test evidence after the backend-first production rollout.
+- Backend publication: `93db66e8259729074513dbbeb37713fb7e943021` on GitCode branch `feature/autotestflow/iteration`.
+- Frontend implementation publication: `6329528dc641bf2abb1d6cb5f6563e47c222b89d` on GitHub branch `develop`.
+- Frontend typography follow-up: `126f6f75f8018cc76ffc60605e2ebaa37b676362` on GitHub branch `develop`. The dimension selector now places its caption and selected value on separate rows; `Basic Functionality` remains on one line at every approved width.
+- Backend release source: `/data1/testrun/releases/20260720-171120-93db66e/source`.
+- Backend pre-R8 rollback snapshot: `/data1/testrun/backups/20260720-171120-pre-r8-93db66e`. Code rollback restores only the recorded source files and restarts port `3000`; it does not overwrite newer task state.
+- Backend archive SHA-256: `e5f485acd03724b87a76fbd83bfa3759fc1536c2480e97c1890a6d723360cb02`.
+- Deployed `main.py` SHA-256: `0097729f278d09d828752db00c5f935678959c627ef248e7ada3776738686f39`.
+- Deployed `task_manager.py` SHA-256: `4084b3ccf9f763d71902fdf7cc94104a81400497bdf3eb418fedb909af3d9f0c`.
+- Pre-restart task-state SHA-256: `a6e0dd7c859c5bc94f11f0dc7c28179c11f51b727407b3d0da1dd7adbb657054`. The snapshot contained 60 records: 27 failed, 25 completed, seven pending, and one running. The former process had one sleeping thread and no children, so the eight nonterminal records were orphaned; the R8 lazy manager initialization reconciled them to failed. The live file then contained 35 failed and 25 completed records.
+- Backend smoke verification: direct and `/testwise/api/` task listing returned `200`; an unknown query returned `400` with `INVALID_QUERY`; an existing task's detail and logs returned `200`; cancellation of that terminal task retained the prior `400` contract; task versions, report service, public shell, and Nginx validation remained healthy.
+- Final frontend artifact SHA-256: `e93d6f34fbec29eb282572f138abf7340f31f535686d0f52f2918b94d786d679`.
+- Frontend release path: `/data1/testwise/releases/20260720-173815-126f6f7`.
+- Immediate frontend rollback target: `/data1/testwise/releases/20260720-171812-6329528`; pre-R8 rollback target: `/data1/testwise/releases/20260720-101953-0ca75cc`.
+- Deployed and publicly re-downloaded payload hashes: `index.html` `1fffc0007747e63f07cc34dde0f2d603db31ef10978b2d2046f1f07db5d7853e`; CSS `ad49c2b1d317b3aecabc536a135091bb84c1a04c7da74ee551ff4641ab1740f7`; JavaScript `379fb34208931bb07915a0163fe171f6308e9543e2aa6c0ca5b60b7844f238d5`.
+- The installed runtime file remained byte-identical before both frontend switches and after the final switch: SHA-256 `216a056145da45da17ec2e74b0ad64cf3fe8f8a02d741a8f5ab81b1262901203`. Repository demo runtime data was never installed.
+- Nginx validation passed before and after both atomic symlink switches; no configuration change or reload was required. The seven direct routes, final assets, runtime JSON, task-list proxy, and report proxy returned `200` through the public gateway.
+- Live browser verification on the first R8 frontend switch loaded Chinese and English Overview, Tasks, Observation, Settings, Results, Scripts, and Knowledge without runtime exceptions, failed requests, route redirects, or horizontal overflow. Both rings retained `124px`/`116px` geometry, `28px`/`27px` scores with normal tracking, and captions outside the arcs.
+- The final live browser pass repeated these checks against `126f6f7`. The English dimension selector rendered `Basic Functionality` on one line, and its label/value rows remained spacious at all five approved widths.
+- Live Settings verification changed the preferred report format to Markdown and enabled reduced motion, saved successfully, applied the root motion class, and retained both values after a full route reload. Unsupported formats and obsolete controls were absent. A persisted report then presented Download Markdown as its primary action while Download HTML remained available; both URLs used the public `/testwise/api/reports/` route.
+- Controlled live execution: `task-3731ffc5`, one read-only `test_tc_040_ak006_list_api_keys` script, version `release1`. The Tasks launch selected the new task on Observation; the active row, pinned detail, events, and logs rendered. The backend runner reached `failed` before the cancellation request arrived, so DELETE correctly retained the terminal-task `400` contract. On refresh the row left the active table while its completed detail remained visible.
 
-No credential, token, raw sensitive response, password, or private backend filesystem path is recorded in this revision record.
+No credential, token, raw sensitive response, password, task log path, script path, or test-data path is recorded in this revision record.
