@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { resolveRuntimeConfig } from '../config/runtime';
-import type { Script, SutTarget, TaskCreateResponse } from '../types';
+import type { Feature, Script, SutTarget, TaskCreateResponse } from '../types';
 import { Tasks } from './Tasks';
 
 const liveRuntimeConfig = resolveRuntimeConfig({ defaultLanguage: 'zh', enableMockFallback: false });
@@ -50,11 +50,14 @@ function json(body: unknown) {
 }
 
 function mockTaskApi(options: {
+  features?: Feature[];
   scripts?: Script[];
+  scriptsByFeature?: Record<string, Script[]>;
   taskId?: string;
   triggerType?: 'feature' | 'level' | 'scripts' | 'scene';
 } = {}) {
   const availableScripts = options.scripts ?? scripts;
+  const availableFeatures = options.features ?? [{ id: 'save', name: 'Save API', type: 'L1' }];
   return vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
     const url = new URL(String(input), 'http://local.test');
     if (url.pathname.endsWith('/versions')) {
@@ -84,19 +87,23 @@ function mockTaskApi(options: {
         success: true,
         product: selectedSut.product,
         scene: selectedSut.scene,
-        features: [{ id: 'save', name: 'Save API', type: 'L1' }],
-        total: 1
+        features: availableFeatures,
+        total: availableFeatures.length
       });
     }
     if (url.pathname.endsWith('/scripts')) {
+      const feature = url.searchParams.get('feature');
+      const scopedScripts = feature && options.scriptsByFeature
+        ? options.scriptsByFeature[feature] ?? []
+        : availableScripts;
       return json({
         success: true,
-        scripts: availableScripts,
-        total: availableScripts.length,
+        scripts: scopedScripts,
+        total: scopedScripts.length,
         filters: {
           product: url.searchParams.get('product'),
           scene: url.searchParams.get('scene'),
-          feature: url.searchParams.get('feature'),
+          feature,
           level: url.searchParams.get('level')
         }
       });
@@ -200,7 +207,7 @@ describe('approved Tasks composition', () => {
       'Scene',
     ]);
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Feature' })).toHaveValue('Save API'));
-    await waitFor(() => expect(screen.getByLabelText('测试批次')).toHaveValue('release1'));
+    await waitFor(() => expect(screen.getByLabelText('执行版本')).toHaveValue('release1'));
 
     expect(screen.getByRole('heading', { name: '脚本快照 · READ-ONLY SELECTION' })).toBeInTheDocument();
     expect(screen.getByRole('searchbox', { name: '搜索脚本' })).toBeInTheDocument();
@@ -265,6 +272,73 @@ describe('approved Tasks composition', () => {
     ))).toHaveLength(scriptRequestsBeforeSearch);
   });
 
+  test('aggregates exact feature scopes for the entire scene and stably deduplicates scripts', async () => {
+    const user = userEvent.setup();
+    const shared: Script = { ...scripts[0], id: 'shared-script', name: 'shared_from_feature_a' };
+    const featureAOnly: Script = {
+      ...scripts[0],
+      id: 'feature-a-only',
+      name: 'feature_a_only',
+      path: 'api/a.py'
+    };
+    const duplicateFromB: Script = {
+      ...shared,
+      name: 'duplicate_from_feature_b',
+      feature: 'Feature B'
+    };
+    const featureBOnly: Script = {
+      ...scripts[0],
+      id: 'feature-b-only',
+      name: 'feature_b_only',
+      feature: 'Feature B',
+      path: 'api/b.py'
+    };
+    const fetchSpy = mockTaskApi({
+      features: [
+        { id: 'feature-a', name: 'Feature A', type: 'L1' },
+        { id: 'feature-b', name: 'Feature B', type: 'L2' }
+      ],
+      scripts: [shared, featureAOnly, featureBOnly],
+      scriptsByFeature: {
+        'Feature A': [shared, featureAOnly],
+        'Feature B': [duplicateFromB, featureBOnly]
+      }
+    });
+    renderTasks();
+
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Feature' })).toHaveValue('Feature A'));
+    await user.click(screen.getByRole('radio', { name: '整个场景' }));
+
+    const table = screen.getByRole('table', { name: '脚本快照' });
+    await waitFor(() => expect(within(table).getAllByRole('row')).toHaveLength(4));
+    expect(within(table).getByText('shared_from_feature_a')).toBeInTheDocument();
+    expect(within(table).getByText('feature_a_only')).toBeInTheDocument();
+    expect(within(table).getByText('feature_b_only')).toBeInTheDocument();
+    expect(within(table).queryByText('duplicate_from_feature_b')).not.toBeInTheDocument();
+    await waitFor(() => expect(fetchSpy.mock.calls.filter(([input]) => (
+      new URL(String(input), 'http://local.test').pathname.endsWith('/scripts')
+    )).map(([input]) => (
+      new URL(String(input), 'http://local.test').searchParams.get('feature')
+    ))).toEqual(['Feature A', 'Feature A', 'Feature B']));
+  });
+
+  test('shows an empty snapshot and never requests unfiltered scripts when discovery returns no features', async () => {
+    const user = userEvent.setup();
+    const fetchSpy = mockTaskApi({ features: [] });
+    renderTasks();
+
+    await waitFor(() => expect(fetchSpy.mock.calls.some(([input]) => (
+      new URL(String(input), 'http://local.test').pathname.endsWith('/features')
+    ))).toBe(true));
+    await user.click(screen.getByRole('radio', { name: '整个场景' }));
+
+    const table = screen.getByRole('table', { name: '脚本快照' });
+    expect(within(table).getByText('没有匹配的脚本')).toBeInTheDocument();
+    expect(fetchSpy.mock.calls.some(([input]) => (
+      new URL(String(input), 'http://local.test').pathname.endsWith('/scripts')
+    ))).toBe(false);
+  });
+
   test('shows mock-only credential and estimate values only when fallback mode is enabled', async () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('offline'));
     renderTasks({ runtimeConfig: mockRuntimeConfig });
@@ -293,7 +367,7 @@ describe('approved Tasks composition', () => {
       /@media \(max-width: 680px\)[\s\S]*?\.tasks-segmented label > span\s*\{[^}]*height:\s*44px;/
     );
     expect(tasksStyles).toMatch(
-      /@media \(max-width: 680px\)[\s\S]*?\.tasks-table-scroll tbody tr\s*\{[^}]*height:\s*44px;/
+      /@media \(max-width: 680px\)[\s\S]*?\.tasks-table-scroll tbody tr\s*\{[^}]*height:\s*68px;/
     );
   });
 
@@ -404,24 +478,24 @@ describe('approved Tasks composition', () => {
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Feature' })).toHaveValue('Endpoint B'));
   });
 
-  test('encodes the exact approved desktop Tasks geometry', () => {
+  test('encodes the approved spacious desktop Tasks geometry', () => {
     expect(tasksStyles).toMatch(/\.tasks-page \.page-header\s*\{[^}]*height:\s*118px;[^}]*min-height:\s*118px;[^}]*margin-bottom:\s*24px;/s);
     expect(tasksStyles).toMatch(/\.tasks-create-task\s*\{[^}]*width:\s*142px;[^}]*height:\s*52px;/s);
     expect(tasksStyles).toMatch(/\.tasks-layout\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*856px\) minmax\(0,\s*416px\);[^}]*gap:\s*24px;/s);
-    expect(tasksStyles).toMatch(/\.tasks-left-column\s*\{[^}]*grid-template-rows:\s*340px 356px;[^}]*gap:\s*24px;/s);
-    expect(tasksStyles).toMatch(/\.tasks-right-rail\s*\{[^}]*grid-template-rows:\s*330px 366px;[^}]*gap:\s*24px;/s);
-    expect(tasksStyles).toMatch(/\.tasks-config-card\s*\{[^}]*height:\s*340px;[^}]*padding:\s*24px 28px;/s);
-    expect(tasksStyles).toMatch(/\.tasks-steps\s*\{[^}]*height:\s*52px;[^}]*grid-template-columns:\s*repeat\(3,\s*260px\);[^}]*gap:\s*10px;/s);
-    expect(tasksStyles).toMatch(/\.tasks-object-summary\s*\{[^}]*height:\s*52px;[^}]*border:\s*0;[^}]*background:\s*transparent;/s);
-    expect(tasksStyles).toMatch(/\.tasks-segmented\s*\{[^}]*width:\s*330px;[^}]*height:\s*44px;[^}]*border-radius:\s*14px;/s);
-    expect(tasksStyles).toMatch(/\.tasks-fields\s*\{[^}]*height:\s*48px;[^}]*gap:\s*12px;/s);
-    expect(tasksStyles).toMatch(/\.tasks-snapshot-card\s*\{[^}]*height:\s*356px;/s);
-    expect(tasksStyles).toMatch(/\.tasks-script-search\s*\{[^}]*width:\s*330px;[^}]*height:\s*44px;/s);
+    expect(tasksStyles).toMatch(/\.tasks-left-column\s*\{[^}]*grid-template-rows:\s*auto minmax\(376px,\s*auto\);[^}]*gap:\s*24px;/s);
+    expect(tasksStyles).toMatch(/\.tasks-right-rail\s*\{[^}]*grid-template-rows:\s*minmax\(348px,\s*auto\) minmax\(382px,\s*auto\);[^}]*gap:\s*24px;/s);
+    expect(tasksStyles).toMatch(/\.tasks-config-card\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*388px;[^}]*padding:\s*24px 28px;/s);
+    expect(tasksStyles).toMatch(/\.tasks-steps\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*64px;[^}]*grid-template-columns:\s*repeat\(3,\s*260px\);[^}]*gap:\s*10px;/s);
+    expect(tasksStyles).toMatch(/\.tasks-object-summary\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*64px;[^}]*border:\s*0;[^}]*background:\s*transparent;/s);
+    expect(tasksStyles).toMatch(/\.tasks-segmented\s*\{[^}]*width:\s*360px;[^}]*height:\s*52px;[^}]*border-radius:\s*14px;/s);
+    expect(tasksStyles).toMatch(/\.tasks-fields\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*52px;[^}]*gap:\s*12px;/s);
+    expect(tasksStyles).toMatch(/\.tasks-snapshot-card\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*376px;/s);
+    expect(tasksStyles).toMatch(/\.tasks-script-search\s*\{[^}]*width:\s*330px;[^}]*height:\s*48px;[^}]*min-height:\s*48px;/s);
     expect(tasksStyles).toMatch(/\.tasks-table-scroll th\s*\{[^}]*height:\s*44px;/s);
     expect(tasksStyles).toMatch(/\.tasks-table-scroll td\s*\{[^}]*height:\s*68px;/s);
-    expect(tasksStyles).toMatch(/\.tasks-launch-card\s*\{[^}]*height:\s*330px;/s);
-    expect(tasksStyles).toMatch(/\.tasks-guardrail-card\s*\{[^}]*height:\s*366px;/s);
-    expect(tasksStyles).toMatch(/\.tasks-guardrail-list > div\s*\{[^}]*height:\s*80px;/s);
+    expect(tasksStyles).toMatch(/\.tasks-launch-card\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*348px;/s);
+    expect(tasksStyles).toMatch(/\.tasks-guardrail-card\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*382px;/s);
+    expect(tasksStyles).toMatch(/\.tasks-guardrail-list > div\s*\{[^}]*min-height:\s*80px;/s);
   });
 });
 
@@ -504,7 +578,7 @@ describe('task creation contracts', () => {
     renderTasks({ onTaskCreated });
 
     await user.click(screen.getByRole('radio', { name: '整个场景' }));
-    await user.selectOptions(await screen.findByRole('combobox', { name: '测试批次' }), 'release2');
+    await user.selectOptions(await screen.findByRole('combobox', { name: '执行版本' }), 'release2');
     await waitFor(() => expect(fetchSpy.mock.calls.some(([input]) => {
       const url = new URL(String(input), 'http://local.test');
       return url.pathname.endsWith('/scripts') && url.searchParams.has('feature');

@@ -171,16 +171,16 @@ describe('Observation', () => {
     expect(page?.firstElementChild).toBe(header);
     expect(header?.nextElementSibling).toBe(metrics);
     expect(observeCss).toMatch(
-      /\.observation-page\s*>\s*\.page-header\s*\{[^}]*height:\s*100px;[^}]*margin-bottom:\s*24px;/
+      /\.observation-page\s*>\s*\.page-header\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*112px;[^}]*margin-bottom:\s*24px;/
     );
     expect(observeCss).toMatch(
-      /\.observation-metrics\s*\{[^}]*height:\s*128px;[^}]*gap:\s*16px;[^}]*margin-bottom:\s*24px;/
+      /\.observation-metrics\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*144px;[^}]*gap:\s*16px;[^}]*margin-bottom:\s*24px;/
     );
     expect(observeCss).toMatch(
-      /\.observation-path-card\s*\{[^}]*height:\s*158px;[^}]*margin-bottom:\s*24px;/
+      /\.observation-path-card\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*192px;[^}]*margin-bottom:\s*24px;/
     );
     expect(observeCss).toMatch(
-      /\.observation-lower-grid\s*\{[^}]*height:\s*360px;[^}]*grid-template-columns:\s*856px 416px;[^}]*gap:\s*24px;/
+      /\.observation-lower-grid\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*400px;[^}]*grid-template-columns:\s*856px 416px;[^}]*gap:\s*24px;/
     );
     await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
   });
@@ -374,7 +374,98 @@ describe('Observation', () => {
     expect(screen.getByText(/cancellation requested/i)).toHaveAttribute('role', 'status');
     expect(screen.getByRole('button', { name: /cancel task/i })).toBeDisabled();
     expect(screen.getAllByText(/running/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/current subprocess finishes first/i)).toBeInTheDocument();
   });
+
+  test('confirms cancellation only after the authoritative task endpoint returns cancelled', async () => {
+    const runningEnvelope = {
+      success: true,
+      task: {
+        id: activeTask.task_id,
+        status: 'running',
+        progress: 40,
+        total_scripts: 5,
+        executed_scripts: 2,
+        failed_scripts: 0,
+        queue_position: -1
+      }
+    };
+    const cancelledEnvelope = {
+      success: true,
+      task: {
+        ...runningEnvelope.task,
+        status: 'cancelled',
+        progress: 40,
+        completed_at: '2026-07-20T10:00:00'
+      }
+    };
+    mockTaskApi(
+      [runningEnvelope, cancelledEnvelope],
+      [{
+        success: true,
+        task_id: activeTask.task_id,
+        previous_status: 'running',
+        message: 'Cancellation signal sent'
+      }]
+    );
+
+    renderObservation();
+    await userEvent.click(await screen.findByRole('button', { name: /cancel task/i }));
+
+    expect(await screen.findByText('Cancellation confirmed by the executor.')).toHaveAttribute('role', 'status');
+    expect(screen.queryByText(/cancellation requested\. waiting/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /cancel task/i })).toBeDisabled();
+    expect(screen.getAllByText('Cancelled').length).toBeGreaterThan(0);
+  });
+
+  test.each([
+    ['completed', 'Success'],
+    ['failed', 'Failed']
+  ] as const)(
+    'clears a pending cancellation acknowledgement when the task instead reaches %s',
+    async (terminalStatus, expectedLabel) => {
+      const runningEnvelope = {
+        success: true,
+        task: {
+          id: activeTask.task_id,
+          status: 'running',
+          progress: 40,
+          total_scripts: 5,
+          executed_scripts: 2,
+          failed_scripts: 0,
+          queue_position: -1
+        }
+      };
+      const terminalEnvelope = {
+        success: true,
+        task: {
+          ...runningEnvelope.task,
+          status: terminalStatus,
+          progress: 100,
+          executed_scripts: 5,
+          failed_scripts: terminalStatus === 'failed' ? 1 : 0,
+          completed_at: '2026-07-20T10:00:00'
+        }
+      };
+      mockTaskApi(
+        [runningEnvelope, terminalEnvelope],
+        [{
+          success: true,
+          task_id: activeTask.task_id,
+          previous_status: 'running',
+          message: 'Cancellation signal sent'
+        }]
+      );
+
+      renderObservation();
+      await userEvent.click(await screen.findByRole('button', { name: /cancel task/i }));
+
+      await waitFor(() => expect(screen.getAllByText(expectedLabel).length).toBeGreaterThan(0));
+      expect(screen.queryByText(/cancellation requested\. waiting/i)).not.toBeInTheDocument();
+      expect(screen.queryByText('Cancellation confirmed by the executor.')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /cancel task/i })).toBeDisabled();
+    }
+  );
 
   test('scopes cancellation acknowledgement to the task that requested it', async () => {
     const earlierTask = { ...activeTask, task_id: 'task_earlier_session' };
@@ -462,13 +553,22 @@ describe('Observation', () => {
     const pendingFallback = new Promise<Response>((resolve) => {
       resolveFallback = resolve;
     });
+    const latestLiveSnapshot = {
+      ...activeTask,
+      progress: {
+        ...activeTask.progress,
+        total_commands: 7,
+        completed: 4,
+        failed: 1
+      }
+    };
     vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
       if (String(input).endsWith('/logs')) {
         return mockJson({ success: true, total: 0, logs: [] });
       }
       statusRequestCount += 1;
       return statusRequestCount === 1
-        ? mockJson(activeTask)
+        ? mockJson(latestLiveSnapshot)
         : pendingFallback;
     });
 
@@ -476,6 +576,7 @@ describe('Observation', () => {
     const control = screen.getByRole('region', { name: 'Task control' });
     const connection = within(control).getByRole('status');
     await waitFor(() => expect(connection).toHaveTextContent('Connected'));
+    expect(screen.getByText('4 / 7')).toBeInTheDocument();
 
     const refetch = client.refetchQueries({ queryKey: ['task-status'] });
     await waitFor(() => expect(connection).toHaveTextContent('Refreshing'));
@@ -484,6 +585,46 @@ describe('Observation', () => {
 
     await waitFor(() => expect(connection).toHaveTextContent('Demo data'));
     expect(connection).not.toHaveTextContent('Connected');
+    expect(screen.getByText('4 / 7')).toBeInTheDocument();
+  });
+
+  test('retains the last valid task snapshot when a later status refresh fails', async () => {
+    let statusRequestCount = 0;
+    const liveSnapshot = {
+      success: true,
+      task: {
+        id: activeTask.task_id,
+        status: 'running',
+        progress: 57,
+        total_scripts: 7,
+        executed_scripts: 4,
+        failed_scripts: 1,
+        queue_position: -1,
+        version: 'release2'
+      }
+    };
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      if (String(input).endsWith('/logs')) {
+        return mockJson({ success: true, total: 0, logs: [] });
+      }
+      statusRequestCount += 1;
+      return statusRequestCount === 1
+        ? mockJson(liveSnapshot)
+        : mockJson({ success: false, message: 'Status unavailable' }, false, 503);
+    });
+
+    const { client } = renderObservation({ runtimeOverrides: { enableMockFallback: false } });
+    expect(await screen.findByText('4 / 7')).toBeInTheDocument();
+    expect(screen.getByText('release2')).toBeInTheDocument();
+
+    await act(async () => {
+      await client.refetchQueries({ queryKey: ['task-status'] });
+    });
+
+    expect(await screen.findByText('Status unavailable')).toBeInTheDocument();
+    expect(screen.getByText('4 / 7')).toBeInTheDocument();
+    expect(screen.getByText('release2')).toBeInTheDocument();
+    expect(screen.getByText(/most recent task information is retained/i)).toBeInTheDocument();
   });
 
   test('supplies approved sample events only when mock fallback is explicitly enabled', async () => {
@@ -526,7 +667,7 @@ describe('Observation', () => {
     expect(screen.getByRole('heading', { name: 'Observe' }).closest('.page-header')).not.toHaveTextContent(/queue position/i);
   });
 
-  test('shows the selected test batch and opens a keyboard-accessible case-status drawer', async () => {
+  test('shows the selected execution version and opens a keyboard-accessible case-status drawer', async () => {
     const user = userEvent.setup();
     const task = { ...activeTask, version: 'release1' };
     const { version: _omittedVersion, ...statusWithoutVersion } = task;
@@ -562,7 +703,7 @@ describe('Observation', () => {
 
     const control = screen.getByRole('region', { name: 'Task control' });
     await waitFor(() => expect(within(control).getByRole('status')).toHaveTextContent('Connected'));
-    expect(within(control).getByText('Test batch')).toBeInTheDocument();
+    expect(within(control).getByText('Execution version')).toBeInTheDocument();
     expect(within(control).getByText('release1')).toBeInTheDocument();
     const trigger = within(control).getByRole('button', { name: 'View case status' });
     await user.click(trigger);
@@ -573,7 +714,7 @@ describe('Observation', () => {
     });
     expect(within(drawer).getByText('save_api_test')).toBeInTheDocument();
     expect(within(drawer).getByText('query_api_test')).toBeInTheDocument();
-    expect(within(drawer).getByText('1 passed · 1 running · 0 failed · 0 pending')).toBeInTheDocument();
+    expect(within(drawer).getByText('1 passed · 1 running · 0 failed · 3 pending')).toBeInTheDocument();
     const closeButton = within(drawer).getByRole('button', { name: 'Close case status' });
     expect(closeButton).toHaveFocus();
     await user.tab();
@@ -582,6 +723,80 @@ describe('Observation', () => {
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog', { name: 'Case status' })).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
+  });
+
+  test('polls case status every two seconds only while its drawer is open and never promotes it to task authority', async () => {
+    vi.useFakeTimers();
+    const runningEnvelope = {
+      success: true,
+      task: {
+        id: activeTask.task_id,
+        status: 'running',
+        progress: 40,
+        total_scripts: 5,
+        executed_scripts: 2,
+        failed_scripts: 0,
+        queue_position: -1
+      }
+    };
+    const scriptSnapshot = {
+      success: true,
+      task_id: activeTask.task_id,
+      scripts_status: [
+        {
+          script_id: 'script-save',
+          script_name: 'save_api_test',
+          version: 'release1',
+          status: 'pass',
+          started_at: '2026-07-20T09:00:00Z',
+          completed_at: '2026-07-20T09:00:01Z',
+          duration_seconds: 1,
+          error_message: null
+        },
+        {
+          script_id: 'script-query',
+          script_name: 'query_api_test',
+          version: 'release1',
+          status: 'pass',
+          started_at: '2026-07-20T09:00:01Z',
+          completed_at: '2026-07-20T09:00:02Z',
+          duration_seconds: 1,
+          error_message: null
+        }
+      ],
+      summary: { todo_count: 99, pass_count: 2, failed_count: 0, running_count: 0 }
+    };
+    const fetchSpy = mockTaskApi([runningEnvelope], [], [scriptSnapshot]);
+
+    renderObservation();
+    fireEvent.click(screen.getByRole('button', { name: 'View case status' }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(countScriptStatusRequests(fetchSpy, activeTask.task_id)).toBe(1);
+    const drawer = screen.getByRole('dialog', { name: 'Case status' });
+    expect(within(drawer).getByText('2 passed · 0 running · 0 failed · 3 pending')).toBeInTheDocument();
+    expect(screen.getAllByText('Running').length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: /cancel task/i })).toBeEnabled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1999);
+    });
+    expect(countScriptStatusRequests(fetchSpy, activeTask.task_id)).toBe(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(countScriptStatusRequests(fetchSpy, activeTask.task_id)).toBe(2);
+
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Close case status' }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4000);
+    });
+    expect(countScriptStatusRequests(fetchSpy, activeTask.task_id)).toBe(2);
   });
 
   test('does not poll case status after the parent task reaches a terminal state', async () => {

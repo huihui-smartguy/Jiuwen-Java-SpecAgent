@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { getScripts } from '../api/client';
+import { getScriptsForScene } from '../api/client';
 import { PageHeader } from '../components/PageHeader';
 import { PresentationOnlyButton } from '../components/PresentationOnlyButton';
 import { mockScripts } from '../data/mockData';
@@ -135,10 +135,11 @@ export function Scripts({ language, selectedSut, runtimeConfig }: ScriptsProps) 
     queryKey: ['scripts', targetIdentity],
     queryFn: async (): Promise<ScriptsQueryData> => {
       try {
-        const response = await getScripts({ apiBaseUrl: targetIdentity.apiBaseUrl }, {
-          product: targetIdentity.product,
-          scene: targetIdentity.scene
-        });
+        const response = await getScriptsForScene(
+          { apiBaseUrl: targetIdentity.apiBaseUrl },
+          targetIdentity.product,
+          targetIdentity.scene
+        );
         return { scripts: response.scripts, source: 'live' };
       } catch (error) {
         if (runtimeConfig.enableMockFallback) {

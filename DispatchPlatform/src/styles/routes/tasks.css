@@ -32,14 +32,14 @@
 .tasks-left-column {
   display: grid;
   min-width: 0;
-  grid-template-rows: 340px 356px;
+  grid-template-rows: auto minmax(376px, auto);
   gap: 24px;
 }
 
 .tasks-right-rail {
   display: grid;
   min-width: 0;
-  grid-template-rows: 330px 366px;
+  grid-template-rows: minmax(348px, auto) minmax(382px, auto);
   align-content: start;
   gap: 24px;
 }
@@ -69,13 +69,14 @@
 
 .tasks-config-card {
   position: relative;
-  height: 340px;
+  height: auto;
+  min-height: 388px;
   padding: 24px 28px;
 }
 
 .tasks-config-heading {
-  height: 28px;
-  margin-bottom: 12px;
+  min-height: 30px;
+  margin-bottom: 16px;
 }
 
 .tasks-ready-pill,
@@ -107,19 +108,21 @@
 .tasks-steps {
   display: grid;
   width: 800px;
-  height: 52px;
+  height: auto;
+  min-height: 64px;
   grid-template-columns: repeat(3, 260px);
   gap: 10px;
-  margin: 0 0 12px;
+  margin: 0 0 16px;
   list-style: none;
 }
 
 .tasks-steps li {
   display: flex;
   min-width: 0;
+  min-height: 64px;
   align-items: center;
   gap: 8px;
-  padding: 6px 14px;
+  padding: 10px 14px;
   border: 0;
   border-radius: 14px;
   background: var(--color-surface);
@@ -144,30 +147,30 @@
 
 .tasks-steps strong {
   color: var(--color-text-primary);
-  font-size: 13px;
+  font-size: var(--type-body-size);
   font-weight: 500;
-  line-height: 20px;
+  line-height: var(--type-body-line);
 }
 
 .tasks-steps small {
-  overflow: hidden;
   color: var(--color-text-secondary);
-  font-size: 12px;
+  font-size: var(--type-label-size);
   font-weight: 500;
-  line-height: 20px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: var(--type-label-line);
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .tasks-object-summary {
   display: flex;
   width: 800px;
-  height: 52px;
+  height: auto;
+  min-height: 64px;
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  margin-bottom: 12px;
-  padding: 0;
+  margin-bottom: 16px;
+  padding: 4px 0;
   border: 0;
   background: transparent;
 }
@@ -180,20 +183,19 @@
 
 .tasks-object-summary > div > span {
   color: var(--color-text-muted);
-  font-size: 11px;
+  font-size: var(--type-caption-size);
   font-weight: 700;
-  letter-spacing: 1px;
-  line-height: 16px;
+  letter-spacing: 0.06em;
+  line-height: var(--type-caption-line);
 }
 
 .tasks-object-summary strong {
-  overflow: hidden;
   color: var(--color-text-primary);
   font-size: 15px;
   font-weight: 500;
-  line-height: 22px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 24px;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .tasks-object-summary button {
@@ -214,17 +216,18 @@
 .tasks-mode-row {
   display: flex;
   width: 800px;
-  height: 44px;
+  height: auto;
+  min-height: 52px;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
 .tasks-segmented {
   display: inline-grid;
-  width: 330px;
-  height: 44px;
+  width: 360px;
+  height: 52px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 2px;
   margin: 0;
@@ -241,7 +244,7 @@
 .tasks-segmented label > span {
   display: inline-flex;
   width: 100%;
-  height: 36px;
+  height: 44px;
   align-items: center;
   justify-content: center;
   border-radius: 10px;
@@ -276,7 +279,8 @@
 .tasks-fields {
   display: grid;
   width: 800px;
-  height: 48px;
+  height: auto;
+  min-height: 52px;
   grid-template-columns: repeat(2, 394px);
   gap: 12px;
 }
@@ -284,7 +288,7 @@
 .tasks-field {
   display: flex;
   min-width: 0;
-  height: 48px;
+  min-height: 52px;
   align-items: center;
   padding: 0 16px;
   border: 0;
@@ -300,8 +304,8 @@
 .tasks-field > span {
   flex: 0 0 auto;
   color: var(--color-text-secondary);
-  font-size: 13px;
-  line-height: 20px;
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line);
 }
 
 .tasks-field > span::after {
@@ -311,57 +315,57 @@
 .tasks-field select {
   width: 100%;
   min-width: 0;
-  height: 44px;
+  height: 48px;
   padding: 0 0 0 4px;
   border: 0;
   outline: 0;
   color: var(--color-text-primary);
   background: transparent;
-  font-size: 13px;
+  font-size: var(--type-body-size);
   font-weight: 500;
+  line-height: var(--type-body-line);
 }
 
 .tasks-inline-error {
   color: var(--color-danger);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-line);
+  overflow-wrap: anywhere;
 }
 
 .tasks-config-card > .tasks-inline-error {
-  position: absolute;
-  right: 28px;
-  bottom: 6px;
-  left: 28px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  position: static;
+  margin-top: 12px;
+  white-space: normal;
 }
 
 .tasks-snapshot-card {
   display: flex;
-  height: 356px;
+  height: auto;
+  min-height: 376px;
   flex-direction: column;
   overflow: hidden;
 }
 
 .tasks-snapshot-heading {
   display: flex;
-  flex: 0 0 84px;
-  height: 84px;
+  min-height: 92px;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  padding: 24px 28px 0;
+  padding: 24px 28px 16px;
 }
 
 .tasks-snapshot-heading h2 {
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .tasks-script-search {
   display: flex;
   width: 330px;
-  height: 44px;
+  height: 48px;
+  min-height: 48px;
   align-items: center;
   padding: 0 14px;
   border: 1px solid var(--color-outline);
@@ -394,7 +398,7 @@
 
 .tasks-table-scroll {
   width: 800px;
-  height: 248px;
+  height: 260px;
   margin: 0 28px 24px;
   overflow: auto;
 }
@@ -458,7 +462,8 @@
 
 .tasks-table-scroll .mono-cell {
   overflow: hidden;
-  font-size: 12px;
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-line);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -495,7 +500,8 @@
 }
 
 .tasks-launch-card {
-  height: 330px;
+  height: auto;
+  min-height: 348px;
 }
 
 .tasks-launch-list {
@@ -505,28 +511,30 @@
 
 .tasks-launch-list > div {
   display: grid;
-  height: 42px;
+  min-height: 44px;
   grid-template-columns: 100px minmax(0, 230px);
   align-items: center;
   gap: 12px;
+  padding-block: 4px;
 }
 
 .tasks-launch-list dt,
 .tasks-guardrail-list dt {
+  min-width: 0;
   color: var(--color-text-secondary);
-  font-size: 13px;
-  line-height: 20px;
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line);
 }
 
 .tasks-launch-list dd {
-  overflow: hidden;
+  min-width: 0;
   color: var(--color-text-primary);
-  font-size: 13px;
+  font-size: var(--type-body-size);
   font-weight: 500;
-  line-height: 20px;
+  line-height: var(--type-body-line);
+  overflow-wrap: anywhere;
   text-align: right;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .tasks-launch-button {
@@ -540,17 +548,14 @@
 }
 
 .tasks-creation-error {
-  position: absolute;
-  right: 28px;
-  bottom: 78px;
-  left: 28px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  position: static;
+  margin: 4px 0 12px;
+  white-space: normal;
 }
 
 .tasks-guardrail-card {
-  height: 366px;
+  height: auto;
+  min-height: 382px;
 }
 
 .tasks-guardrail-count {
@@ -568,7 +573,7 @@
 .tasks-guardrail-list > div {
   display: flex;
   width: 360px;
-  height: 80px;
+  min-height: 80px;
   align-items: center;
   justify-content: space-between;
   gap: 18px;
@@ -662,7 +667,8 @@
 
   .tasks-launch-card,
   .tasks-guardrail-card {
-    height: 366px;
+    height: auto;
+    min-height: 366px;
   }
 
   .tasks-table-scroll {
@@ -716,7 +722,7 @@
   }
 
   .tasks-left-column {
-    grid-template-rows: auto 420px;
+    grid-template-rows: auto minmax(432px, auto);
   }
 
   .tasks-config-card {
@@ -726,7 +732,7 @@
 
   .tasks-config-heading {
     height: auto;
-    min-height: 28px;
+    min-height: 30px;
   }
 
   .tasks-steps {
@@ -735,7 +741,7 @@
   }
 
   .tasks-steps li {
-    min-height: 52px;
+    min-height: 64px;
   }
 
   .tasks-object-summary {
@@ -784,7 +790,8 @@
   }
 
   .tasks-snapshot-card {
-    height: 420px;
+    height: auto;
+    min-height: 432px;
   }
 
   .tasks-snapshot-heading {
@@ -801,7 +808,7 @@
 
   .tasks-script-search {
     width: 100%;
-    min-height: 44px;
+    min-height: 48px;
   }
 
   .tasks-table-scroll {
@@ -809,7 +816,7 @@
   }
 
   .tasks-table-scroll tbody tr {
-    height: 44px;
+    height: 68px;
   }
 
   .tasks-right-rail {
@@ -819,7 +826,7 @@
   .tasks-launch-card,
   .tasks-guardrail-card {
     height: auto;
-    min-height: 330px;
+    min-height: 366px;
   }
 
   .tasks-launch-button,

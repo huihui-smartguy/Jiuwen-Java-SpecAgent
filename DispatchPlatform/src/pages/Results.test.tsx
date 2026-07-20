@@ -363,7 +363,8 @@ describe('Results', () => {
 
     const failures = screen.getByRole('region', { name: '失败分布' });
     expect(within(failures).getByText('2 个用例')).toBeInTheDocument();
-    expect(within(failures).queryAllByRole('listitem')).toHaveLength(0);
+    expect(within(failures).getAllByRole('listitem')).toHaveLength(1);
+    expect(within(failures).getByText('当前版本暂无失败分布')).toBeInTheDocument();
     for (const mockOnlyValue of [
       '42',
       '93.6%',
@@ -527,8 +528,25 @@ describe('Results', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  test('defaults to Persisted Reports without session tasks and queries exact version filters with 20-row pagination', async () => {
+  test('uses one Object-scoped registered version, reconciles exact matches, and paginates locally', async () => {
     const runtimeConfig = resolveRuntimeConfig({ enableMockFallback: false });
+    const exactReports = Array.from({ length: 21 }, (_, index) => ({
+      id: `report-exact-${String(index + 1).padStart(2, '0')}`,
+      title: `Release 1 report ${String(index + 1).padStart(2, '0')}`,
+      software_version: 'release1',
+      summary: {
+        total: 10,
+        pass: 9,
+        failed: 1,
+        skipped: 0,
+        running: 0,
+        success_rate: 90,
+        total_duration_seconds: 42
+      },
+      conclusion: { passed: false, verdict: '不通过', reason: 'One failure' },
+      created_at: `2026-07-${String(Math.min(index + 1, 21)).padStart(2, '0')}T10:30:00`,
+      created_by: 'codex-verification'
+    }));
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
       const url = new URL(String(input), 'http://local.test');
       if (url.pathname.endsWith('/versions')) {
@@ -547,24 +565,16 @@ describe('Results', () => {
       if (url.pathname.endsWith('/reports')) {
         return json({
           success: true,
-          total: 21,
-          reports: [{
-            id: `report-${url.searchParams.get('offset') ?? '0'}`,
-            title: 'Build v2.4.1 regression report',
-            software_version: 'v2.4.1',
-            test_version: url.searchParams.get('test_version') ?? 'release1',
-            summary: {
-              total: 10,
-              pass: 9,
-              failed: 1,
-              skipped: 0,
-              success_rate: 90,
-              total_duration_seconds: 42
-            },
-            conclusion: { passed: false, verdict: '不通过', reason: 'One failure' },
-            created_at: '2026-07-15T10:30:00',
-            created_by: 'codex-verification'
-          }]
+          total: 22,
+          reports: [
+            ...exactReports,
+            {
+              ...exactReports[0],
+              id: 'report-prefix-collision',
+              title: 'Release 10 prefix collision',
+              software_version: 'release10'
+            }
+          ]
         });
       }
       throw new Error(`Unexpected request: ${url}`);
@@ -580,36 +590,43 @@ describe('Results', () => {
     expect(sessionTab).toHaveAttribute('aria-selected', 'true');
     await userEvent.keyboard('{ArrowRight}');
     expect(persistedTab).toHaveAttribute('aria-selected', 'true');
-    await waitFor(() => expect(fetchSpy).toHaveBeenCalledWith(
-      '/api/reports?software_version=v2.4.1&limit=20&offset=0',
-      { headers: { Accept: 'application/json' } }
-    ));
-    expect(await screen.findByText('Build v2.4.1 regression report')).toBeInTheDocument();
+    await waitFor(() => expect(fetchSpy.mock.calls.some(([input]) => {
+      const url = new URL(String(input), 'http://local.test');
+      return url.pathname === '/api/reports'
+        && url.searchParams.get('software_version') === 'release1'
+        && url.searchParams.get('test_version') === 'release1'
+        && url.searchParams.get('product') === runtimeConfig.sutTargets[0].product
+        && url.searchParams.get('scene') === runtimeConfig.sutTargets[0].scene
+        && url.searchParams.get('limit') === '200'
+        && url.searchParams.get('offset') === '0';
+    })).toBe(true));
+    expect(await screen.findByText('Release 1 report 01')).toBeInTheDocument();
+    expect(screen.queryByText('Release 10 prefix collision')).not.toBeInTheDocument();
     expect(screen.getByText('第 1 / 2 页')).toBeInTheDocument();
     const reportRequestsBeforeSearch = fetchSpy.mock.calls.filter(([input]) => (
       String(input).includes('/reports?')
     )).length;
-    await userEvent.type(screen.getByRole('searchbox', { name: '搜索报告或任务' }), 'Build v2');
-    expect(screen.getByText('Build v2.4.1 regression report')).toBeInTheDocument();
+    await userEvent.type(screen.getByRole('searchbox', { name: '搜索报告或任务' }), 'report 07');
+    expect(screen.getByText('Release 1 report 07')).toBeInTheDocument();
+    expect(screen.queryByText('Release 1 report 01')).not.toBeInTheDocument();
     expect(fetchSpy.mock.calls.filter(([input]) => String(input).includes('/reports?')))
       .toHaveLength(reportRequestsBeforeSearch);
     await userEvent.clear(screen.getByRole('searchbox', { name: '搜索报告或任务' }));
 
     await userEvent.click(screen.getByRole('button', { name: '筛选' }));
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: '测试批次（可选）' }), 'release1');
-    await waitFor(() => expect(fetchSpy).toHaveBeenCalledWith(
-      '/api/reports?software_version=v2.4.1&test_version=release1&limit=20&offset=0',
-      { headers: { Accept: 'application/json' } }
-    ));
+    const versionControl = screen.getByRole('combobox', { name: /执行\s*\/\s*报告版本/ });
+    expect(versionControl).toHaveValue('release1');
+    expect(screen.queryByRole('combobox', { name: /测试批次/ })).not.toBeInTheDocument();
+    expect(screen.getByText('task.version → report.software_version')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: '下一页' }));
-    await waitFor(() => expect(fetchSpy).toHaveBeenCalledWith(
-      '/api/reports?software_version=v2.4.1&test_version=release1&limit=20&offset=20',
-      { headers: { Accept: 'application/json' } }
-    ));
+    expect(await screen.findByText('Release 1 report 21')).toBeInTheDocument();
+    expect(screen.getByText('第 2 / 2 页')).toBeInTheDocument();
+    expect(fetchSpy.mock.calls.filter(([input]) => String(input).includes('/reports?')))
+      .toHaveLength(reportRequestsBeforeSearch);
   });
 
-  test('gates generic Object versions until an exact software build is entered and remembers it per Object', async () => {
+  test('never promotes the Object display version into report semantics and remembers the registered canonical version', async () => {
     const runtimeConfig = resolveRuntimeConfig({
       enableMockFallback: false,
       sutTargets: [{
@@ -625,7 +642,17 @@ describe('Results', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
       const url = new URL(String(input), 'http://local.test');
       if (url.pathname.endsWith('/versions')) {
-        return json({ success: true, default_version: 'release1', versions: [] });
+        return json({
+          success: true,
+          default_version: 'release1',
+          versions: [{
+            code: 'release1',
+            name: 'Release 1',
+            description: 'Stable',
+            created_at: '2026-07-01T00:00:00Z',
+            is_default: true
+          }]
+        });
       }
       if (url.pathname.endsWith('/reports')) {
         return json({ success: true, total: 0, reports: [] });
@@ -635,19 +662,17 @@ describe('Results', () => {
 
     renderResults({ runtimeConfig, selectedSut: runtimeConfig.sutTargets[0] });
 
-    expect(screen.getByText('请输入精确的软件版本或构建号后查询报告。')).toBeInTheDocument();
-    expect(fetchSpy.mock.calls.some(([input]) => String(input).includes('/reports?'))).toBe(false);
-
-    await userEvent.click(screen.getByRole('button', { name: '筛选' }));
-    const softwareVersion = screen.getByRole('textbox', { name: '被测软件版本' });
-    await userEvent.clear(softwareVersion);
-    await userEvent.type(softwareVersion, 'AgentPlatform 3.5.2 build 20260715.1');
-
     await waitFor(() => expect(fetchSpy.mock.calls.some(([input]) => (
-      String(input).includes('/api/reports?software_version=AgentPlatform+3.5.2+build+20260715.1')
+      String(input).includes('/api/reports?software_version=release1')
     ))).toBe(true));
-    expect(window.localStorage.getItem('testwise.reportSoftwareVersion:generic-version-object'))
-      .toBe('AgentPlatform 3.5.2 build 20260715.1');
+    expect(fetchSpy.mock.calls.some(([input]) => String(input).includes('software_version=Latest')))
+      .toBe(false);
+    await userEvent.click(screen.getByRole('button', { name: '筛选' }));
+    expect(screen.getByRole('combobox', { name: /执行\s*\/\s*报告版本/ }))
+      .toHaveValue('release1');
+    expect(screen.queryByRole('textbox', { name: /软件版本|构建号/ })).not.toBeInTheDocument();
+    expect(window.localStorage.getItem('testwise.reportCanonicalVersion:generic-version-object'))
+      .toBe('release1');
   });
 
   test('generates a scoped report from an accessible modal and opens its detail route', async () => {
@@ -700,7 +725,13 @@ describe('Results', () => {
     modal = await screen.findByRole('dialog', { name: '生成报告' });
     expect(within(modal).getByText(`${runtimeConfig.sutTargets[0].product} · ${runtimeConfig.sutTargets[0].scene}`))
       .toBeInTheDocument();
-    await waitFor(() => expect(within(modal).getByRole('combobox', { name: '测试批次' })).toHaveValue('release1'));
+    const reportVersion = within(modal).getByRole('combobox', {
+      name: /执行\s*\/\s*报告版本/
+    });
+    await waitFor(() => expect(reportVersion).toHaveValue('release1'));
+    expect(within(modal).queryByRole('combobox', { name: /测试批次/ })).not.toBeInTheDocument();
+    expect(within(modal).getByText('task.version → report.software_version')).toBeInTheDocument();
+    expect(within(modal).getByText('后端版本注册表')).toBeInTheDocument();
     await user.selectOptions(within(modal).getByRole('combobox', { name: 'Feature（可选）' }), 'Save API');
     await user.selectOptions(within(modal).getByRole('combobox', { name: '级别（可选）' }), 'L1');
     await user.type(within(modal).getByRole('textbox', { name: '报告标题（可选）' }), 'Release verification');
@@ -712,7 +743,7 @@ describe('Results', () => {
       const post = fetchSpy.mock.calls.find(([, init]) => init?.method === 'POST');
       expect(JSON.parse(String(post?.[1]?.body))).toEqual({
         test_version: 'release1',
-        software_version: 'v2.4.1',
+        software_version: 'release1',
         scope: {
           product: runtimeConfig.sutTargets[0].product,
           scenes: [runtimeConfig.sutTargets[0].scene],
@@ -756,14 +787,16 @@ describe('Results', () => {
     renderResults({ runtimeConfig, activeTask: sessionTask, sessionTasks: [sessionTask] });
     await userEvent.click(screen.getByRole('button', { name: '生成报告' }));
     const modal = await screen.findByRole('dialog', { name: '生成报告' });
-    await waitFor(() => expect(within(modal).getByRole('combobox', { name: '测试批次' })).toHaveValue('release1'));
+    await waitFor(() => expect(within(modal).getByRole('combobox', {
+      name: /执行\s*\/\s*报告版本/
+    })).toHaveValue('release1'));
     await userEvent.click(within(modal).getByRole('button', { name: '创建并打开报告' }));
 
     expect(await within(modal).findByRole('alert')).toHaveTextContent('No matching execution results');
     const post = fetchSpy.mock.calls.find(([, init]) => init?.method === 'POST');
     expect(JSON.parse(String(post?.[1]?.body))).toEqual({
       test_version: 'release1',
-      software_version: 'v2.4.1',
+      software_version: 'release1',
       scope: {
         product: runtimeConfig.sutTargets[0].product,
         scenes: [runtimeConfig.sutTargets[0].scene]
@@ -771,12 +804,145 @@ describe('Results', () => {
     });
   });
 
+  test('treats a persisted report with zero executions as neutral, no matching data, and explicitly unbound', async () => {
+    const runtimeConfig = resolveRuntimeConfig({ enableMockFallback: false });
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = new URL(String(input), 'http://local.test');
+      if (url.pathname.endsWith('/versions')) {
+        return json({
+          success: true,
+          default_version: 'release1',
+          versions: [{
+            code: 'release1',
+            name: 'Release 1',
+            description: 'Stable',
+            created_at: '2026-07-01T00:00:00Z',
+            is_default: true
+          }]
+        });
+      }
+      if (url.pathname.endsWith('/reports')) {
+        return json({
+          success: true,
+          total: 1,
+          reports: [{
+            id: 'report-zero-executions',
+            title: '零执行数据报告',
+            software_version: 'release1',
+            summary: {
+              total: 0,
+              pass: 0,
+              failed: 0,
+              skipped: 0,
+              running: 0,
+              success_rate: 100,
+              total_duration_seconds: 0
+            },
+            conclusion: {
+              passed: true,
+              verdict: '通过',
+              reason: 'Backend must not override the zero-execution state'
+            },
+            created_at: '2026-07-15T10:30:00',
+            created_by: 'codex-verification'
+          }]
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    renderResults({ runtimeConfig, activeTask: null, sessionTasks: [] });
+
+    const reportTitle = await screen.findByText('零执行数据报告');
+    const row = reportTitle.closest('tr');
+    expect(row).not.toBeNull();
+    expect(within(row!).getByText('release1')).toBeInTheDocument();
+    expect(within(row!).getByText('未绑定')).toHaveAttribute(
+      'title',
+      '当前后端未提供报告到任务的稳定关联字段'
+    );
+    const outcome = within(row!).getByLabelText('无匹配数据, —');
+    expect(outcome).toHaveTextContent('无匹配数据');
+    expect(outcome).toHaveClass('is-neutral');
+    expect(within(row!).queryByText('通过')).not.toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: '结果指标' }))
+      .getAllByTestId('metric-value').map((value) => value.textContent)).toEqual([
+      '1', '—', '0', '—'
+    ]);
+  });
+
+  test('does not auto-retry an outcome-unknown report POST and sends the user to reconciliation', async () => {
+    const runtimeConfig = resolveRuntimeConfig({ enableMockFallback: false });
+    const sessionTask = task('task-outcome-unknown', { version: 'release1' });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = new URL(String(input), 'http://local.test');
+      if (url.pathname.endsWith('/versions')) {
+        return json({
+          success: true,
+          default_version: 'release1',
+          versions: [{
+            code: 'release1',
+            name: 'Release 1',
+            description: 'Stable',
+            created_at: '2026-07-01T00:00:00Z',
+            is_default: true
+          }]
+        });
+      }
+      if (url.pathname.endsWith('/features')) {
+        return json({ success: true, product: '高码java', scene: '场景', features: [], total: 0 });
+      }
+      if (url.pathname.endsWith('/reports') && init?.method === 'POST') {
+        return Promise.reject(new TypeError('connection closed after request upload'));
+      }
+      if (url.pathname.endsWith('/reports')) {
+        return json({ success: true, total: 0, reports: [] });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    renderResults({ runtimeConfig, activeTask: sessionTask, sessionTasks: [sessionTask] });
+    await userEvent.click(screen.getByRole('button', { name: '生成报告' }));
+    const modal = await screen.findByRole('dialog', { name: '生成报告' });
+    await waitFor(() => expect(within(modal).getByRole('combobox', {
+      name: /执行\s*\/\s*报告版本/
+    })).toHaveValue('release1'));
+    await userEvent.click(within(modal).getByRole('button', { name: '创建并打开报告' }));
+
+    const reconciliation = await within(modal).findByRole('status');
+    expect(reconciliation).toHaveTextContent('生成结果暂时未知');
+    expect(reconciliation).toHaveTextContent('避免重复快照');
+    expect(screen.getByTestId('location-path')).toHaveTextContent('/results');
+    const reportPosts = () => fetchSpy.mock.calls.filter(([, request]) => request?.method === 'POST');
+    expect(reportPosts()).toHaveLength(1);
+    await Promise.resolve();
+    expect(reportPosts()).toHaveLength(1);
+
+    await userEvent.click(within(reconciliation).getByRole('button', { name: '查看持久化报告' }));
+    expect(screen.queryByRole('dialog', { name: '生成报告' })).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '持久化报告' })).toHaveAttribute('aria-selected', 'true');
+    await waitFor(() => expect(fetchSpy.mock.calls.some(([input, request]) => (
+      String(input).includes('/reports?') && request?.method !== 'POST'
+    ))).toBe(true));
+    expect(reportPosts()).toHaveLength(1);
+  });
+
   test('shows a persisted-list 500 error without replacing session results', async () => {
     const runtimeConfig = resolveRuntimeConfig({ enableMockFallback: false });
     vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
       const url = new URL(String(input), 'http://local.test');
       if (url.pathname.endsWith('/versions')) {
-        return json({ success: true, default_version: 'release1', versions: [] });
+        return json({
+          success: true,
+          default_version: 'release1',
+          versions: [{
+            code: 'release1',
+            name: 'Release 1',
+            description: 'Stable',
+            created_at: '2026-07-01T00:00:00Z',
+            is_default: true
+          }]
+        });
       }
       if (url.pathname.endsWith('/reports')) {
         return json({ success: false, message: 'Report list exploded' }, 500);
@@ -790,7 +956,7 @@ describe('Results', () => {
     expect(screen.getByRole('table', { name: '最近报告' })).toBeInTheDocument();
   });
 
-  test('owns the approved desktop grid geometry and responsive source-order collapse', () => {
+  test('owns the approved spacious typography, elastic geometry, and shell-safe mobile modal', () => {
     const cssPath = 'src/styles/routes/results.css';
     expect(existsSync(cssPath)).toBe(true);
     if (!existsSync(cssPath)) {
@@ -798,50 +964,58 @@ describe('Results', () => {
     }
     const resultsCss = readFileSync(cssPath, 'utf8');
 
+    expect(resultsCss).toMatch(/\.results-filter-panel\s*\{[^}]*gap:\s*16px;[^}]*padding:\s*24px;/);
     expect(resultsCss).toMatch(
-      /\.results-page\s*>\s*\.page-header\s*\{[^}]*height:\s*110px;[^}]*margin-bottom:\s*24px;/
+      /\.results-filter-panel\s+label,\s*\.report-generation-fields\s+label\s*\{[^}]*gap:\s*8px;[^}]*font-size:\s*13px;[^}]*line-height:\s*20px;/
     );
     expect(resultsCss).toMatch(
-      /\.results-metrics\s*\{[^}]*height:\s*120px;[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\);[^}]*gap:\s*16px;[^}]*margin-bottom:\s*24px;/
-    );
-    expect(resultsCss).toMatch(/\.results-metric-card\s*\{[^}]*height:\s*120px;[^}]*padding:\s*18px\s+22px;/);
-    expect(resultsCss).toMatch(
-      /\.results-chart-grid\s*\{[^}]*grid-template-columns:\s*760px\s+512px;[^}]*height:\s*246px;[^}]*gap:\s*24px;[^}]*margin-bottom:\s*24px;/
+      /\.results-filter-panel\s+input,[\s\S]*?\.report-generation-fields\s+select\s*\{[^}]*min-height:\s*48px;[^}]*font-size:\s*14px;[^}]*line-height:\s*22px;/
     );
     expect(resultsCss).toMatch(
-      /\.results-trend-chart\s*\{[^}]*width:\s*712px;[^}]*height:\s*160px;[^}]*grid-template-columns:\s*repeat\(7,\s*90px\);[^}]*gap:\s*12px;/
+      /\.results-filter-panel\s+small,\s*\.report-generation-fields\s+small\s*\{[^}]*font-size:\s*12px;[^}]*line-height:\s*18px;[^}]*overflow-wrap:\s*anywhere;/
     );
     expect(resultsCss).toMatch(
-      /\.results-trend-item\s*\{[^}]*width:\s*90px;[^}]*height:\s*160px;[^}]*gap:\s*8px;/
-    );
-    expect(resultsCss).toMatch(/\.results-trend-bar\s*\{[^}]*width:\s*24px;/);
-    expect(resultsCss).toMatch(/\.results-failure-track\s*\{[^}]*height:\s*8px;/);
-    expect(resultsCss).toMatch(
-      /\.results-failure-list\s*\{[^}]*width:\s*calc\(100%\s*\+\s*2px\);[^}]*gap:\s*14px;[^}]*margin-top:\s*-1px;[^}]*margin-left:\s*-1px;/
+      /\.results-page\s*>\s*\.page-header\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*110px;[^}]*margin-bottom:\s*24px;/
     );
     expect(resultsCss).toMatch(
-      /\.results-failure-list\s+li\s*\{[^}]*height:\s*34px;[^}]*row-gap:\s*8px;/
+      /\.results-metrics\s*\{[^}]*min-height:\s*132px;[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\);[^}]*gap:\s*16px;[^}]*margin-bottom:\s*24px;/
+    );
+    expect(resultsCss).toMatch(/\.results-metric-card\s*\{[^}]*min-height:\s*132px;[^}]*padding:\s*22px\s+24px;/);
+    expect(resultsCss).toMatch(
+      /\.results-chart-grid\s*\{[^}]*grid-template-columns:\s*760px\s+512px;[^}]*min-height:\s*270px;[^}]*gap:\s*24px;/
+    );
+    expect(resultsCss).toMatch(/\.results-chart-card\s*\{[^}]*min-height:\s*270px;[^}]*gap:\s*16px;[^}]*padding:\s*24px;/);
+    expect(resultsCss).toMatch(
+      /\.results-card-heading\s+h2,\s*\.results-reports-heading\s+h2\s*\{[^}]*font-size:\s*20px;[^}]*line-height:\s*28px;/
     );
     expect(resultsCss).toMatch(
-      /\.results-failure-track\s*>\s*\.is-danger\s*\{[^}]*background:\s*#e5484d;/
+      /\.results-trend-chart\s*\{[^}]*width:\s*712px;[^}]*min-height:\s*176px;[^}]*grid-template-columns:\s*repeat\(7,\s*90px\);[^}]*gap:\s*12px;/
+    );
+    expect(resultsCss).not.toMatch(/\.results-trend-chart\s*\{[^}]*min-height:\s*176px;[^}]*min-height:\s*0;/);
+    expect(resultsCss).toMatch(
+      /\.results-failure-list\s+li\s*\{[^}]*min-height:\s*42px;[^}]*row-gap:\s*8px;/
     );
     expect(resultsCss).toMatch(
-      /\.results-failure-track\s*>\s*\.is-warning\s*\{[^}]*background:\s*#b86e00;/
+      /\.results-failure-label,\s*\.results-failure-list\s+strong\s*\{[^}]*font-size:\s*14px;[^}]*line-height:\s*22px;/
     );
-    expect(resultsCss).toMatch(/\.results-reports-card\s*\{[^}]*height:\s*374px;[^}]*padding:\s*22px\s+28px\s+20px;/);
+    expect(resultsCss).toMatch(/\.results-reports-card\s*\{[^}]*min-height:\s*444px;[^}]*gap:\s*16px;[^}]*padding:\s*24px\s+28px;/);
+    expect(resultsCss).toMatch(/\.results-report-tabs\s*\{[^}]*min-height:\s*48px;/);
+    expect(resultsCss).toMatch(/\.results-report-tabs\s+button\s*\{[^}]*font-size:\s*14px;[^}]*line-height:\s*22px;/);
+    expect(resultsCss).toMatch(/\.results-report-search\s*\{[^}]*height:\s*48px;[^}]*min-height:\s*48px;/);
+    expect(resultsCss).toMatch(/\.results-table-scroll\s*\{[^}]*min-height:\s*320px;[^}]*flex:\s*1\s+1\s+320px;/);
     expect(resultsCss).toMatch(
-      /\.results-table-scroll\s*\{[^}]*width:\s*1240px;[^}]*height:\s*270px;/
+      /\.results-reports-card\s+table\s*\{[^}]*font-size:\s*14px;[^}]*line-height:\s*22px;/
     );
+    expect(resultsCss).toMatch(/\.results-reports-card\s+thead\s+tr\s*\{[^}]*min-height:\s*44px;/);
+    expect(resultsCss).toMatch(/\.results-reports-card\s+tbody\s+tr\s*\{[^}]*min-height:\s*64px;[^}]*padding-block:\s*10px;/);
     expect(resultsCss).toMatch(
-      /\.results-reports-card\s+thead\s+tr\s*\{[^}]*height:\s*38px;[^}]*grid-template-columns:\s*318px\s+198px\s+198px\s+170px\s+180px\s+152px;[^}]*border-radius:\s*10px;[^}]*background:\s*#e6eaf0;/
+      /\.results-report-title,\s*\.results-report-id,\s*\.results-report-version\s*\{[^}]*overflow-wrap:\s*anywhere;[^}]*word-break:\s*break-word;/
     );
-    expect(resultsCss).toMatch(/\.results-reports-card\s+tbody\s+tr\s*\{[^}]*height:\s*58px;/);
-    expect(resultsCss).toMatch(
-      /\.results-reports-card\s+th,\s*\.results-reports-card\s+td\s*\{[^}]*border-bottom:\s*0;/
-    );
-    expect(resultsCss).toMatch(
-      /\.results-report-id\s*\{[^}]*font-family:\s*inherit;[^}]*font-size:\s*13px;/
-    );
+    expect(resultsCss).toMatch(/\.results-pagination\s+button\s*\{[^}]*min-height:\s*44px;/);
+    expect(resultsCss).toMatch(/\.report-modal-backdrop\s*\{[^}]*inset:\s*72px\s+0\s+0;/);
+    expect(resultsCss).toMatch(/\.report-generation-modal\s*\{[^}]*gap:\s*24px;/);
+    expect(resultsCss).toMatch(/\.report-generation-lede\s*\{[^}]*font-size:\s*14px;[^}]*line-height:\s*22px;[^}]*overflow-wrap:\s*anywhere;/);
+    expect(resultsCss).toMatch(/\.report-generation-fields\s*\{[^}]*gap:\s*16px;/);
     expect(resultsCss).toMatch(
       /@media \(max-width:\s*1439px\)[\s\S]*?\.results-table-scroll\s*\{[^}]*width:\s*calc\(100%\s*\+\s*2px\);[^}]*max-width:\s*calc\(100%\s*\+\s*2px\);[^}]*overflow-x:\s*auto;/
     );
@@ -849,7 +1023,13 @@ describe('Results', () => {
       /@media \(max-width:\s*980px\)[\s\S]*?\.results-chart-grid\s*\{[^}]*height:\s*auto;[\s\S]*?\.results-trend-card,[\s\S]*?\.results-failure-card\s*\{[^}]*grid-column:\s*1\s*\/\s*-1;/
     );
     expect(resultsCss).toMatch(
-      /@media \(max-width:\s*680px\)[\s\S]*?\.results-metrics\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);[\s\S]*?\.results-header-actions[\s\S]*?min-height:\s*44px;/
+      /@media \(max-width:\s*680px\)[\s\S]*?\.results-metrics\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);[\s\S]*?\.results-header-actions[\s\S]*?min-height:\s*48px;/
+    );
+    expect(resultsCss).toMatch(
+      /@media \(max-width:\s*680px\)[\s\S]*?\.report-modal-backdrop\s*\{[^}]*padding:\s*0;[^}]*place-items:\s*stretch;[\s\S]*?\.report-generation-modal\s*\{[^}]*height:\s*100%;[^}]*max-height:\s*100%;/
+    );
+    expect(resultsCss).toMatch(
+      /@media \(max-width:\s*680px\)[\s\S]*?\.report-generation-modal\s*>\s*header\s*\{[^}]*position:\s*sticky;[^}]*top:\s*0;[\s\S]*?\.report-generation-modal\s*>\s*footer\s*\{[^}]*position:\s*sticky;[^}]*bottom:\s*0;/
     );
   });
 });

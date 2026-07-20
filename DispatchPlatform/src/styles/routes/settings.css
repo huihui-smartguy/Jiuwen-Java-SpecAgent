@@ -49,20 +49,22 @@
 
 .settings-grid {
   display: grid;
+  width: 100%;
   min-width: 0;
   grid-template-columns: repeat(2, minmax(0, 636px));
-  grid-template-rows: repeat(2, 310px);
+  grid-auto-rows: minmax(310px, auto);
   gap: 24px;
 }
 
 .settings-card {
   display: flex;
-  height: 310px;
+  width: 100%;
+  height: auto;
+  min-height: 310px;
   min-width: 0;
   flex-direction: column;
   gap: 16px;
   padding: 24px 28px;
-  overflow: hidden;
   border: 1px solid var(--color-outline);
   border-radius: 24px;
   background: var(--color-surface-low);
@@ -71,9 +73,9 @@
 
 .settings-card__header {
   display: flex;
-  height: 28px;
+  height: auto;
   min-height: 28px;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
 }
@@ -85,6 +87,7 @@
   font-weight: 700;
   letter-spacing: -0.2px;
   line-height: 26px;
+  overflow-wrap: anywhere;
 }
 
 .settings-status-pill,
@@ -129,37 +132,39 @@
 
 .settings-card__description {
   margin: 0;
-  overflow: hidden;
+  min-width: 0;
   color: var(--color-text-secondary);
   font-size: 14px;
   line-height: 22px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .settings-card__body {
   display: flex;
   min-width: 0;
+  flex: 1 1 auto;
   flex-direction: column;
   margin: 0;
 }
 
 .settings-card--object .settings-card__body,
 .settings-card--runtime .settings-card__body {
-  height: 156px;
+  min-height: 156px;
 }
 
 .settings-card--preferences .settings-card__body,
 .settings-card--reports .settings-card__body {
-  height: 182px;
+  min-height: 182px;
 }
 
 .settings-row {
   display: flex;
   width: 100%;
-  height: 78px;
+  height: auto;
   min-width: 0;
   min-height: 78px;
+  flex: 1 1 auto;
   align-items: center;
   justify-content: space-between;
   gap: 20px;
@@ -167,7 +172,7 @@
 
 .settings-card--preferences .settings-row,
 .settings-card--reports .settings-row {
-  height: 91px;
+  height: auto;
   min-height: 91px;
 }
 
@@ -186,26 +191,24 @@
 }
 
 .settings-row__label strong {
-  overflow: hidden;
   color: var(--color-text-primary);
   font-size: 14px;
   font-weight: 400;
   line-height: 22px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .settings-row__label > span {
-  overflow: hidden;
   color: var(--color-text-secondary);
   font-size: 12px;
-  line-height: 22px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .settings-control {
-  min-height: 44px;
+  min-height: 48px;
 }
 
 .settings-select-shell {
@@ -221,13 +224,13 @@
 .settings-select-visual {
   display: flex;
   width: 100%;
-  height: 44px;
+  height: auto;
+  min-height: 48px;
   min-width: 0;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 0 14px;
-  overflow: hidden;
+  padding: 10px 14px;
   border: 1px solid var(--color-outline);
   border-radius: 14px;
   color: var(--color-text-primary);
@@ -235,13 +238,12 @@
   font-size: 14px;
   font-weight: 500;
   line-height: 20px;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .settings-select-visual > span {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
 .settings-select-visual svg {
@@ -267,7 +269,7 @@
 .settings-switch {
   display: inline-grid;
   width: 52px;
-  height: 44px;
+  height: 48px;
   flex: 0 0 52px;
   place-items: center;
   padding: 0;
@@ -310,12 +312,13 @@
   flex: 0 0 160px;
   color: var(--color-text-secondary);
   font-size: 14px;
-  line-height: 20px;
+  line-height: 22px;
+  overflow-wrap: anywhere;
 }
 
 .settings-readonly-value {
   min-width: 0;
-  height: 44px;
+  height: 48px;
   padding: 0 14px;
   border: 1px solid var(--color-outline);
   border-radius: 14px;
@@ -394,7 +397,6 @@ html.settings-reduced-motion *::after {
 @media (max-width: 980px) {
   .settings-grid {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: repeat(4, 310px);
   }
 
   .settings-select-shell,
@@ -459,5 +461,15 @@ html.settings-reduced-motion *::after {
 
   .settings-readonly-value--api {
     flex: 1 1 auto;
+  }
+}
+
+@media (max-width: 380px) {
+  .settings-card {
+    padding: 20px 18px;
+  }
+
+  .settings-card__header {
+    flex-wrap: wrap;
   }
 }

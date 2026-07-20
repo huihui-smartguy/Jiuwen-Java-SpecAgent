@@ -8,6 +8,7 @@ import {
   getFeatures,
   getReport,
   getReportDownloadUrl,
+  getScriptsForScene,
   getStatisticsSummary,
   getScripts,
   getTaskLogs,
@@ -17,6 +18,7 @@ import {
   listReports,
   normalizeCreatedTask,
   normalizeTaskStatus,
+  ReportOutcomeUnknownError,
   resolvePublicDownloadUrl
 } from './client';
 
@@ -31,8 +33,32 @@ function mockJson(body: unknown, ok = true, status = 200) {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
+
+function reportListItem(
+  id: string,
+  version: { software_version?: string; test_version?: string }
+) {
+  return {
+    id,
+    title: `Report ${id}`,
+    ...version,
+    summary: {
+      total: 1,
+      pass: 1,
+      failed: 0,
+      skipped: 0,
+      running: 0,
+      success_rate: 100,
+      total_duration_seconds: 1
+    },
+    conclusion: { passed: true, verdict: 'passed', reason: 'all checks passed' },
+    created_at: '2026-07-15T10:00:00',
+    created_by: 'system'
+  };
+}
 
 describe('execution API client', () => {
   test('normalizes the observed live task log payload without inventing entries', async () => {
@@ -195,6 +221,82 @@ describe('execution API client', () => {
     expect(url.searchParams.get('scene')).toBe('场景');
     expect(url.searchParams.get('feature')).toBe('保存接口');
     expect(url.searchParams.get('level')).toBe('L0');
+  });
+
+  test('discovers every scene script by feature fan-out with stable de-duplication', async () => {
+    const sharedFromFirstFeature = {
+      id: 'script-shared',
+      name: 'shared-first',
+      filename: 'shared.py',
+      extension: '.py',
+      product: '合一版本',
+      scene: 'API',
+      feature: '认证',
+      level: 'L0',
+      size: 100,
+      path: '/tests/shared.py'
+    };
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = new URL(String(input), 'http://local.test');
+      if (url.pathname === '/api/features') {
+        return await mockJson({
+          success: true,
+          product: '合一版本',
+          scene: 'API',
+          features: [
+            { id: 'feature-auth', name: '认证', type: 'feature' },
+            { id: 'feature-keys', name: '密钥管理', type: 'feature' }
+          ],
+          total: 2
+        });
+      }
+
+      const feature = url.searchParams.get('feature');
+      if (url.pathname === '/api/scripts' && feature === '认证') {
+        return await mockJson({
+          success: true,
+          scripts: [
+            sharedFromFirstFeature,
+            { ...sharedFromFirstFeature, id: 'script-auth', name: 'auth-only', path: '/tests/auth.py' },
+            { ...sharedFromFirstFeature, id: '', name: 'path-first', path: '/tests/by-path.py' }
+          ],
+          total: 3
+        });
+      }
+      if (url.pathname === '/api/scripts' && feature === '密钥管理') {
+        return await mockJson({
+          success: true,
+          scripts: [
+            { ...sharedFromFirstFeature, name: 'shared-second', feature: '密钥管理' },
+            { ...sharedFromFirstFeature, id: 'script-keys', name: 'keys-only', feature: '密钥管理', path: '/tests/keys.py' },
+            { ...sharedFromFirstFeature, id: '', name: 'path-second', feature: '密钥管理', path: '/tests/by-path.py' }
+          ],
+          total: 3
+        });
+      }
+      throw new Error(`Unexpected request: ${url.pathname}${url.search}`);
+    });
+
+    const result = await getScriptsForScene(api, '合一版本', 'API');
+
+    expect(result.scripts.map((script) => script.name)).toEqual([
+      'shared-first',
+      'auth-only',
+      'path-first',
+      'keys-only'
+    ]);
+    expect(result.total).toBe(4);
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+    const requestUrls = fetchSpy.mock.calls.map(([input]) => new URL(String(input), 'http://local.test'));
+    expect(requestUrls[0].pathname).toBe('/api/features');
+    expect(requestUrls.slice(1).map((url) => url.searchParams.get('feature'))).toEqual([
+      '认证',
+      '密钥管理'
+    ]);
+    requestUrls.slice(1).forEach((url) => {
+      expect(url.searchParams.get('product')).toBe('合一版本');
+      expect(url.searchParams.get('scene')).toBe('API');
+    });
   });
 
   test('task creation posts the selected feature trigger payload', async () => {
@@ -544,38 +646,151 @@ describe('execution API client', () => {
     expect(result).toMatchObject({ trigger_type: 'scene', version: 'release1' });
   });
 
-  test('creates and lists report snapshots with exact build filtering and pagination', async () => {
-    const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(await mockJson({ success: true, report_id: 'report-1' }))
-      .mockResolvedValueOnce(await mockJson({ success: true, total: 0, reports: [] }));
-
+  test('creates one canonical execution/report version without an independent test version', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      await mockJson({ success: true, report_id: 'report-1' })
+    );
     const payload = {
-      test_version: 'release1',
-      software_version: 'AgentPlatform build 20260715.1',
+      software_version: 'release1',
       scope: { product: '合一版本', scenes: ['API'] },
       time_window: ['2026-07-15T09:00:00', '2026-07-15T10:00:00'] as [string, string]
     };
+
     const created = await createReport(api, payload);
-    const listed = await listReports(api, {
-      software_version: 'AgentPlatform build 20260715.1',
-      test_version: 'release1',
-      limit: 20,
-      offset: 40
-    });
 
     expect(created.report_id).toBe('report-1');
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(fetchSpy.mock.calls[0][1]).toEqual(expect.objectContaining({
       method: 'POST',
-      body: JSON.stringify(payload)
+      body: JSON.stringify({ ...payload, test_version: 'release1' })
     }));
-    const listUrl = new URL(fetchSpy.mock.calls[1][0] as string, 'http://local.test');
-    expect(listUrl.pathname).toBe('/api/reports');
-    expect(listUrl.searchParams.get('software_version')).toBe('AgentPlatform build 20260715.1');
-    expect(listUrl.searchParams.get('test_version')).toBe('release1');
-    expect(listUrl.searchParams.get('limit')).toBe('20');
-    expect(listUrl.searchParams.get('offset')).toBe('40');
-    expect(listed).toEqual({ success: true, total: 0, reports: [] });
+    const posted = JSON.parse(String((fetchSpy.mock.calls[0][1] as RequestInit).body));
+    expect(posted.software_version).toBe(posted.test_version);
+  });
+
+  test('scans prefix-filtered backend pages, normalizes versions, and paginates exact matches locally', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(await mockJson({
+        success: true,
+        total: 6,
+        reports: [
+          reportListItem('exact-first', { software_version: 'release1', test_version: 'legacy-other' }),
+          reportListItem('prefix', { software_version: 'release10' }),
+          reportListItem('legacy-exact', { test_version: 'release1' })
+        ]
+      }))
+      .mockResolvedValueOnce(await mockJson({
+        success: true,
+        total: 6,
+        reports: [
+          reportListItem('exact-first', { software_version: 'release1' }),
+          reportListItem('exact-second', { software_version: 'release1' }),
+          reportListItem('legacy-prefix', { test_version: 'release100' })
+        ]
+      }));
+
+    const listed = await listReports(api, {
+      software_version: 'release1',
+      product: '合一版本',
+      scene: 'API',
+      limit: 1,
+      offset: 1
+    });
+
+    expect(listed).toEqual({
+      success: true,
+      total: 3,
+      reports: [expect.objectContaining({ id: 'legacy-exact', software_version: 'release1' })]
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    const firstUrl = new URL(fetchSpy.mock.calls[0][0] as string, 'http://local.test');
+    const secondUrl = new URL(fetchSpy.mock.calls[1][0] as string, 'http://local.test');
+    expect(firstUrl.pathname).toBe('/api/reports');
+    expect(firstUrl.searchParams.get('software_version')).toBe('release1');
+    expect(firstUrl.searchParams.get('test_version')).toBe('release1');
+    expect(firstUrl.searchParams.get('product')).toBe('合一版本');
+    expect(firstUrl.searchParams.get('scene')).toBe('API');
+    expect(firstUrl.searchParams.get('limit')).toBe('200');
+    expect(firstUrl.searchParams.get('offset')).toBe('0');
+    expect(secondUrl.searchParams.get('offset')).toBe('3');
+  });
+
+  test('prefers software_version and falls back to legacy test_version only when needed', async () => {
+    const detailFields = {
+      scope: { product: '合一版本', scenes: ['API'] },
+      environment: {},
+      risks: [],
+      result_data: []
+    };
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(await mockJson({
+        success: true,
+        report: {
+          ...reportListItem('current', { software_version: 'release2', test_version: 'stale-v1' }),
+          ...detailFields
+        }
+      }))
+      .mockResolvedValueOnce(await mockJson({
+        success: true,
+        report: {
+          ...reportListItem('legacy', { test_version: 'release1' }),
+          ...detailFields
+        }
+      }))
+      .mockResolvedValueOnce(await mockJson({
+        success: true,
+        report: {
+          ...reportListItem('invalid', {}),
+          ...detailFields
+        }
+      }));
+
+    await expect(getReport(api, 'current')).resolves.toMatchObject({
+      report: { software_version: 'release2', test_version: 'stale-v1' }
+    });
+    await expect(getReport(api, 'legacy')).resolves.toMatchObject({
+      report: { software_version: 'release1', test_version: 'release1' }
+    });
+    await expect(getReport(api, 'invalid')).rejects.toMatchObject({
+      name: 'ApiError',
+      code: 'INVALID_REPORT_RESPONSE'
+    });
+  });
+
+  test('does not retry a transport failure and reports an unknown report outcome', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new TypeError('connection reset'));
+
+    const request = createReport(api, {
+      software_version: 'release1',
+      scope: { product: '合一版本', scenes: ['API'] }
+    });
+
+    await expect(request).rejects.toBeInstanceOf(ReportOutcomeUnknownError);
+    await expect(request).rejects.toMatchObject({ code: 'REPORT_OUTCOME_UNKNOWN' });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('aborts a timed-out report request once and reports an unknown outcome', async () => {
+    vi.useFakeTimers();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => (
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          reject(new DOMException('The operation was aborted', 'AbortError'));
+        });
+      })
+    ));
+    const request = createReport(api, {
+      software_version: 'release1',
+      scope: { product: '合一版本', scenes: ['API'] }
+    }, { timeoutMs: 10 });
+    const assertion = expect(request).rejects.toBeInstanceOf(ReportOutcomeUnknownError);
+
+    await vi.advanceTimersByTimeAsync(11);
+
+    await assertion;
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect((fetchSpy.mock.calls[0][1] as RequestInit).signal).toBeInstanceOf(AbortSignal);
   });
 
   test('loads, downloads, and deletes persisted reports through the selected subpath gateway', async () => {

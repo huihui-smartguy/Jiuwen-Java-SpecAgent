@@ -140,6 +140,7 @@ export function Observation({
   const caseStatusTriggerRef = useRef<HTMLButtonElement>(null);
   const caseStatusCloseRef = useRef<HTMLButtonElement>(null);
   const caseStatusDrawerRef = useRef<HTMLElement>(null);
+  const lastValidTaskRef = useRef(activeTask);
   const taskSut = activeTask.sourceSut ?? selectedSut;
   const api = useMemo(
     () => ({ apiBaseUrl: taskSut.apiBaseUrl || runtimeConfig.apiBaseUrl }),
@@ -173,15 +174,18 @@ export function Observation({
       void taskQuery.refetch();
     }
   });
-  const task = taskQuery.isError
-    ? asPollingError(activeTask)
-    : taskQuery.data?.task
-      ? {
-          ...taskQuery.data.task,
-          version: taskQuery.data.task.version ?? activeTask.version,
-          sourceSut: taskQuery.data.task.sourceSut ?? activeTask.sourceSut
-        }
-      : activeTask;
+  const retainedTask = lastValidTaskRef.current.task_id === activeTask.task_id
+    ? lastValidTaskRef.current
+    : activeTask;
+  const latestLiveTask = taskQuery.data?.source === 'live' ? taskQuery.data.task : undefined;
+  const latestValidTask = latestLiveTask
+    ? {
+        ...latestLiveTask,
+        version: latestLiveTask.version ?? activeTask.version,
+        sourceSut: latestLiveTask.sourceSut ?? activeTask.sourceSut
+      }
+    : retainedTask;
+  const task = taskQuery.isError ? asPollingError(latestValidTask) : latestValidTask;
   const scriptStatusQuery = useQuery<TaskScriptStatusResponse>({
     queryKey: ['task-script-status', api.apiBaseUrl, task.task_id],
     queryFn: async () => {
@@ -200,14 +204,16 @@ export function Observation({
       }
     },
     enabled: caseStatusOpen,
-    refetchInterval: isPollingTask(task) ? 5000 : false,
-    refetchIntervalInBackground: true
+    refetchInterval: caseStatusOpen && isPollingTask(task) ? 2000 : false,
+    refetchIntervalInBackground: false
   });
   const progress = task.progress;
   const completedCommands = progress?.completed ?? task.result?.success_count ?? 0;
   const totalCommands = progress?.total_commands ?? task.result?.total_commands ?? 0;
   const currentCommand = stripCommandPrefix(progress?.current_command, t.noCurrentCommand);
   const cancellationAcknowledged = cancellationRequestedTaskId === task.task_id;
+  const cancellationAwaitingConfirmation = cancellationAcknowledged && isPollingTask(task);
+  const cancellationConfirmed = cancellationAcknowledged && task.status === 'cancelled';
   const cancellationPending = cancellation.isPending && cancellation.variables === task.task_id;
   const cancellationFailed = cancellation.isError && cancellation.variables === task.task_id;
   const canRequestCancellation = isPollingTask(task) && !cancellationAcknowledged;
@@ -244,8 +250,23 @@ export function Observation({
           ? 'is-connected'
           : 'is-pending';
 
+  const returnedScriptCount = scriptStatusQuery.data?.scripts_status.length ?? 0;
+  const authoritativeScriptTotal = task.total_scripts ?? totalCommands;
+  const pendingScriptCount = Math.max(authoritativeScriptTotal - returnedScriptCount, 0);
+
   useEffect(() => {
-    if (taskQuery.data) {
+    if (taskQuery.data?.source !== 'live') {
+      return;
+    }
+    lastValidTaskRef.current = {
+      ...taskQuery.data.task,
+      version: taskQuery.data.task.version ?? activeTask.version,
+      sourceSut: taskQuery.data.task.sourceSut ?? activeTask.sourceSut
+    };
+  }, [activeTask.sourceSut, activeTask.version, taskQuery.data]);
+
+  useEffect(() => {
+    if (taskQuery.data?.source === 'live') {
       onTaskStatusChange({
         ...taskQuery.data.task,
         version: taskQuery.data.task.version ?? activeTask.version,
@@ -253,6 +274,16 @@ export function Observation({
       });
     }
   }, [activeTask.version, onTaskStatusChange, taskQuery.data, taskSut]);
+
+  useEffect(() => {
+    if (
+      cancellationRequestedTaskId === task.task_id
+      && task.isTerminal
+      && task.status !== 'cancelled'
+    ) {
+      setCancellationRequestedTaskId(undefined);
+    }
+  }, [cancellationRequestedTaskId, task.isTerminal, task.status, task.task_id]);
 
   const closeCaseStatus = () => {
     setCaseStatusOpen(false);
@@ -296,6 +327,7 @@ export function Observation({
 
   useEffect(() => {
     setCaseStatusOpen(false);
+    setCancellationRequestedTaskId((current) => current === task.task_id ? current : undefined);
   }, [task.task_id]);
 
   return (
@@ -424,12 +456,20 @@ export function Observation({
                 {cancellationPending ? t.requestingCancellation : t.requestCancellation}
               </button>
             </div>
-            {cancellationAcknowledged ? (
+            {cancellationAwaitingConfirmation ? (
               <p className="cancellation-status" role="status">{t.cancellationRequested}</p>
+            ) : cancellationConfirmed ? (
+              <p className="cancellation-status" role="status">
+                {language === 'zh' ? '执行端已确认任务取消。' : 'Cancellation confirmed by the executor.'}
+              </p>
             ) : null}
             {taskQuery.isError ? <p className="polling-error">{t.pollingErrorHint}</p> : null}
             {cancellationFailed ? <p className="polling-error">{cancellationError}</p> : null}
-            <p className="observation-cancel-note">{t.cancellationRetentionHint}</p>
+            <p className="observation-cancel-note">
+              {language === 'zh'
+                ? '当前子进程会先执行完成；执行端将在下一个脚本边界安全停止，并保留已完成步骤和结果。'
+                : 'The current subprocess finishes first; the executor stops safely at the next script boundary and retains completed steps and results.'}
+            </p>
           </div>
         </section>
       </div>
@@ -468,8 +508,8 @@ export function Observation({
             {scriptStatusQuery.data ? (
               <p className="observation-case-summary" role="status">
                 {language === 'zh'
-                  ? `${scriptStatusQuery.data.summary.pass_count} 通过 · ${scriptStatusQuery.data.summary.running_count} 执行中 · ${scriptStatusQuery.data.summary.failed_count} 失败 · ${scriptStatusQuery.data.summary.todo_count} 待执行`
-                  : `${scriptStatusQuery.data.summary.pass_count} passed · ${scriptStatusQuery.data.summary.running_count} running · ${scriptStatusQuery.data.summary.failed_count} failed · ${scriptStatusQuery.data.summary.todo_count} pending`}
+                  ? `${scriptStatusQuery.data.summary.pass_count} 通过 · ${scriptStatusQuery.data.summary.running_count} 执行中 · ${scriptStatusQuery.data.summary.failed_count} 失败 · ${pendingScriptCount} 待执行`
+                  : `${scriptStatusQuery.data.summary.pass_count} passed · ${scriptStatusQuery.data.summary.running_count} running · ${scriptStatusQuery.data.summary.failed_count} failed · ${pendingScriptCount} pending`}
               </p>
             ) : null}
 

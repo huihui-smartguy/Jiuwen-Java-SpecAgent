@@ -48,15 +48,14 @@ const reportResponse = {
     id: 'report-detail-1',
     title: 'Release verification report',
     software_version: 'AgentPlatform 3.5.2 build 20260715.1',
-    test_version: 'release1',
     scope: {
       product: 'AgentPlatform',
       scenes: ['API'],
       features: ['Save API'],
-      levels: ['L1']
+      levels: ['L1'],
+      total_scripts: 7
     },
     environment: {
-      test_version: 'release1',
       execute_mode: 'pytest',
       env_vars: { A2A_BASE_URL: 'http://sut.example.test' },
       sut: {
@@ -138,7 +137,7 @@ afterEach(() => {
 });
 
 describe('Report detail', () => {
-  test('renders the persisted snapshot, public downloads, gates, risks, environment, and case results', async () => {
+  test('renders the canonical version, immutable provenance, public downloads, gates, environment, and case results', async () => {
     const runtimeConfig = resolveRuntimeConfig({
       enableMockFallback: false,
       apiBaseUrl: '/testwise/api',
@@ -162,6 +161,14 @@ describe('Report detail', () => {
     expect(screen.getByText('Save endpoint returned 500')).toBeInTheDocument();
     expect(screen.getByText('runner-01')).toBeInTheDocument();
     expect(screen.getByText('save_api_test.py')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Provenance & scope' })).toBeInTheDocument();
+    expect(screen.getByText('Unbound / unavailable')).toBeInTheDocument();
+    expect(screen.getByText(/Persisted and immutable/)).toBeInTheDocument();
+    expect(screen.getByText('Actual executed rows')).toBeInTheDocument();
+    expect(screen.getByText('Registered scripts in scope')).toBeInTheDocument();
+    expect(screen.getByText('7')).toBeInTheDocument();
+    expect(screen.queryByText('task-report-source')).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('undefined');
     expect(screen.getByRole('link', { name: 'Download Markdown' })).toHaveAttribute(
       'href',
       '/testwise/api/reports/report-detail-1/download?format=md'
@@ -175,6 +182,93 @@ describe('Report detail', () => {
       '/testwise/api/download/public/execution.log'
     );
     expect(screen.queryByText('/srv/private/results/execution.log')).not.toBeInTheDocument();
+  });
+
+  test('treats a zero-row report as neutral even when the backend verdict says passed', async () => {
+    const zeroResultResponse = {
+      success: true,
+      report: {
+        ...reportResponse.report,
+        id: 'report-empty',
+        title: 'Empty release report',
+        software_version: 'release-empty',
+        scope: {
+          ...reportResponse.report.scope,
+          total_scripts: 7
+        },
+        summary: {
+          ...reportResponse.report.summary,
+          total: 0,
+          pass: 0,
+          failed: 0,
+          skipped: 0,
+          success_rate: 100,
+          total_duration_seconds: 0,
+          by_feature: []
+        },
+        conclusion: {
+          passed: true,
+          verdict: 'Passed',
+          reason: 'Backend generated a passing gate for an empty report',
+          gates: [{
+            name: 'Overall success rate',
+            required: '95%',
+            actual: '100%',
+            passed: true
+          }]
+        },
+        risks: [],
+        result_data: []
+      }
+    };
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => json(zeroResultResponse));
+
+    renderDetail();
+
+    expect(await screen.findByRole('heading', { name: 'Empty release report' })).toBeInTheDocument();
+    expect(screen.getAllByText('No matching execution data').length).toBeGreaterThan(0);
+    expect(screen.getByText('—')).toBeInTheDocument();
+    expect(screen.queryByText('100.0%')).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Passed$/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Overall success rate')).not.toBeInTheDocument();
+    expect(screen.getByText(/cannot be judged as passed or failed/)).toBeInTheDocument();
+  });
+
+  test('distinguishes an all-passed report with no detail rows from a zero-match report', async () => {
+    const allPassedResponse = {
+      success: true,
+      report: {
+        ...reportResponse.report,
+        id: 'report-all-passed',
+        title: 'All passed report',
+        summary: {
+          ...reportResponse.report.summary,
+          total: 2,
+          pass: 2,
+          failed: 0,
+          skipped: 0,
+          success_rate: 100,
+          total_duration_seconds: 3,
+          by_feature: []
+        },
+        conclusion: {
+          passed: true,
+          verdict: 'Passed',
+          reason: 'All executed cases passed',
+          gates: []
+        },
+        risks: [],
+        result_data: []
+      }
+    };
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => json(allPassedResponse));
+
+    renderDetail();
+
+    expect(await screen.findByRole('heading', { name: 'All passed report' })).toBeInTheDocument();
+    expect(screen.getAllByText('All executed cases passed')).toHaveLength(2);
+    expect(screen.queryByText('No matching execution data')).not.toBeInTheDocument();
+    expect(screen.getByText('100.0%')).toBeInTheDocument();
   });
 
   test('deletes only after explicit confirmation and returns to the report list', async () => {

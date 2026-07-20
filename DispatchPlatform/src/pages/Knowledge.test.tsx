@@ -245,7 +245,7 @@ describe('approved Knowledge frame', () => {
     });
   });
 
-  test('imports only the Knowledge stylesheet, encodes the approved geometry, and removes the legacy placeholder', () => {
+  test('imports only the Knowledge stylesheet and keeps the approved composition spacious and responsive', () => {
     const legacyPagePath = ['src/pages/Shell', 'Page.tsx'].join('');
 
     expect(existsSync('src/styles/routes/knowledge.css')).toBe(true);
@@ -262,7 +262,7 @@ describe('approved Knowledge frame', () => {
       /\.knowledge-page\s*\{[^}]*gap:\s*24px;/
     );
     expect(knowledgeCss).toMatch(
-      /\.knowledge-page > \.page-header\s*\{[^}]*height:\s*110px;[^}]*min-height:\s*110px;/
+      /\.knowledge-page > \.page-header\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*110px;/
     );
     expect(knowledgeCss).toMatch(
       /\.knowledge-page > \.page-header h1\s*\{[^}]*letter-spacing:\s*0;/
@@ -272,22 +272,47 @@ describe('approved Knowledge frame', () => {
     );
     expect(knowledgeCss).toMatch(/\.knowledge-new-entry\s*\{[^}]*gap:\s*10px;/);
     expect(knowledgeCss).toMatch(
-      /\.knowledge-search-surface\s*\{[^}]*height:\s*64px;[^}]*border-radius:\s*18px;/
+      /\.knowledge-search-surface\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*64px;[^}]*border-radius:\s*18px;/
     );
     expect(knowledgeCss).toMatch(
       /\.knowledge-collections\s*\{[^}]*grid-template-columns:\s*421px 422px 421px;[^}]*gap:\s*16px;/
     );
-    expect(knowledgeCss).toMatch(/\.knowledge-collection-card\s*\{[^}]*height:\s*200px;[^}]*padding:\s*22px 24px;/);
+    expect(knowledgeCss).toMatch(
+      /\.knowledge-collection-card\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*216px;[^}]*gap:\s*14px;[^}]*padding:\s*22px 24px;/
+    );
     expect(knowledgeCss).toMatch(
       /\.knowledge-lower-grid\s*\{[^}]*grid-template-columns:\s*856px 416px;[^}]*gap:\s*24px;/
     );
-    expect(knowledgeCss).toMatch(/\.knowledge-recent-card\s*\{[^}]*height:\s*476px;[^}]*padding:\s*22px 28px;/);
-    expect(knowledgeCss).toMatch(/\.knowledge-gaps-card\s*\{[^}]*height:\s*476px;[^}]*padding:\s*22px 24px;/);
+    expect(knowledgeCss).toMatch(
+      /\.knowledge-recent-card\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*476px;[^}]*padding:\s*22px 28px;/
+    );
+    expect(knowledgeCss).toMatch(
+      /\.knowledge-gaps-card\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*476px;[^}]*padding:\s*22px 24px;/
+    );
     expect(knowledgeCss).toMatch(
       /\.knowledge-page \.presentation-only-button\s*\{[^}]*min-height:\s*44px;/
     );
     expect(knowledgeCss).toMatch(
       /@media \(max-width:\s*980px\)[\s\S]*\.knowledge-recent-card,[\s\S]*\.knowledge-gaps-card\s*\{[^}]*grid-column:\s*1\s*\/\s*-1;/
     );
+    expect(knowledgeCss).toMatch(
+      /\.knowledge-eyebrow\s*\{[^}]*font-size:\s*12px;[^}]*line-height:\s*18px;/
+    );
+    expect(knowledgeCss).toMatch(
+      /\.knowledge-gap-list li > strong\s*\{[^}]*font-size:\s*12px;[^}]*line-height:\s*18px;/
+    );
+    expect(knowledgeCss).toMatch(
+      /\.knowledge-gap-list li > p\s*\{[^}]*font-size:\s*14px;[^}]*line-height:\s*22px;/
+    );
+    expect(knowledgeCss).toMatch(
+      /\.knowledge-gap-list li\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*130px;/
+    );
+    expect(knowledgeCss).toMatch(
+      /\.knowledge-gap-list h3\s*\{[^}]*overflow-wrap:\s*break-word;[^}]*word-break:\s*normal;/
+    );
+    expect(knowledgeCss).not.toMatch(/font-size:\s*11px;/);
+    expect(knowledgeCss).not.toMatch(/\.knowledge-gap-list h3\s*\{[^}]*(?:text-overflow|white-space):/);
+    expect(knowledgeCss).toMatch(/@media \(max-width:\s*1439px\)/);
+    expect(knowledgeCss).toMatch(/@media \(max-width:\s*420px\)/);
   });
 });

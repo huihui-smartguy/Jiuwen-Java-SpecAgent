@@ -1,7 +1,14 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ApiError, createTask, getFeatures, getScripts, getVersions } from '../api/client';
+import {
+  ApiError,
+  createTask,
+  getFeatures,
+  getScripts,
+  getScriptsForFeatures,
+  getVersions
+} from '../api/client';
 import { PageHeader } from '../components/PageHeader';
 import { mockFeatures, mockScripts } from '../data/mockData';
 import { getCopy } from '../i18n';
@@ -138,14 +145,10 @@ export function Tasks({
       };
       try {
         if (mode === 'scene') {
-          const responses = await Promise.all(featureNames.map((feature) => getScripts(api, {
+          return (await getScriptsForFeatures(api, {
             product: targetIdentity.product,
-            scene: targetIdentity.scene,
-            feature
-          })));
-          return [...new Map(
-            responses.flatMap((response) => response.scripts).map((script) => [script.id, script])
-          ).values()];
+            scene: targetIdentity.scene
+          }, featureNames)).scripts;
         }
         return (await getScripts(api, query)).scripts;
       } catch (error) {

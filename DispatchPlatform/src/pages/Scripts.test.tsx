@@ -82,25 +82,57 @@ function deferred<T>() {
   return { promise, reject, resolve };
 }
 
-function mockLiveScriptsApi(scripts: Script[]) {
+interface FeatureScope {
+  name: string;
+  scripts: Script[];
+}
+
+function mockFeatureScopedScriptsApi(scopes: FeatureScope[]) {
   return vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
     const url = new URL(String(input), 'http://local.test');
-    if (!url.pathname.endsWith('/scripts')) {
-      throw new Error(`unexpected request: ${url.toString()}`);
-    }
-
-    return json({
-      success: true,
-      scripts,
-      total: scripts.length,
-      filters: {
+    if (url.pathname.endsWith('/features')) {
+      return json({
+        success: true,
         product: url.searchParams.get('product'),
         scene: url.searchParams.get('scene'),
-        feature: url.searchParams.get('feature'),
-        level: url.searchParams.get('level')
+        features: scopes.map((scope, index) => ({
+          id: `feature-${index + 1}`,
+          name: scope.name,
+          type: 'L1'
+        })),
+        total: scopes.length
+      });
+    }
+    if (url.pathname.endsWith('/scripts')) {
+      const feature = url.searchParams.get('feature');
+      const scope = scopes.find((candidate) => candidate.name === feature);
+      if (!feature || !scope) {
+        throw new Error(`expected an exact feature request: ${url.toString()}`);
       }
-    });
+
+      return json({
+        success: true,
+        scripts: scope.scripts,
+        total: scope.scripts.length,
+        filters: {
+          product: url.searchParams.get('product'),
+          scene: url.searchParams.get('scene'),
+          feature,
+          level: url.searchParams.get('level')
+        }
+      });
+    }
+
+    throw new Error(`unexpected request: ${url.toString()}`);
   });
+}
+
+function mockLiveScriptsApi(scripts: Script[]) {
+  const featureNames = Array.from(new Set(scripts.map((script) => script.feature)));
+  return mockFeatureScopedScriptsApi(featureNames.map((name) => ({
+    name,
+    scripts: scripts.filter((script) => script.feature === name)
+  })));
 }
 
 afterEach(() => {
@@ -221,9 +253,10 @@ describe('approved Scripts frame', () => {
 
     pendingResponse.resolve(await json({
       success: true,
-      scripts: [],
+      product: mockRuntimeConfig.sutTargets[0].product,
+      scene: mockRuntimeConfig.sutTargets[0].scene,
+      features: [],
       total: 0,
-      filters: {}
     }));
     await waitFor(() => expect(tableCard).not.toHaveAttribute('aria-busy', 'true'));
   });
@@ -275,7 +308,7 @@ describe('approved Scripts frame', () => {
     expect(screen.getAllByRole('button')).toEqual([importButton]);
   });
 
-  test('uses the selected Object API base and target in one unfiltered getScripts request', async () => {
+  test('uses the selected Object API base and target for feature discovery and one exact feature request', async () => {
     const runtimeConfig = resolveRuntimeConfig({
       defaultLanguage: 'zh',
       enableMockFallback: false,
@@ -309,13 +342,86 @@ describe('approved Scripts frame', () => {
     renderScripts({ runtimeConfig, selectedSut: runtimeConfig.sutTargets[0] });
 
     expect(await screen.findByText('live_script')).toBeInTheDocument();
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    const requests = fetchSpy.mock.calls.map(([input]) => new URL(String(input), 'http://local.test'));
+    expect(requests.map((request) => request.pathname)).toEqual([
+      '/object-api/features',
+      '/object-api/scripts'
+    ]);
+    for (const request of requests) {
+      expect(request.searchParams.get('product')).toBe('合一版本');
+      expect(request.searchParams.get('scene')).toBe('API');
+    }
+    expect(requests[0].searchParams.has('feature')).toBe(false);
+    expect(requests[1].searchParams.get('feature')).toBe('Live feature');
+    expect(requests[1].searchParams.has('level')).toBe(false);
+  });
+
+  test('aggregates every discovered feature in order and stably deduplicates repeated scripts', async () => {
+    const baseScript: Script = {
+      id: 'shared-script',
+      name: 'shared_from_first_feature',
+      filename: 'shared.py',
+      extension: '.py',
+      product: '合一版本',
+      scene: 'API',
+      feature: 'Feature A',
+      level: 'L1',
+      size: 64,
+      path: 'api/shared.py'
+    };
+    const fetchSpy = mockFeatureScopedScriptsApi([
+      {
+        name: 'Feature A',
+        scripts: [
+          baseScript,
+          { ...baseScript, id: 'feature-a-only', name: 'feature_a_only', path: 'api/a.py' }
+        ]
+      },
+      {
+        name: 'Feature B',
+        scripts: [
+          { ...baseScript, name: 'duplicate_from_second_feature', feature: 'Feature B' },
+          { ...baseScript, id: 'feature-b-only', name: 'feature_b_only', feature: 'Feature B', path: 'api/b.py' }
+        ]
+      }
+    ]);
+
+    renderScripts();
+
+    const table = await screen.findByRole('table', { name: '脚本资产' });
+    await waitFor(() => expect(within(table).getAllByRole('row')).toHaveLength(4));
+    const names = within(table).getAllByRole('row').slice(1).map((row) => (
+      within(row).getAllByRole('cell')[0].textContent
+    ));
+    expect(names).toEqual([
+      'shared_from_first_featureapi/shared.py',
+      'feature_a_onlyapi/a.py',
+      'feature_b_onlyapi/b.py'
+    ]);
+    expect(within(table).queryByText('duplicate_from_second_feature')).not.toBeInTheDocument();
+    expect(fetchSpy.mock.calls.map(([input]) => {
+      const url = new URL(String(input), 'http://local.test');
+      return [url.pathname, url.searchParams.get('feature')];
+    })).toEqual([
+      ['/api/features', null],
+      ['/api/scripts', 'Feature A'],
+      ['/api/scripts', 'Feature B']
+    ]);
+  });
+
+  test('shows the empty state without issuing an unfiltered scripts request when no features exist', async () => {
+    const fetchSpy = mockFeatureScopedScriptsApi([]);
+
+    renderScripts();
+
+    const table = await screen.findByRole('table', { name: '脚本资产' });
+    expect(await within(table).findByText('没有匹配的脚本')).toBeInTheDocument();
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const request = new URL(String(fetchSpy.mock.calls[0][0]), 'http://local.test');
-    expect(request.pathname).toBe('/object-api/scripts');
-    expect(request.searchParams.get('product')).toBe('合一版本');
-    expect(request.searchParams.get('scene')).toBe('API');
-    expect(request.searchParams.has('feature')).toBe(false);
-    expect(request.searchParams.has('level')).toBe(false);
+    expect(request.pathname).toBe('/api/features');
+    expect(request.searchParams.get('product')).toBe(mockRuntimeConfig.sutTargets[0].product);
+    expect(request.searchParams.get('scene')).toBe(mockRuntimeConfig.sutTargets[0].scene);
   });
 
   test('never caps live API rows to the four-row approved fallback frame', async () => {
@@ -427,7 +533,18 @@ describe('approved Scripts frame', () => {
     };
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
       const url = new URL(String(input), 'http://local.test');
+      if (url.pathname.endsWith('/features')) {
+        const scripts = rowsByPath[url.pathname.replace(/\/features$/, '/scripts')] ?? [];
+        return json({
+          success: true,
+          product: url.searchParams.get('product'),
+          scene: url.searchParams.get('scene'),
+          features: scripts.map((script) => ({ id: script.feature, name: script.feature, type: script.level })),
+          total: scripts.length
+        });
+      }
       const scripts = rowsByPath[url.pathname] ?? [];
+      expect(url.searchParams.get('feature')).toBe(scripts[0]?.feature);
       return json({ success: true, scripts, total: scripts.length, filters: {} });
     });
     const user = userEvent.setup();
@@ -439,21 +556,26 @@ describe('approved Scripts frame', () => {
     expect(await screen.findByText('alpha_script')).toBeInTheDocument();
     await user.selectOptions(screen.getByRole('combobox', { name: 'Level' }), 'L1');
     await user.selectOptions(screen.getByRole('combobox', { name: 'Feature' }), 'Alpha Feature');
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
 
     rerenderSelectedSut(runtimeConfig.sutTargets[1]);
 
     expect(await screen.findByText('beta_script')).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Level' })).toHaveValue('All');
     expect(screen.getByRole('combobox', { name: 'Feature' })).toHaveValue('All');
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy).toHaveBeenCalledTimes(4);
 
     await user.selectOptions(screen.getByRole('combobox', { name: 'Level' }), 'L3');
     await user.selectOptions(screen.getByRole('combobox', { name: 'Feature' }), 'Beta Feature');
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy).toHaveBeenCalledTimes(4);
     expect(fetchSpy.mock.calls.map(([input]) => (
       new URL(String(input), 'http://local.test').pathname
-    ))).toEqual(['/alpha-api/scripts', '/beta-api/scripts']);
+    ))).toEqual([
+      '/alpha-api/features',
+      '/alpha-api/scripts',
+      '/beta-api/features',
+      '/beta-api/scripts'
+    ]);
   });
 
   test('refetches and resets target filters when Object data changes under the same ID', async () => {
@@ -510,7 +632,18 @@ describe('approved Scripts frame', () => {
     };
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
       const url = new URL(String(input), 'http://local.test');
+      if (url.pathname.endsWith('/features')) {
+        const scripts = rowsByPath[url.pathname.replace(/\/features$/, '/scripts')] ?? [];
+        return json({
+          success: true,
+          product: url.searchParams.get('product'),
+          scene: url.searchParams.get('scene'),
+          features: scripts.map((script) => ({ id: script.feature, name: script.feature, type: script.level })),
+          total: scripts.length
+        });
+      }
       const scripts = rowsByPath[url.pathname] ?? [];
+      expect(url.searchParams.get('feature')).toBe(scripts[0]?.feature);
       return json({ success: true, scripts, total: scripts.length, filters: {} });
     });
     const user = userEvent.setup();
@@ -519,18 +652,18 @@ describe('approved Scripts frame', () => {
     expect(await screen.findByText('initial_script')).toBeInTheDocument();
     await user.selectOptions(screen.getByRole('combobox', { name: 'Level' }), 'L1');
     await user.selectOptions(screen.getByRole('combobox', { name: 'Feature' }), 'Initial Feature');
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
 
     rerenderSelectedSut(updatedTarget);
 
     expect(await screen.findByText('updated_script')).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Level' })).toHaveValue('All');
     expect(screen.getByRole('combobox', { name: 'Feature' })).toHaveValue('All');
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy).toHaveBeenCalledTimes(4);
 
     await user.selectOptions(screen.getByRole('combobox', { name: 'Level' }), 'L3');
     await user.selectOptions(screen.getByRole('combobox', { name: 'Feature' }), 'Updated Feature');
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy).toHaveBeenCalledTimes(4);
   });
 
   test('derives live summaries only from fetched rows and never assigns mock Last result values', async () => {
@@ -621,7 +754,7 @@ describe('approved Scripts frame', () => {
     expect(within(table).queryByText(/Passed|Failed|Flaky/)).not.toBeInTheDocument();
   });
 
-  test('imports only the Scripts route stylesheet and encodes the approved geometry and responsive safeguards', () => {
+  test('imports only the Scripts route stylesheet and encodes spacious typography and responsive safeguards', () => {
     expect(existsSync('src/styles/routes/scripts.css')).toBe(true);
     const stylesIndex = readFileSync('src/styles.css', 'utf8');
     const scriptsCss = readFileSync('src/styles/routes/scripts.css', 'utf8');
@@ -637,19 +770,19 @@ describe('approved Scripts frame', () => {
       /\.scripts-summary\s*\{[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\);[^}]*gap:\s*16px;[^}]*margin-bottom:\s*24px;/
     );
     expect(scriptsCss).toMatch(
-      /\.scripts-summary-card\s*\{[^}]*height:\s*128px;[^}]*padding:\s*18px 24px 16px;/
+      /\.scripts-summary-card\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*136px;[^}]*padding:\s*20px 24px 18px;/
     );
     expect(scriptsCss).toMatch(
-      /\.scripts-table-card\s*\{[^}]*height:\s*586px;[^}]*padding:\s*24px 28px;/
+      /\.scripts-table-card\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*606px;[^}]*padding:\s*24px 28px;/
     );
     expect(scriptsCss).toMatch(
-      /\.scripts-toolbar\s*\{[^}]*width:\s*calc\(100% \+ 2px\);[^}]*height:\s*48px;[^}]*margin-left:\s*-1px;/
+      /\.scripts-toolbar\s*\{[^}]*width:\s*calc\(100% \+ 2px\);[^}]*min-height:\s*48px;[^}]*gap:\s*24px;[^}]*margin-left:\s*-1px;/
     );
     expect(scriptsCss).toMatch(
       /\.scripts-table-scroll\s*\{[^}]*width:\s*calc\(100% \+ 2px\);[^}]*height:\s*430px;[^}]*flex:\s*0 0 430px;[^}]*margin-left:\s*-1px;/
     );
     expect(scriptsCss).toMatch(
-      /\.scripts-search-control\s*\{[^}]*width:\s*430px;[^}]*height:\s*44px;/
+      /\.scripts-search-control\s*\{[^}]*width:\s*430px;[^}]*height:\s*48px;[^}]*min-height:\s*48px;/
     );
     expect(scriptsCss).toMatch(
       /\.scripts-search-control\s*\{[^}]*background:\s*var\(--color-surface\);/
@@ -668,6 +801,9 @@ describe('approved Scripts frame', () => {
     );
     expect(scriptsCss).toMatch(/\.scripts-table thead tr\s*\{[^}]*height:\s*44px;/);
     expect(scriptsCss).toMatch(/\.scripts-table tbody tr\s*\{[^}]*height:\s*74px;/);
+    expect(scriptsCss).toMatch(/\.scripts-summary-card h2\s*\{[^}]*font-size:\s*15px;[^}]*line-height:\s*var\(--type-body-line\);/);
+    expect(scriptsCss).toMatch(/\.scripts-table\s*\{[^}]*font-size:\s*14px;/);
+    expect(scriptsCss).toMatch(/\.scripts-table th\s*\{[^}]*font-size:\s*13px;[^}]*line-height:\s*20px;/);
     for (const [column, width] of [[1, 360], [2, 230], [3, 100], [4, 150], [5, 140], [6, 260]]) {
       expect(scriptsCss).toMatch(
         new RegExp(`\\.scripts-table th:nth-child\\(${column}\\)[^}]*width:\\s*${width}px;`)
@@ -685,7 +821,7 @@ describe('approved Scripts frame', () => {
       /\.scripts-table td\s*\{[^}]*border-bottom:\s*1px solid var\(--color-outline\);/
     );
     expect(scriptsCss).toMatch(
-      /@media \(max-width:\s*680px\)[\s\S]*\.scripts-filter-control[^}]*min-height:\s*44px;/
+      /@media \(max-width:\s*680px\)[\s\S]*\.scripts-filter-control[^}]*min-height:\s*48px;/
     );
   });
 });

@@ -7,8 +7,8 @@
   gap: 0;
 }
 
-.page-header {
-  height: 130px;
+.overview-page .page-header {
+  height: auto;
   min-height: 130px;
   align-items: center;
   margin-bottom: 24px;
@@ -18,7 +18,7 @@
 .overview-create-task {
   flex: 0 0 120px;
   width: 120px;
-  height: 52px;
+  height: auto;
   min-width: 120px;
   min-height: 52px;
   margin-top: 0;
@@ -32,7 +32,7 @@
 
 .overview-current-run {
   display: grid;
-  height: 96px;
+  height: auto;
   min-height: 96px;
   grid-template-columns: minmax(0, 1.45fr) minmax(0, 1.15fr) minmax(0, 1.35fr) auto;
   align-items: center;
@@ -80,7 +80,8 @@
   color: var(--color-text-secondary);
   font-size: 13px;
   font-weight: 500;
-  line-height: 19px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
 }
 
 .current-run__label strong {
@@ -90,14 +91,13 @@
 
 .overview-current-run .focus-task-id,
 .current-run__command code {
-  overflow: hidden;
   color: var(--color-text-primary);
   font-family: var(--font-ui);
   font-size: 15px;
   font-weight: 700;
   line-height: 22px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .current-run__command code {
@@ -146,25 +146,27 @@
 
 .overview-l0-card {
   display: grid;
-  height: 210px;
+  height: auto;
+  min-height: 210px;
   grid-template-columns: 300px 1px minmax(0, 1fr);
   gap: 24px;
   align-items: stretch;
-  overflow: hidden;
+  overflow: visible;
   padding: 24px;
 }
 
 .overview-l0-score-zone {
   display: grid;
   min-width: 0;
-  grid-template-rows: 48px minmax(0, 1fr);
+  grid-template-rows: minmax(48px, auto) minmax(0, 1fr);
   gap: 8px;
 }
 
 .overview-hierarchy-heading {
   display: flex;
   min-width: 0;
-  height: 48px;
+  height: auto;
+  min-height: 48px;
   align-items: center;
   gap: 12px;
 }
@@ -186,16 +188,17 @@
 .overview-hierarchy-heading p,
 .overview-l1-card__heading p {
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.02em;
-  line-height: 15px;
-  white-space: nowrap;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .overview-l0-card .overview-hierarchy-heading p {
-  font-size: 11px;
-  line-height: 16px;
+  font-size: 13px;
+  line-height: 20px;
 }
 
 .overview-hierarchy-heading h2 {
@@ -275,8 +278,8 @@
 
 .overview-quality-ring__copy span {
   color: var(--color-text-secondary);
-  font-size: 10px;
-  line-height: 16px;
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .overview-l0-score-status,
@@ -294,29 +297,32 @@
   font-size: 14px;
   font-weight: 700;
   line-height: 22px;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .overview-l0-score-status > span:last-child,
 .dimension-assessment__rating > span:last-child {
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 18px;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .overview-status-pill {
   display: inline-flex;
-  min-height: 24px;
+  min-height: 28px;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 0 9px;
+  padding: 5px 10px;
   border-radius: 16px;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
-  line-height: 14px;
-  white-space: nowrap;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .overview-status-pill > span {
@@ -338,7 +344,9 @@
 
 .overview-l0-divider {
   width: 1px;
-  height: 162px;
+  height: auto;
+  min-height: 162px;
+  align-self: stretch;
   background: var(--color-outline);
 }
 
@@ -353,11 +361,12 @@
   position: relative;
   display: grid;
   min-width: 0;
-  height: 162px;
+  height: auto;
+  min-height: 162px;
   align-content: start;
   gap: 8px;
   padding: 16px 24px;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .overview-l0-metric + .overview-l0-metric::before {
@@ -373,17 +382,17 @@
 .overview-l0-metric > p,
 .dimension-summary-zone__eyebrow {
   color: var(--color-accent);
-  font-size: 9px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.02em;
-  line-height: 14px;
+  line-height: 20px;
 }
 
 .overview-l0-metric > span {
   color: var(--color-text-secondary);
   font-size: 14px;
   font-weight: 500;
-  line-height: 20px;
+  line-height: 22px;
 }
 
 .overview-l0-metric > strong {
@@ -399,12 +408,11 @@
 }
 
 .overview-l0-metric > small {
-  overflow: hidden;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 400;
   line-height: 18px;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
 .overview-l1-section {
@@ -416,36 +424,42 @@
 .overview-l1-heading {
   display: flex;
   min-width: 0;
-  height: 44px;
+  height: auto;
+  min-height: 44px;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
 }
 
 .overview-l1-heading .overview-hierarchy-heading {
-  height: 44px;
+  height: auto;
+  min-height: 44px;
 }
 
 .overview-mock-badge {
   display: inline-flex;
-  flex: 0 0 196px;
-  width: 196px;
-  height: 28px;
+  flex: 0 1 auto;
+  width: auto;
+  max-width: 100%;
+  min-height: 32px;
   align-items: center;
   justify-content: center;
   border-radius: 16px;
   color: var(--color-text-secondary);
   background: var(--color-surface);
-  font-size: 10px;
-  line-height: 16px;
-  white-space: nowrap;
+  padding: 6px 12px;
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+  text-align: center;
+  white-space: normal;
 }
 
 .overview-l1-card {
   position: relative;
   display: grid;
   min-height: 350px;
-  grid-template-rows: 48px 1px minmax(205px, 1fr);
+  grid-template-rows: minmax(48px, auto) 1px minmax(240px, 1fr);
   gap: 16px;
   overflow: visible;
   padding: 24px;
@@ -454,7 +468,8 @@
 .overview-l1-card__heading {
   display: flex;
   min-width: 0;
-  height: 48px;
+  height: auto;
+  min-height: 48px;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
@@ -490,11 +505,12 @@
 .dimension-selector__trigger {
   display: grid;
   width: 232px;
-  height: 44px;
+  height: auto;
+  min-height: 48px;
   grid-template-columns: auto minmax(0, 1fr) 16px;
   align-items: center;
   gap: 8px;
-  padding: 0 12px;
+  padding: 10px 12px;
   border: 1px solid var(--color-outline);
   border-radius: 16px;
   color: var(--color-text-primary);
@@ -507,16 +523,16 @@
   font-size: 13px;
   font-weight: 400;
   line-height: 20px;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .dimension-selector__trigger > strong {
-  overflow: hidden;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
-  line-height: 20px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 22px;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .dimension-selector__trigger > svg {
@@ -548,10 +564,11 @@
 .dimension-selector__menu button {
   display: flex;
   width: 100%;
-  height: 42px;
+  height: auto;
+  min-height: 44px;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px;
+  padding: 10px 12px;
   border: 0;
   border-radius: 12px;
   color: var(--color-text-secondary);
@@ -560,7 +577,8 @@
   font-weight: 500;
   line-height: 22px;
   text-align: left;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .dimension-selector__menu button:hover,
@@ -585,7 +603,8 @@
 .performance-summary-grid {
   display: grid;
   min-width: 0;
-  height: 205px;
+  height: auto;
+  min-height: 240px;
   gap: 16px;
 }
 
@@ -597,14 +616,15 @@
 .performance-trend,
 .performance-baseline {
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   border-radius: 16px;
   background: var(--color-surface);
 }
 
 .dimension-summary-zone {
   display: flex;
-  height: 205px;
+  height: auto;
+  min-height: 240px;
   flex-direction: column;
   align-items: flex-start;
   gap: 10px;
@@ -612,17 +632,20 @@
 }
 
 .dimension-summary-zone__eyebrow {
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .dimension-summary-zone__value-row {
   display: flex;
   width: 100%;
   min-width: 0;
-  height: 50px;
+  height: auto;
+  min-height: 50px;
   align-items: baseline;
   gap: 8px;
-  white-space: nowrap;
+  flex-wrap: wrap;
+  overflow-wrap: anywhere;
 }
 
 .dimension-summary-zone__value-row > strong {
@@ -640,8 +663,9 @@
 .dimension-summary-zone__value-row > span,
 .dimension-summary-zone > p:not(.dimension-summary-zone__eyebrow) {
   color: var(--color-text-secondary);
-  font-size: 11px;
-  line-height: 18px;
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
 }
 
 .dimension-progress,
@@ -664,7 +688,8 @@
 .dimension-assessment {
   display: flex;
   min-width: 0;
-  height: 106px;
+  height: auto;
+  min-height: 112px;
   align-items: center;
   gap: 20px;
 }
@@ -675,12 +700,11 @@
 
 .dimension-conclusion,
 .dimension-priority {
-  overflow: hidden;
   width: 100%;
   margin-top: auto;
   font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .issue-severity {
@@ -710,7 +734,8 @@
 
 .performance-trend,
 .performance-baseline {
-  height: 205px;
+  height: auto;
+  min-height: 240px;
   padding: 16px;
 }
 
@@ -749,24 +774,26 @@
 .performance-trend__heading p,
 .performance-baseline__title {
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
-  line-height: 16px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
 }
 
 .performance-trend__change,
 .performance-baseline__delta {
   color: var(--color-success);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
-  line-height: 16px;
-  white-space: nowrap;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .performance-chart {
   display: grid;
   min-height: 0;
-  grid-template-rows: minmax(0, 1fr) 18px;
+  grid-template-rows: minmax(0, 1fr) 20px;
 }
 
 .performance-chart svg {
@@ -804,31 +831,34 @@
   justify-content: space-between;
   color: var(--color-text-secondary);
   font-family: var(--font-mono);
-  font-size: 8px;
-  line-height: 16px;
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .performance-baseline {
   display: grid;
-  grid-template-rows: auto 40px 1fr auto;
+  grid-template-rows: auto minmax(48px, auto) 1fr auto;
   gap: 8px;
 }
 
 .performance-baseline__summary {
   display: flex;
   min-width: 0;
-  height: 40px;
+  height: auto;
+  min-height: 48px;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 0 12px;
+  padding: 8px 12px;
   border-radius: 8px;
   color: var(--color-text-secondary);
   background: var(--color-canvas);
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 500;
-  line-height: 16px;
-  white-space: nowrap;
+  line-height: 20px;
+  flex-wrap: wrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .performance-baseline__rows {
@@ -840,21 +870,27 @@
 .performance-baseline__rows > div {
   display: flex;
   min-width: 0;
-  height: 32px;
+  height: auto;
+  min-height: 44px;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 0 10px;
+  padding: 10px;
   border-radius: 8px;
   color: var(--color-text-secondary);
   background: var(--color-surface-low);
-  font-size: 10px;
-  line-height: 16px;
+  font-size: 13px;
+  line-height: 20px;
 }
 
 .performance-baseline__rows dt,
 .performance-baseline__rows dd {
   margin: 0;
+}
+
+.performance-baseline__rows dt {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .performance-baseline__rows dd {
@@ -992,8 +1028,8 @@
 }
 
 @media (max-width: 980px) {
-  .page-header {
-    height: 90px;
+  .overview-page .page-header {
+    height: auto;
     min-height: 90px;
   }
 
@@ -1031,7 +1067,7 @@
 }
 
 @media (max-width: 680px) {
-  .page-header {
+  .overview-page .page-header {
     height: auto;
     min-height: 0;
     margin-bottom: 18px;
@@ -1145,9 +1181,9 @@
   .overview-l1-card__heading p,
   .overview-hierarchy-heading p,
   .dimension-summary-zone__eyebrow {
-    overflow: hidden;
     max-width: 100%;
-    text-overflow: ellipsis;
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 
   .performance-baseline__summary {

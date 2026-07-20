@@ -7,11 +7,12 @@ import {
   type KeyboardEvent as ReactKeyboardEvent
 } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ApiError, getVersions, listReports } from '../api/client';
+import { ApiError, getVersions, listAllReports } from '../api/client';
 import { MetricCard } from '../components/MetricCard';
 import { PageHeader } from '../components/PageHeader';
 import { ReportGenerationModal } from '../components/ReportGenerationModal';
 import { getCopy } from '../i18n';
+import { reportOutcome } from '../reportSemantics';
 import type {
   Language,
   NormalizedTaskStatus,
@@ -161,8 +162,11 @@ function passRateForTask(task: NormalizedTaskStatus): number | undefined {
 
 function resultForTask(
   task: NormalizedTaskStatus,
-  labels: Record<UiTaskStatus | 'partial', string>
+  labels: Record<UiTaskStatus | 'partial' | 'no_results', string>
 ): { label: string; tone: ResultTone } {
+  if (task.uiStatus === 'success' && (task.result?.total_commands ?? 0) <= 0) {
+    return { label: labels.no_results, tone: 'neutral' };
+  }
   if (task.uiStatus === 'success' && task.result?.failed_count) {
     return task.result.success_count > 0
       ? { label: labels.partial, tone: 'warning' }
@@ -245,7 +249,7 @@ function formatDuration(seconds: number | undefined): string {
 function liveViewModel(
   tasks: NormalizedTaskStatus[],
   selectedSut: SutTarget,
-  labels: Record<UiTaskStatus | 'partial', string>,
+  labels: Record<UiTaskStatus | 'partial' | 'no_results', string>,
   notes: {
     session: string;
     withResults: string;
@@ -310,6 +314,61 @@ function liveViewModel(
   };
 }
 
+function persistedViewModel(reports: ReportListItem[], language: Language): ResultsViewModel {
+  const isChinese = language === 'zh';
+  const executedReports = reports.filter((report) => report.summary.total > 0);
+  const pass = executedReports.reduce((total, report) => total + report.summary.pass, 0);
+  const failed = executedReports.reduce((total, report) => total + report.summary.failed, 0);
+  const skipped = executedReports.reduce((total, report) => total + report.summary.skipped, 0);
+  const running = executedReports.reduce((total, report) => total + (report.summary.running ?? 0), 0);
+  const conclusive = pass + failed;
+  const durations = executedReports
+    .map((report) => report.summary.total_duration_seconds)
+    .filter((duration) => Number.isFinite(duration) && duration >= 0);
+  const averageDuration = durations.length
+    ? durations.reduce((total, duration) => total + duration, 0) / durations.length
+    : undefined;
+  const latestByDay = new Map<string, ReportListItem>();
+  [...executedReports]
+    .sort((left, right) => left.created_at.localeCompare(right.created_at))
+    .forEach((report) => latestByDay.set(report.created_at.slice(0, 10), report));
+  const trendPoints = [...latestByDay.entries()].slice(-7).map(([date, report]) => ({
+    label: date.slice(5),
+    value: report.summary.success_rate
+  }));
+  const failures: FailureRow[] = [
+    { label: isChinese ? '失败' : 'Failed', count: failed, tone: 'danger' as const },
+    { label: isChinese ? '跳过' : 'Skipped', count: skipped, tone: 'warning' as const },
+    { label: isChinese ? '执行中' : 'Running', count: running, tone: 'accent' as const }
+  ].filter((row) => row.count > 0);
+
+  return {
+    metrics: [
+      String(reports.length),
+      conclusive > 0 ? `${((pass / conclusive) * 100).toFixed(1)}%` : '—',
+      String(failed),
+      formatDuration(averageDuration)
+    ],
+    metricNotes: isChinese
+      ? [
+          '当前精确版本',
+          `${executedReports.length} 份含执行数据`,
+          '需要复核',
+          durations.length ? `${durations.length} 份报告` : '—'
+        ]
+      : [
+          'Current exact version',
+          `${executedReports.length} reports with executions`,
+          'Review required',
+          durations.length ? `${durations.length} reports` : '—'
+        ],
+    trendPoints,
+    failures,
+    failureTotal: failed + skipped + running,
+    reports: []
+  };
+}
+
 function TrendChart({
   title,
   unavailable,
@@ -330,40 +389,37 @@ function TrendChart({
       aria-label={`${title}：${description}`}
       data-point-count={points.length}
     >
-      {points.map((point, index) => (
-        <div className="results-trend-item" key={`${point.label}-${index}`} aria-hidden="true">
-          <span className="results-trend-bar-track">
-            <span
-              className={`results-trend-bar${index === points.length - 1 ? ' is-current' : ''}`}
-              style={{
-                height: `${point.barHeight ?? Math.max(12, Math.min(112, point.value * 1.12))}px`
-              }}
-            />
-          </span>
-          <span className="results-trend-label">{point.label}</span>
-        </div>
-      ))}
+      {points.length ? points.map((point, index) => (
+          <div className="results-trend-item" key={`${point.label}-${index}`} aria-hidden="true">
+            <span className="results-trend-bar-track">
+              <span
+                className={`results-trend-bar${index === points.length - 1 ? ' is-current' : ''}`}
+                style={{
+                  height: `${point.barHeight ?? Math.max(12, Math.min(112, point.value * 1.12))}px`
+                }}
+              />
+            </span>
+            <span className="results-trend-label">{point.label}</span>
+          </div>
+        )) : (
+          <p className="results-chart-empty" aria-hidden="true">{unavailable}</p>
+        )}
     </div>
   );
 }
 
 type ResultsTab = 'session' | 'persisted';
 
-function softwareVersionStorageKey(objectId: string) {
-  return `testwise.reportSoftwareVersion:${objectId}`;
+function reportVersionStorageKey(objectId: string) {
+  return `testwise.reportCanonicalVersion:${objectId}`;
 }
 
-function initialSoftwareVersion(sut: SutTarget) {
+function storedReportVersion(sut: SutTarget) {
   try {
-    return window.localStorage.getItem(softwareVersionStorageKey(sut.id)) ?? sut.version;
+    return window.localStorage.getItem(reportVersionStorageKey(sut.id)) ?? '';
   } catch {
-    return sut.version;
+    return '';
   }
-}
-
-function hasExactSoftwareVersion(value: string) {
-  const normalized = value.trim();
-  return Boolean(normalized) && !/^(?:live|current|latest)$/i.test(normalized);
 }
 
 function persistedReportMatches(report: ReportListItem, search: string) {
@@ -374,7 +430,6 @@ function persistedReportMatches(report: ReportListItem, search: string) {
     report.title,
     report.id,
     report.software_version,
-    report.test_version,
     report.conclusion.verdict,
     report.created_by,
     report.created_at
@@ -402,9 +457,7 @@ export function Results({
   const [reportSearch, setReportSearch] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [generateOpen, setGenerateOpen] = useState(false);
-  const [softwareVersion, setSoftwareVersion] = useState(() => initialSoftwareVersion(selectedSut));
-  const [softwareVersionObjectId, setSoftwareVersionObjectId] = useState(selectedSut.id);
-  const [testVersionFilter, setTestVersionFilter] = useState('');
+  const [reportVersion, setReportVersion] = useState(() => storedReportVersion(selectedSut));
   const [reportPage, setReportPage] = useState(0);
   const trendTitle = language === 'zh' ? '通过率趋势' : 'Pass rate trend';
   const trendPeriod = language === 'zh' ? '近 7 天' : 'Last 7 days';
@@ -417,52 +470,74 @@ export function Results({
     apiBaseUrl: resolvedApiBaseUrl
   }), [resolvedApiBaseUrl, selectedSut.id, selectedSut.product, selectedSut.scene]);
   const api = useMemo(() => ({ apiBaseUrl: targetIdentity.apiBaseUrl }), [targetIdentity.apiBaseUrl]);
-  const exactSoftwareVersion = hasExactSoftwareVersion(softwareVersion);
+  const preferredTaskVersion = useMemo(() => {
+    const candidates = uniqueTasks(sessionTasks, activeTask);
+    return candidates.find((task) => {
+      if (!task.version) {
+        return false;
+      }
+      return !task.sourceSut || task.sourceSut.id === selectedSut.id;
+    })?.version ?? '';
+  }, [activeTask, selectedSut.id, sessionTasks]);
   const versionsQuery = useQuery({
     queryKey: ['versions', targetIdentity],
     queryFn: () => getVersions(api),
-    enabled: !runtimeConfig.enableMockFallback && (activeTab === 'persisted' || filtersOpen)
+    enabled: !runtimeConfig.enableMockFallback && (activeTab === 'persisted' || filtersOpen || generateOpen)
   });
+  const registeredReportVersion = Boolean(reportVersion) && Boolean(
+    versionsQuery.data?.versions.some((version) => version.code === reportVersion)
+  );
   const reportsQuery = useQuery({
-    queryKey: [
-      'reports',
-      targetIdentity,
-      {
-        softwareVersion: softwareVersion.trim(),
-        testVersion: testVersionFilter,
-        limit: 20,
-        offset: reportPage * 20
-      }
-    ],
-    queryFn: () => listReports(api, {
-      software_version: softwareVersion.trim(),
-      ...(testVersionFilter ? { test_version: testVersionFilter } : {}),
-      limit: 20,
-      offset: reportPage * 20
+    queryKey: ['reports', targetIdentity, { reportVersion }],
+    queryFn: () => listAllReports(api, {
+      software_version: reportVersion,
+      product: selectedSut.product,
+      scene: selectedSut.scene
     }),
     enabled: !runtimeConfig.enableMockFallback
       && activeTab === 'persisted'
-      && softwareVersionObjectId === selectedSut.id
-      && exactSoftwareVersion
+      && registeredReportVersion
   });
 
   useEffect(() => {
-    setSoftwareVersion(initialSoftwareVersion(selectedSut));
-    setSoftwareVersionObjectId(selectedSut.id);
-    setTestVersionFilter('');
+    setReportVersion(storedReportVersion(selectedSut));
     setReportPage(0);
   }, [selectedSut.id]);
 
-  const updateSoftwareVersion = (value: string) => {
-    setSoftwareVersion(value);
-    setSoftwareVersionObjectId(selectedSut.id);
+  const updateReportVersion = (value: string) => {
+    setReportVersion(value);
     setReportPage(0);
     try {
-      window.localStorage.setItem(softwareVersionStorageKey(selectedSut.id), value);
+      window.localStorage.setItem(reportVersionStorageKey(selectedSut.id), value);
     } catch {
       // Browsers may disable storage; the current edit still remains usable for this session.
     }
   };
+
+  useEffect(() => {
+    const response = versionsQuery.data;
+    const versions = response?.versions ?? [];
+    if (!versions.length) {
+      return;
+    }
+    const registered = new Set(versions.map((version) => version.code));
+    const nextVersion = [
+      preferredTaskVersion,
+      reportVersion,
+      response?.default_version,
+      versions.find((version) => version.is_default)?.code,
+      versions[0]?.code
+    ].find((candidate): candidate is string => Boolean(candidate && registered.has(candidate)));
+    if (nextVersion && nextVersion !== reportVersion) {
+      setReportVersion(nextVersion);
+      setReportPage(0);
+      try {
+        window.localStorage.setItem(reportVersionStorageKey(selectedSut.id), nextVersion);
+      } catch {
+        // Keep the registered version available for this session when storage is disabled.
+      }
+    }
+  }, [preferredTaskVersion, reportVersion, selectedSut.id, versionsQuery.data]);
   const handleTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
       return;
@@ -479,7 +554,7 @@ export function Results({
       document.getElementById(`results-${nextTab}-tab`)?.focus();
     });
   };
-  const viewModel = useMemo(() => {
+  const sessionViewModel = useMemo(() => {
     if (runtimeConfig.enableMockFallback) {
       return mockViewModel(language);
     }
@@ -494,7 +569,8 @@ export function Results({
         running: t.running,
         pending: t.pending,
         polling_error: t.polling_error,
-        partial: language === 'zh' ? '部分通过' : 'Partial'
+        partial: language === 'zh' ? '部分通过' : 'Partial',
+        no_results: language === 'zh' ? '无匹配数据' : 'No matching data'
       },
       {
         session: t.sessionReportsNote,
@@ -507,16 +583,31 @@ export function Results({
   }, [language, runtimeConfig.enableMockFallback, selectedSut, sessionTaskSnapshot, t]);
   const normalizedSearch = reportSearch.trim().toLocaleLowerCase();
   const filteredReports = normalizedSearch
-    ? viewModel.reports.filter((report) => (
+    ? sessionViewModel.reports.filter((report) => (
       [report.title, report.id, report.object, report.result, report.passRate, report.completed]
         .some((value) => value.toLocaleLowerCase().includes(normalizedSearch))
     ))
-    : viewModel.reports;
-  const persistedReports = (reportsQuery.data?.reports ?? []).filter((report) => (
+    : sessionViewModel.reports;
+  const allPersistedReports = reportsQuery.data?.reports ?? [];
+  const matchingPersistedReports = allPersistedReports.filter((report) => (
     persistedReportMatches(report, normalizedSearch)
   ));
-  const reportPageCount = Math.max(1, Math.ceil((reportsQuery.data?.total ?? 0) / 20));
+  const reportPageCount = Math.max(1, Math.ceil(matchingPersistedReports.length / 20));
+  const persistedReports = matchingPersistedReports.slice(reportPage * 20, reportPage * 20 + 20);
+  const viewModel = activeTab === 'persisted' && !runtimeConfig.enableMockFallback
+    ? persistedViewModel(allPersistedReports, language)
+    : sessionViewModel;
   const maximumFailureCount = Math.max(...viewModel.failures.map((failure) => failure.count), 1);
+
+  useEffect(() => {
+    setReportPage(0);
+  }, [normalizedSearch, reportVersion]);
+
+  useEffect(() => {
+    if (reportPage >= reportPageCount) {
+      setReportPage(Math.max(0, reportPageCount - 1));
+    }
+  }, [reportPage, reportPageCount]);
 
   return (
     <div className="page-stack results-page">
@@ -556,33 +647,30 @@ export function Results({
           aria-label={language === 'zh' ? '报告筛选条件' : 'Report filters'}
         >
           <label>
-            <span>{language === 'zh' ? '被测软件版本' : 'Software/build version'}</span>
-            <input
-              type="text"
-              value={softwareVersion}
-              onChange={(event) => updateSoftwareVersion(event.target.value)}
-            />
-          </label>
-          <label>
-            <span>{language === 'zh' ? '测试批次（可选）' : 'Test batch (optional)'}</span>
+            <span>{language === 'zh' ? '执行 / 报告版本' : 'Execution / report version'}</span>
             <select
-              value={testVersionFilter}
-              onChange={(event) => {
-                setTestVersionFilter(event.target.value);
-                setReportPage(0);
-              }}
+              value={reportVersion}
+              onChange={(event) => updateReportVersion(event.target.value)}
               disabled={runtimeConfig.enableMockFallback || versionsQuery.isLoading}
             >
-              <option value="">{language === 'zh' ? '全部批次' : 'All batches'}</option>
+              {!versionsQuery.data?.versions.length ? (
+                <option value="">{versionsQuery.isLoading
+                  ? language === 'zh' ? '正在加载…' : 'Loading…'
+                  : language === 'zh' ? '暂无已注册版本' : 'No registered versions'}</option>
+              ) : null}
               {(versionsQuery.data?.versions ?? []).map((version) => (
                 <option key={version.code} value={version.code}>{version.name} · {version.code}</option>
               ))}
             </select>
+            <small>task.version → report.software_version</small>
           </label>
-          {!exactSoftwareVersion ? (
-            <p>{language === 'zh'
-              ? '请输入精确的软件版本或构建号。'
-              : 'Enter an exact software version or build.'}</p>
+          <p className="results-filter-guidance">{language === 'zh'
+            ? '版本来自后端注册表。列表按该值查询，并在客户端再次做精确版本核对。'
+            : 'Versions come from the backend registry. Results are queried and then exact-matched again in the client.'}</p>
+          {versionsQuery.isError ? (
+            <p className="results-filter-error" role="alert">{language === 'zh'
+              ? '版本注册表加载失败。'
+              : 'Unable to load the version registry.'}</p>
           ) : null}
         </section>
       ) : null}
@@ -642,7 +730,7 @@ export function Results({
             </span>
           </div>
           <ul className="results-failure-list" aria-label={t.failureDistribution}>
-            {viewModel.failures.map((failure) => (
+            {viewModel.failures.length ? viewModel.failures.map((failure) => (
               <li key={failure.label}>
                 <span className="results-failure-label">{failure.label}</span>
                 <span className="results-failure-track" aria-hidden="true">
@@ -657,7 +745,11 @@ export function Results({
                 </span>
                 <strong>{failure.count}</strong>
               </li>
-            ))}
+            )) : (
+              <li className="results-failure-empty">
+                <span>{language === 'zh' ? '当前版本暂无失败分布' : 'No failure distribution for this version'}</span>
+              </li>
+            )}
           </ul>
         </section>
       </div>
@@ -769,11 +861,27 @@ export function Results({
                 ))}
               </tbody>
             </table>
-          ) : !exactSoftwareVersion ? (
+          ) : versionsQuery.isLoading ? (
             <p className="results-persisted-state" role="status">
               {language === 'zh'
-                ? '请输入精确的软件版本或构建号后查询报告。'
-                : 'Enter an exact software version or build before querying reports.'}
+                ? '正在加载执行 / 报告版本…'
+                : 'Loading execution / report versions…'}
+            </p>
+          ) : versionsQuery.isError ? (
+            <p className="results-persisted-state is-error" role="alert">
+              {language === 'zh' ? '版本注册表加载失败。' : 'Unable to load the version registry.'}
+            </p>
+          ) : !versionsQuery.data?.versions.length ? (
+            <p className="results-persisted-state" role="status">
+              {language === 'zh'
+                ? '后端尚未注册可用的执行 / 报告版本。'
+                : 'The backend has no registered execution / report version.'}
+            </p>
+          ) : !registeredReportVersion ? (
+            <p className="results-persisted-state" role="status">
+              {language === 'zh'
+                ? '请选择后端已注册的执行 / 报告版本。'
+                : 'Select a registered execution / report version.'}
             </p>
           ) : reportsQuery.isLoading ? (
             <p className="results-persisted-state" role="status">
@@ -791,38 +899,47 @@ export function Results({
                 <thead>
                   <tr>
                     <th>{language === 'zh' ? '报告' : 'Report'}</th>
-                    <th>{language === 'zh' ? '软件版本' : 'Software version'}</th>
-                    <th>{language === 'zh' ? '测试批次' : 'Test batch'}</th>
+                    <th>{language === 'zh' ? '执行 / 报告版本' : 'Execution / report version'}</th>
+                    <th>{language === 'zh' ? '任务关联' : 'Task association'}</th>
                     <th>{language === 'zh' ? '结论' : 'Conclusion'}</th>
                     <th>{language === 'zh' ? '创建时间' : 'Created'}</th>
                     <th>{language === 'zh' ? '操作' : 'Action'}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {persistedReports.map((report) => (
-                    <tr key={report.id}>
-                      <td className="results-report-title">{report.title}</td>
-                      <td>{report.software_version}</td>
-                      <td className="results-report-id">{report.test_version}</td>
-                      <td>
-                        <span
-                          className={`results-status-pill is-${report.conclusion.passed ? 'success' : 'danger'}`}
-                          aria-label={`${report.conclusion.verdict}, ${report.summary.success_rate.toFixed(1)}%`}
-                        >
-                          {report.conclusion.verdict}
-                        </span>
-                      </td>
-                      <td>{displayTaskTime(report.created_at)}</td>
-                      <td>
-                        <Link
-                          className="results-report-action"
-                          to={`/results/${encodeURIComponent(report.id)}`}
-                        >
-                          {language === 'zh' ? '打开报告  →' : 'Open report  →'}
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
+                  {persistedReports.map((report) => {
+                    const outcome = reportOutcome(report.summary, report.conclusion, language);
+                    return (
+                      <tr key={report.id}>
+                        <td className="results-report-title">{report.title}</td>
+                        <td className="results-report-version">{report.software_version}</td>
+                        <td>
+                          <span className="results-unbound-task" title={language === 'zh'
+                            ? '当前后端未提供报告到任务的稳定关联字段'
+                            : 'The backend does not expose a stable report-to-task correlation'}>
+                            {language === 'zh' ? '未绑定' : 'Unbound'}
+                          </span>
+                        </td>
+                        <td>
+                          <span
+                            className={`results-status-pill is-${outcome.tone}`}
+                            aria-label={`${outcome.label}, ${outcome.rate}`}
+                          >
+                            {outcome.label}
+                          </span>
+                        </td>
+                        <td>{displayTaskTime(report.created_at)}</td>
+                        <td>
+                          <Link
+                            className="results-report-action"
+                            to={`/results/${encodeURIComponent(report.id)}`}
+                          >
+                            {language === 'zh' ? '打开报告  →' : 'Open report  →'}
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
                   {!persistedReports.length ? (
                     <tr className="results-empty-row">
                       <td>{language === 'zh' ? '没有匹配的持久化报告' : 'No matching persisted reports'}</td>
@@ -859,13 +976,18 @@ export function Results({
           language={language}
           selectedSut={selectedSut}
           runtimeConfig={runtimeConfig}
-          softwareVersion={softwareVersion}
+          reportVersion={reportVersion}
           returnFocusRef={generateButtonRef}
-          onSoftwareVersionChange={updateSoftwareVersion}
+          onReportVersionChange={updateReportVersion}
           onClose={() => setGenerateOpen(false)}
           onCreated={(reportId) => {
             setGenerateOpen(false);
             navigate(`/results/${encodeURIComponent(reportId)}`);
+          }}
+          onOutcomeUnknown={() => {
+            setGenerateOpen(false);
+            setActiveTab('persisted');
+            setReportPage(0);
           }}
         />
       ) : null}

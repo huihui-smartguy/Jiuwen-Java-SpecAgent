@@ -39,20 +39,20 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('Overview dashboard R6', () => {
-  test('encodes the approved desktop geometry, hierarchy gap, and single-line action', () => {
+describe('Overview dashboard R7', () => {
+  test('encodes the approved flexible desktop geometry, hierarchy gap, and single-line action', () => {
     expect(foundationStyles).toMatch(/--radius-card:\s*24px;/);
     expect(primitiveStyles).toMatch(
       /\.main-content\s*\{[^}]*max-width:\s*1440px;[^}]*padding:\s*48px 72px 80px;/s
     );
     expect(overviewStyles).toMatch(
-      /\.overview-create-task\s*\{[^}]*width:\s*120px;[^}]*height:\s*52px;[^}]*min-width:\s*120px;[^}]*white-space:\s*nowrap;/s
+      /\.overview-create-task\s*\{[^}]*width:\s*120px;[^}]*height:\s*auto;[^}]*min-width:\s*120px;[^}]*min-height:\s*52px;[^}]*white-space:\s*nowrap;/s
     );
     expect(overviewStyles).toMatch(
       /\.overview-quality-hierarchy\s*\{[^}]*gap:\s*48px;/s
     );
     expect(overviewStyles).toMatch(
-      /\.overview-l0-card\s*\{[^}]*height:\s*210px;[^}]*grid-template-columns:\s*300px 1px minmax\(0,\s*1fr\);/s
+      /\.overview-l0-card\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*210px;[^}]*grid-template-columns:\s*300px 1px minmax\(0,\s*1fr\);/s
     );
     expect(overviewStyles).toMatch(
       /\.overview-l1-card\s*\{[^}]*min-height:\s*350px;/s
@@ -71,6 +71,29 @@ describe('Overview dashboard R6', () => {
     );
     expect(overviewStyles).toMatch(
       /@media \(max-width:\s*680px\)[\s\S]*?\.overview-l1-card\s*\{[^}]*grid-template-rows:\s*auto 1px auto;[^}]*gap:\s*14px;/s
+    );
+  });
+
+  test('keeps Dashboard metadata readable and lets long copy expand instead of clipping', () => {
+    const pixelFontSizes = [...overviewStyles.matchAll(/font-size:\s*(\d+)px;/g)]
+      .map((match) => Number(match[1]));
+
+    expect(pixelFontSizes.length).toBeGreaterThan(0);
+    expect(Math.min(...pixelFontSizes)).toBeGreaterThanOrEqual(12);
+    expect(overviewStyles).toMatch(
+      /\.overview-hierarchy-heading p,[\s\S]*?font-size:\s*13px;[\s\S]*?line-height:\s*20px;[\s\S]*?overflow-wrap:\s*anywhere;[\s\S]*?white-space:\s*normal;/
+    );
+    expect(overviewStyles).toMatch(
+      /\.overview-status-pill\s*\{[^}]*min-height:\s*28px;[^}]*font-size:\s*12px;[^}]*line-height:\s*18px;[^}]*white-space:\s*normal;/s
+    );
+    expect(overviewStyles).toMatch(
+      /\.overview-current-run\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*96px;/s
+    );
+    expect(overviewStyles).toMatch(
+      /\.dimension-summary-zone\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*240px;/s
+    );
+    expect(overviewStyles).toMatch(
+      /\.dimension-conclusion,[^}]*\{[^}]*overflow-wrap:\s*anywhere;[^}]*white-space:\s*normal;/s
     );
   });
 

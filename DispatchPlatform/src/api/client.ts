@@ -19,7 +19,9 @@ import type {
   CreateReportResponse,
   DeleteReportResponse,
   ReportDetailResponse,
+  ReportDetail,
   ReportDownloadFormat,
+  ReportListItem,
   ReportListQuery,
   ReportListResponse,
   StatisticsFilters,
@@ -41,6 +43,27 @@ interface ScriptResponse {
   scripts: Script[];
   total: number;
   filters?: Record<string, string | null>;
+}
+
+type ReportListItemWire = Omit<ReportListItem, 'software_version'> & {
+  software_version?: string;
+  test_version?: string;
+};
+
+type ReportDetailWire = Omit<ReportDetail, 'software_version'> & {
+  software_version?: string;
+  test_version?: string;
+};
+
+interface ReportListResponseWire {
+  success: boolean;
+  total: number;
+  reports: ReportListItemWire[];
+}
+
+interface ReportDetailResponseWire {
+  success: boolean;
+  report: ReportDetailWire;
 }
 
 interface LiveTaskCreateResponse {
@@ -90,6 +113,20 @@ export class ApiError extends Error {
     this.details = options?.details;
   }
 }
+
+export class ReportOutcomeUnknownError extends ApiError {
+  constructor(details?: unknown) {
+    super('Report generation outcome is unknown. Verify the persisted report list before retrying.', {
+      code: 'REPORT_OUTCOME_UNKNOWN',
+      details
+    });
+    this.name = 'ReportOutcomeUnknownError';
+  }
+}
+
+const REPORT_GENERATION_TIMEOUT_MS = 195_000;
+const REPORT_SCAN_PAGE_SIZE = 200;
+const REPORT_SCAN_PAGE_LIMIT = 1_000;
 
 function trimTrailingSlash(value: string): string {
   return value.endsWith('/') ? value.slice(0, -1) : value;
@@ -156,6 +193,60 @@ export async function getScripts(
   return readJson<ScriptResponse>(response);
 }
 
+export async function getScriptsForFeatures(
+  context: ApiContext,
+  target: Pick<ScriptQuery, 'product' | 'scene'>,
+  featureNames: readonly string[]
+): Promise<ScriptResponse> {
+  if (!featureNames.length) {
+    return {
+      success: true,
+      scripts: [],
+      total: 0,
+      filters: { product: target.product, scene: target.scene }
+    };
+  }
+
+  const responses = await Promise.all(featureNames.map((feature) => getScripts(context, {
+    product: target.product,
+    scene: target.scene,
+    feature
+  })));
+  const scripts: Script[] = [];
+  const seen = new Set<string>();
+
+  for (const response of responses) {
+    for (const script of response.scripts) {
+      const identity = script.id || script.path || `${script.product}:${script.scene}:${script.feature}:${script.name}`;
+      if (seen.has(identity)) {
+        continue;
+      }
+      seen.add(identity);
+      scripts.push(script);
+    }
+  }
+
+  return {
+    success: true,
+    scripts,
+    total: scripts.length,
+    filters: { product: target.product, scene: target.scene }
+  };
+}
+
+export async function getScriptsForScene(
+  context: ApiContext,
+  product: string,
+  scene: string
+): Promise<ScriptResponse> {
+  const features = await getFeatures(context, product, scene);
+  return getScriptsForFeatures(
+    context,
+    { product, scene },
+    features.features.map((feature) => feature.name)
+  );
+}
+
 export async function getVersions(context: ApiContext): Promise<TestVersionResponse> {
   const response = await fetch(buildApiUrl(context.apiBaseUrl, '/versions'), {
     headers: { Accept: 'application/json' }
@@ -185,27 +276,110 @@ export async function getTaskScriptStatus(
 
 export async function createReport(
   context: ApiContext,
-  payload: CreateReportRequest
+  payload: CreateReportRequest,
+  options: { timeoutMs?: number } = {}
 ): Promise<CreateReportResponse> {
-  const response = await fetch(buildApiUrl(context.apiBaseUrl, '/reports'), {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(payload)
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(
+    () => controller.abort(),
+    options.timeoutMs ?? REPORT_GENERATION_TIMEOUT_MS
+  );
+
+  try {
+    const response = await fetch(buildApiUrl(context.apiBaseUrl, '/reports'), {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json'
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        ...payload,
+        // v1 compatibility alias. It is deliberately identical, never a second UI dimension.
+        test_version: payload.software_version
+      })
+    });
+    return await readJson<CreateReportResponse>(response);
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    throw new ReportOutcomeUnknownError(error);
+  } finally {
+    globalThis.clearTimeout(timeout);
+  }
+}
+
+async function scanExactReports(
+  context: ApiContext,
+  query: ReportListQuery
+): Promise<ReportListItem[]> {
+  const exactReports: ReportListItem[] = [];
+  const seenReportIds = new Set<string>();
+  let backendOffset = 0;
+
+  for (let page = 0; page < REPORT_SCAN_PAGE_LIMIT; page += 1) {
+    const response = await fetch(buildApiUrl(context.apiBaseUrl, '/reports', {
+      software_version: query.software_version,
+      // Older report services require this alias; newer services safely ignore it.
+      test_version: query.software_version,
+      product: query.product,
+      scene: query.scene,
+      limit: REPORT_SCAN_PAGE_SIZE,
+      offset: backendOffset
+    }), {
+      headers: { Accept: 'application/json' }
+    });
+    const body = await readJson<ReportListResponseWire>(response);
+
+    if (!Array.isArray(body.reports) || !Number.isSafeInteger(body.total) || body.total < 0) {
+      throw new ApiError('The report list response is malformed', {
+        code: 'INVALID_REPORT_RESPONSE',
+        status: response.status,
+        details: body
+      });
+    }
+
+    for (const wireReport of body.reports) {
+      const report = normalizeReportListItem(wireReport, response.status);
+      if (report.software_version !== query.software_version || seenReportIds.has(report.id)) {
+        continue;
+      }
+      seenReportIds.add(report.id);
+      exactReports.push(report);
+    }
+
+    if (!body.reports.length || backendOffset + body.reports.length >= body.total) {
+      return exactReports;
+    }
+    backendOffset += body.reports.length;
+  }
+
+  throw new ApiError('The report list could not be reconciled safely', {
+    code: 'REPORT_SCAN_LIMIT_EXCEEDED'
   });
-  return readJson<CreateReportResponse>(response);
+}
+
+export async function listAllReports(
+  context: ApiContext,
+  query: Omit<ReportListQuery, 'limit' | 'offset'>
+): Promise<ReportListResponse> {
+  const reports = await scanExactReports(context, query);
+  return { success: true, total: reports.length, reports };
 }
 
 export async function listReports(
   context: ApiContext,
   query: ReportListQuery
 ): Promise<ReportListResponse> {
-  const response = await fetch(buildApiUrl(context.apiBaseUrl, '/reports', query), {
-    headers: { Accept: 'application/json' }
-  });
-  return readJson<ReportListResponse>(response);
+  const reports = await scanExactReports(context, query);
+  const offset = Math.max(0, query.offset ?? 0);
+  const limit = Math.max(1, query.limit ?? 20);
+  return {
+    success: true,
+    total: reports.length,
+    reports: reports.slice(offset, offset + limit)
+  };
 }
 
 export async function getReport(
@@ -215,7 +389,40 @@ export async function getReport(
   const response = await fetch(buildApiUrl(context.apiBaseUrl, `/reports/${reportId}`), {
     headers: { Accept: 'application/json' }
   });
-  return readJson<ReportDetailResponse>(response);
+  const body = await readJson<ReportDetailResponseWire>(response);
+  return {
+    success: body.success,
+    report: normalizeReportDetail(body.report, response.status)
+  };
+}
+
+function canonicalReportVersion(
+  report: { software_version?: string; test_version?: string },
+  status?: number
+): string {
+  const version = report.software_version?.trim() || report.test_version?.trim();
+  if (!version) {
+    throw new ApiError('The report response does not include a version', {
+      code: 'INVALID_REPORT_RESPONSE',
+      status,
+      details: report
+    });
+  }
+  return version;
+}
+
+function normalizeReportListItem(report: ReportListItemWire, status?: number): ReportListItem {
+  return {
+    ...report,
+    software_version: canonicalReportVersion(report, status)
+  };
+}
+
+function normalizeReportDetail(report: ReportDetailWire, status?: number): ReportDetail {
+  return {
+    ...report,
+    software_version: canonicalReportVersion(report, status)
+  };
 }
 
 export function getReportDownloadUrl(

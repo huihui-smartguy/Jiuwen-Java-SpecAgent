@@ -274,7 +274,7 @@ describe('approved Settings frame', () => {
     expect(container.querySelector('footer')).not.toBeInTheDocument();
   });
 
-  test('imports the dedicated stylesheet and encodes the approved geometry and no-persistence boundary', () => {
+  test('imports the dedicated stylesheet and encodes the approved flexible geometry and no-persistence boundary', () => {
     expect(existsSync('src/styles/routes/settings.css')).toBe(true);
 
     const stylesIndex = readFileSync('src/styles.css', 'utf8');
@@ -302,13 +302,34 @@ describe('approved Settings frame', () => {
       /\.settings-runtime-pill\s*\{[^}]*width:\s*auto;[^}]*min-width:\s*96px;/
     );
     expect(settingsCss).toMatch(
-      /\.settings-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*636px\)\);[^}]*grid-template-rows:\s*repeat\(2,\s*310px\);[^}]*gap:\s*24px;/
+      /\.settings-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*636px\)\);[^}]*grid-auto-rows:\s*minmax\(310px,\s*auto\);[^}]*gap:\s*24px;/
     );
-    expect(settingsCss).toMatch(/\.settings-card\s*\{[^}]*height:\s*310px;[^}]*padding:\s*24px 28px;/);
-    expect(settingsCss).toMatch(/\.settings-row\s*\{[^}]*height:\s*78px;/);
-    expect(settingsCss).toMatch(/\.settings-card--preferences \.settings-row,[\s\S]*\.settings-card--reports \.settings-row\s*\{[^}]*height:\s*91px;/);
+    expect(settingsCss).toMatch(
+      /\.settings-card\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*310px;[^}]*padding:\s*24px 28px;/
+    );
+    expect(settingsCss).toMatch(
+      /\.settings-card__description\s*\{[^}]*font-size:\s*14px;[^}]*line-height:\s*22px;[^}]*overflow-wrap:\s*anywhere;[^}]*white-space:\s*normal;/
+    );
+    expect(settingsCss).toMatch(
+      /\.settings-row\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*78px;/
+    );
+    expect(settingsCss).toMatch(
+      /\.settings-card--preferences \.settings-row,[\s\S]*\.settings-card--reports \.settings-row\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*91px;/
+    );
+    expect(settingsCss).toMatch(
+      /\.settings-row__label strong\s*\{[^}]*font-size:\s*14px;[^}]*line-height:\s*22px;[^}]*overflow-wrap:\s*anywhere;/
+    );
+    expect(settingsCss).toMatch(
+      /\.settings-row__label > span\s*\{[^}]*font-size:\s*12px;[^}]*line-height:\s*18px;[^}]*overflow-wrap:\s*anywhere;/
+    );
     expect(settingsCss).toMatch(/\.settings-select-shell\s*\{[^}]*width:\s*250px;/);
-    expect(settingsCss).toMatch(/\.settings-control\s*\{[^}]*min-height:\s*44px;/);
+    expect(settingsCss).toMatch(/\.settings-control\s*\{[^}]*min-height:\s*48px;/);
+    expect(settingsCss).toMatch(
+      /\.settings-select-visual\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*48px;/
+    );
+    expect(settingsCss).not.toMatch(
+      /\.settings-card__description\s*\{[^}]*(?:overflow:\s*hidden|text-overflow:\s*ellipsis|white-space:\s*nowrap)/
+    );
     expect(settingsCss).toMatch(
       /@media \(max-width:\s*980px\)[\s\S]*\.settings-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/
     );

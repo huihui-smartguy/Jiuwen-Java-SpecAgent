@@ -50,7 +50,7 @@ afterEach(() => {
 });
 
 describe('LiveLogConsole', () => {
-  test('contains many real lines in the approved 360px desktop row and releases the row height responsively', async () => {
+  test('contains many real lines in the roomy elastic desktop row and releases the row height responsively', async () => {
     const logs = Array.from({ length: 80 }, (_, index) => ({
       timestamp: `2026-07-13 10:00:${String(index).padStart(2, '0')}`,
       level: 'INFO',
@@ -72,10 +72,13 @@ describe('LiveLogConsole', () => {
 
     const observeCss = readFileSync('src/styles/routes/observe.css', 'utf8');
     expect(observeCss).toMatch(
-      /\.observation-lower-grid\s*\{[^}]*height:\s*360px;/
+      /\.observation-lower-grid\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*400px;/
     );
     expect(observeCss).toMatch(
-      /\.live-log-viewport\s*\{[^}]*min-height:\s*0;/
+      /\.live-log-panel\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*400px;/
+    );
+    expect(observeCss).toMatch(
+      /\.live-log-viewport\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*280px;[^}]*flex:\s*1 1 280px;/
     );
     expect(observeCss).toMatch(
       /@media \(max-width: 980px\)\s*\{[\s\S]*?\.observation-lower-grid\s*\{[^}]*height:\s*auto;/

@@ -5,42 +5,44 @@ import {
   useState,
   type RefObject
 } from 'react';
-import { ApiError, createReport, getFeatures, getVersions } from '../api/client';
+import {
+  ApiError,
+  ReportOutcomeUnknownError,
+  createReport,
+  getFeatures,
+  getVersions
+} from '../api/client';
 import type { Language, RuntimeConfig, SutTarget } from '../types';
 
 interface ReportGenerationModalProps {
   language: Language;
   selectedSut: SutTarget;
   runtimeConfig: RuntimeConfig;
-  softwareVersion: string;
+  reportVersion: string;
   returnFocusRef: RefObject<HTMLButtonElement | null>;
-  onSoftwareVersionChange: (value: string) => void;
+  onReportVersionChange: (value: string) => void;
   onClose: () => void;
   onCreated: (reportId: string) => void;
+  onOutcomeUnknown: () => void;
 }
 
 const levels = ['L0', 'L1', 'L2', 'L3', 'L4'] as const;
-
-function isExactSoftwareVersion(value: string) {
-  const normalized = value.trim();
-  return Boolean(normalized) && !/^(?:live|current|latest)$/i.test(normalized);
-}
 
 export function ReportGenerationModal({
   language,
   selectedSut,
   runtimeConfig,
-  softwareVersion,
+  reportVersion,
   returnFocusRef,
-  onSoftwareVersionChange,
+  onReportVersionChange,
   onClose,
-  onCreated
+  onCreated,
+  onOutcomeUnknown
 }: ReportGenerationModalProps) {
   const isChinese = language === 'zh';
   const queryClient = useQueryClient();
   const closeRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
-  const [testVersion, setTestVersion] = useState('');
   const [feature, setFeature] = useState('');
   const [level, setLevel] = useState('');
   const [title, setTitle] = useState('');
@@ -68,14 +70,14 @@ export function ReportGenerationModal({
     if (!versions.length) {
       return;
     }
-    if (!testVersion || !versions.some((version) => version.code === testVersion)) {
-      setTestVersion(
+    if (!reportVersion || !versions.some((version) => version.code === reportVersion)) {
+      onReportVersionChange(
         versions.find((version) => version.code === versionsQuery.data?.default_version)?.code
           ?? versions.find((version) => version.is_default)?.code
           ?? versions[0].code
       );
     }
-  }, [testVersion, versionsQuery.data]);
+  }, [onReportVersionChange, reportVersion, versionsQuery.data]);
 
   const close = () => {
     onClose();
@@ -116,13 +118,10 @@ export function ReportGenerationModal({
   }, []);
 
   const completeTimeWindow = Boolean(timeStart) === Boolean(timeEnd);
-  const canCreate = isExactSoftwareVersion(softwareVersion)
-    && Boolean(testVersion)
-    && completeTimeWindow;
+  const canCreate = Boolean(reportVersion) && completeTimeWindow;
   const creation = useMutation({
     mutationFn: () => createReport(api, {
-      test_version: testVersion,
-      software_version: softwareVersion.trim(),
+      software_version: reportVersion,
       scope: {
         product: selectedSut.product,
         scenes: [selectedSut.scene],
@@ -132,9 +131,15 @@ export function ReportGenerationModal({
       ...(title.trim() ? { title: title.trim() } : {}),
       ...(timeStart && timeEnd ? { time_window: [timeStart, timeEnd] as [string, string] } : {})
     }),
+    retry: false,
     onSuccess: (response) => {
       void queryClient.invalidateQueries({ queryKey: ['reports'] });
       onCreated(response.report_id);
+    },
+    onError: (error) => {
+      if (error instanceof ReportOutcomeUnknownError) {
+        void queryClient.invalidateQueries({ queryKey: ['reports'] });
+      }
     }
   });
 
@@ -169,22 +174,19 @@ export function ReportGenerationModal({
           </button>
         </header>
 
+        <p className="report-generation-lede">
+          {isChinese
+            ? '报告同步生成，可能需要数分钟。网络超时后不会自动重复提交。'
+            : 'Reports are generated synchronously and may take several minutes. A timeout is never retried automatically.'}
+        </p>
+
         <div className="report-generation-fields">
-          <label>
-            <span>{isChinese ? '被测软件版本' : 'Software/build version'}</span>
-            <input
-              type="text"
-              required
-              value={softwareVersion}
-              onChange={(event) => onSoftwareVersionChange(event.target.value)}
-            />
-          </label>
-          <label>
-            <span>{isChinese ? '测试批次' : 'Test batch'}</span>
+          <label className="report-generation-version-field">
+            <span>{isChinese ? '执行 / 报告版本' : 'Execution / report version'}</span>
             <select
               required
-              value={testVersion}
-              onChange={(event) => setTestVersion(event.target.value)}
+              value={reportVersion}
+              onChange={(event) => onReportVersionChange(event.target.value)}
               disabled={versionsQuery.isLoading || !versionsQuery.data?.versions.length}
             >
               {versionsQuery.isLoading ? (
@@ -196,7 +198,13 @@ export function ReportGenerationModal({
                 </option>
               ))}
             </select>
+            <small>task.version → report.software_version</small>
           </label>
+          <div className="report-version-source-card">
+            <span>{isChinese ? '版本来源' : 'Version source'}</span>
+            <strong>{isChinese ? '后端版本注册表' : 'Backend registry'}</strong>
+            <small>GET /api/versions</small>
+          </div>
           <label>
             <span>{isChinese ? 'Feature（可选）' : 'Feature (optional)'}</span>
             <select value={feature} onChange={(event) => setFeature(event.target.value)}>
@@ -235,16 +243,19 @@ export function ReportGenerationModal({
           </label>
         </div>
 
-        {!isExactSoftwareVersion(softwareVersion) ? (
-          <p className="report-generation-message is-error" role="alert">
-            {isChinese
-              ? '请输入精确的软件版本或构建号；Live、Current、Latest 不能用于报告。'
-              : 'Enter an exact software version or build; Live, Current, and Latest are not valid.'}
-          </p>
-        ) : !completeTimeWindow ? (
+        {!completeTimeWindow ? (
           <p className="report-generation-message is-error" role="alert">
             {isChinese ? '开始和结束时间必须同时填写。' : 'Start and end time must be provided together.'}
           </p>
+        ) : creation.error instanceof ReportOutcomeUnknownError ? (
+          <div className="report-generation-message is-warning" role="status">
+            <p>{isChinese
+              ? '生成结果暂时未知。后端可能已经保存报告；请先核对持久化报告，避免重复快照。'
+              : 'The outcome is unknown. The backend may already have saved the report; verify persisted reports before retrying.'}</p>
+            <button type="button" onClick={onOutcomeUnknown}>
+              {isChinese ? '查看持久化报告' : 'View persisted reports'}
+            </button>
+          </div>
         ) : creation.isError ? (
           <p className="report-generation-message is-error" role="alert">
             {creation.error instanceof ApiError
@@ -274,7 +285,7 @@ export function ReportGenerationModal({
             onClick={() => creation.mutate()}
           >
             {creation.isPending
-              ? isChinese ? '正在创建…' : 'Creating…'
+              ? isChinese ? '正在生成…' : 'Generating…'
               : isChinese ? '创建并打开报告' : 'Create and open report'}
           </button>
         </footer>

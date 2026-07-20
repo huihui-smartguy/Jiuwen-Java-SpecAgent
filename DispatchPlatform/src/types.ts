@@ -275,6 +275,8 @@ export interface TaskScriptStatus {
   completed_at: string | null;
   duration_seconds: number | null;
   error_message: string | null;
+  /** Newer testrun builds may expose the database status separately from the display status. */
+  actual_status?: TaskScriptExecutionStatus;
 }
 
 export interface TaskScriptStatusResponse {
@@ -286,6 +288,7 @@ export interface TaskScriptStatusResponse {
     pass_count: number;
     failed_count: number;
     running_count: number;
+    actual_status_distribution?: Partial<Record<TaskScriptExecutionStatus, number>>;
   };
 }
 
@@ -299,10 +302,12 @@ export interface ReportScope {
   scenes: string[];
   features?: Array<string | ReportFeatureScope>;
   levels?: string[];
+  /** Registered scripts in the persisted scope; distinct from summary.total executions. */
+  total_scripts?: number | null;
 }
 
 export interface CreateReportRequest {
-  test_version: string;
+  /** Canonical execution/report version. The API client supplies a same-value v1 alias on the wire. */
   software_version: string;
   scope: ReportScope;
   title?: string;
@@ -402,7 +407,8 @@ export interface ReportListItem {
   id: string;
   title: string;
   software_version: string;
-  test_version: string;
+  /** Legacy v1 field. New report responses intentionally omit it. */
+  test_version?: string;
   summary: ReportSummary;
   conclusion: ReportConclusion;
   created_at: string;
@@ -420,7 +426,8 @@ export interface ReportDetail extends ReportListItem {
 
 export interface ReportListQuery {
   software_version: string;
-  test_version?: string;
+  product?: string;
+  scene?: string;
   limit?: number;
   offset?: number;
 }

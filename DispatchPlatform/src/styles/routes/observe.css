@@ -3,8 +3,8 @@
 }
 
 .observation-page > .page-header {
-  height: 100px;
-  min-height: 100px;
+  height: auto;
+  min-height: 112px;
   align-items: center;
   margin-bottom: 24px;
   padding-bottom: 0;
@@ -18,8 +18,8 @@
 .observation-page > .page-header > div:first-child {
   display: flex;
   width: 900px;
-  height: 90px;
-  flex: 0 0 900px;
+  min-height: 90px;
+  flex: 0 1 900px;
   flex-direction: column;
   gap: 8px;
 }
@@ -100,7 +100,8 @@
 
 .observation-metrics {
   display: grid;
-  height: 128px;
+  height: auto;
+  min-height: 144px;
   min-width: 0;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
@@ -109,13 +110,13 @@
 
 .observation-metric-card {
   display: flex;
-  height: 128px;
+  height: auto;
+  min-height: 144px;
   min-width: 0;
   flex-direction: column;
   align-items: flex-start;
-  gap: 3px;
-  overflow: hidden;
-  padding: 18px 24px 16px;
+  gap: 6px;
+  padding: 20px 24px 18px;
   border: 1px solid var(--color-outline);
   border-radius: 22px;
   background: var(--color-surface-low);
@@ -123,47 +124,44 @@
 
 .observation-metric-card h2 {
   width: calc(100% + 2px);
-  overflow: hidden;
   color: var(--color-text-secondary);
   font-size: 15px;
   font-weight: 500;
   letter-spacing: 0;
-  line-height: 20px;
+  line-height: var(--type-body-line);
   margin-top: -1px;
   margin-left: -1px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .observation-metric-card__value {
   width: calc(100% + 2px);
-  overflow: hidden;
   margin-left: -1px;
   color: var(--color-text-primary);
   font-size: 30px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0;
-  line-height: 38px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 40px;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .observation-metric-card:nth-child(4) .observation-metric-card__value {
-  font-size: 22px;
+  font-size: 24px;
   letter-spacing: 0;
-  line-height: 32px;
+  line-height: 34px;
 }
 
 .observation-metric-card p {
   width: calc(100% + 2px);
-  overflow: hidden;
   margin-left: -1px;
   color: var(--color-text-secondary);
-  font-size: 13px;
-  line-height: 20px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line);
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .observation-path-card,
@@ -178,9 +176,10 @@
 
 .observation-path-card {
   display: flex;
-  height: 158px;
+  height: auto;
+  min-height: 192px;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
   margin-bottom: 24px;
   padding: 22px 28px;
 }
@@ -188,9 +187,10 @@
 .observation-path-card__heading {
   display: flex;
   width: calc(100% + 2px);
-  height: 36px;
+  height: auto;
+  min-height: 44px;
   min-width: 0;
-  flex: 0 0 36px;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
   gap: 18px;
@@ -202,6 +202,7 @@
   display: flex;
   min-width: 0;
   align-items: center;
+  flex-wrap: wrap;
   gap: 14px;
 }
 
@@ -215,23 +216,23 @@
 .observation-path-card h2 {
   font-size: 18px;
   line-height: 26px;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .observation-path-card__heading p {
-  overflow: hidden;
   margin: 0;
   color: var(--color-text-secondary);
-  font-size: 13px;
-  line-height: 20px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line);
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .observation-path-card__heading > span {
   display: inline-flex;
   width: 132px;
-  height: 28px;
+  min-height: 30px;
   min-width: 132px;
   align-items: center;
   justify-content: center;
@@ -248,7 +249,8 @@
 .observation-path-list {
   display: grid;
   width: calc(100% + 2px);
-  height: 58px;
+  height: auto;
+  min-height: 84px;
   min-width: 0;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
@@ -258,13 +260,13 @@
 
 .observation-path-list li {
   display: flex;
-  height: 58px;
+  height: auto;
+  min-height: 84px;
   min-width: 0;
   flex-direction: column;
   align-items: flex-start;
-  gap: 1px;
-  overflow: hidden;
-  padding: 8px 14px;
+  gap: 4px;
+  padding: 10px 14px;
   border: 1px solid var(--color-outline);
   border-radius: 14px;
   background: var(--color-surface);
@@ -288,23 +290,22 @@
 .observation-path-list strong,
 .observation-path-list small {
   width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .observation-path-list strong {
   color: var(--color-text-primary);
   font-size: 14px;
   font-weight: 700;
-  line-height: 20px;
+  line-height: var(--type-body-line);
 }
 
 .observation-path-list small {
   color: var(--color-text-secondary);
   font-family: var(--font-ui);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-line);
 }
 
 .observation-path-list li[data-stage-state='complete'] small {
@@ -321,7 +322,8 @@
 
 .observation-lower-grid {
   display: grid;
-  height: 360px;
+  height: auto;
+  min-height: 400px;
   min-width: 0;
   grid-template-columns: 856px 416px;
   gap: 24px;
@@ -331,10 +333,11 @@
 .live-log-panel {
   display: flex;
   width: 856px;
-  height: 360px;
+  height: auto;
+  min-height: 400px;
   min-width: 0;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
   overflow: hidden;
   padding: 22px 24px;
   border-radius: 24px;
@@ -345,9 +348,8 @@
 .live-log-heading {
   display: flex;
   width: 100%;
-  height: 28px;
-  min-height: 28px;
-  flex: 0 0 28px;
+  min-height: 32px;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
   gap: 18px;
@@ -356,10 +358,10 @@
 .live-log-heading h2 {
   color: #f0f2fa;
   font-family: var(--font-ui);
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 700;
   letter-spacing: 0;
-  line-height: 24px;
+  line-height: 26px;
 }
 
 .live-log-count {
@@ -374,10 +376,10 @@
 
 .live-log-viewport {
   width: 100%;
-  height: 240px;
+  height: auto;
   min-width: 0;
-  min-height: 0;
-  flex: 0 0 240px;
+  min-height: 280px;
+  flex: 1 1 280px;
   overflow: auto;
   color: #c7cfe0;
   background: transparent;
@@ -396,7 +398,7 @@
   display: grid;
   width: 100%;
   min-width: 0;
-  min-height: 50px;
+  min-height: 52px;
   grid-template-columns: 94px minmax(0, 1fr);
   align-items: center;
 }
@@ -412,8 +414,8 @@
   min-width: 0;
   overflow-wrap: anywhere;
   color: #9ebdff;
-  font-size: 13px;
-  line-height: 20px;
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line);
   white-space: pre-wrap;
 }
 
@@ -427,7 +429,7 @@
 
 .live-log-empty {
   display: grid;
-  min-height: 240px;
+  min-height: 280px;
   place-content: center;
   justify-items: center;
   gap: 7px;
@@ -450,20 +452,19 @@
 .observation-control-card {
   display: flex;
   width: 416px;
-  height: 360px;
-  min-height: 360px;
+  height: auto;
+  min-height: 400px;
   flex-direction: column;
-  gap: 18px;
-  overflow: auto;
+  gap: 20px;
+  overflow: visible;
   padding: 22px 28px;
 }
 
 .observation-control-card > header {
   display: flex;
   width: calc(100% + 2px);
-  height: 28px;
-  min-height: 28px;
-  flex: 0 0 28px;
+  min-height: 32px;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
@@ -472,11 +473,10 @@
 }
 
 .observation-control-card h2 {
-  overflow: hidden;
   font-size: 18px;
   line-height: 26px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .observation-connection {
@@ -518,9 +518,9 @@
 .observation-task-metadata {
   display: flex;
   width: calc(100% + 2px);
-  height: 160px;
-  min-height: 160px;
-  flex: 0 0 160px;
+  height: auto;
+  min-height: 176px;
+  flex: 0 0 auto;
   flex-direction: column;
   margin-left: -1px;
 }
@@ -528,8 +528,8 @@
 .observation-task-metadata > div {
   display: flex;
   width: 100%;
-  height: 40px;
-  min-height: 40px;
+  height: auto;
+  min-height: 44px;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
@@ -539,8 +539,8 @@
 .observation-task-metadata dd {
   min-width: 0;
   margin: 0;
-  font-size: 13px;
-  line-height: 20px;
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line);
 }
 
 .observation-task-metadata dt {
@@ -550,12 +550,11 @@
 
 .observation-task-metadata dd {
   width: 180px;
-  overflow: hidden;
   color: var(--color-text-primary);
   font-weight: 500;
+  overflow-wrap: anywhere;
   text-align: right;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .observation-task-metadata > div:last-child dd {
@@ -565,7 +564,7 @@
 .observation-control-card__actions {
   display: flex;
   width: calc(100% + 2px);
-  min-height: 92px;
+  min-height: 100px;
   flex: 0 0 auto;
   flex-direction: column;
   gap: 8px;
@@ -590,7 +589,7 @@
   border-radius: 14px;
   color: var(--color-accent);
   background: var(--color-accent-surface);
-  font-size: 13px;
+  font-size: var(--type-body-size);
   font-weight: 700;
   line-height: 20px;
 }
@@ -628,8 +627,9 @@
 .observation-control-card .cancellation-status {
   margin: 0;
   color: var(--color-text-secondary);
-  font-size: 12px;
-  line-height: 20px;
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-line);
+  overflow-wrap: anywhere;
 }
 
 .observation-control-card .cancellation-status {
@@ -647,7 +647,10 @@
 .observation-drawer-backdrop {
   position: fixed;
   z-index: 80;
-  inset: 0;
+  top: 72px;
+  right: 0;
+  bottom: 0;
+  left: 0;
   display: flex;
   justify-content: flex-end;
   background: rgba(10, 20, 41, 0.32);
@@ -681,7 +684,9 @@
   margin-bottom: 4px;
   color: var(--color-text-secondary);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-line);
+  overflow-wrap: anywhere;
 }
 
 .observation-case-drawer > header h2 {
@@ -709,8 +714,8 @@
   border-radius: 12px;
   color: var(--color-text-secondary);
   background: var(--color-surface);
-  font-size: 13px;
-  line-height: 20px;
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line);
 }
 
 .observation-drawer-state {
@@ -742,10 +747,11 @@
 
 .observation-case-table-scroll th,
 .observation-case-table-scroll td {
-  padding: 14px 12px;
+  padding: 16px 12px;
   border-bottom: 1px solid var(--color-border);
   color: var(--color-text-secondary);
-  font-size: 12px;
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-line);
   text-align: left;
 }
 
@@ -771,7 +777,8 @@
 .observation-case-table-scroll td strong {
   color: var(--color-text-primary);
   font-weight: 600;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .observation-case-table-scroll td small {
@@ -786,6 +793,8 @@
   align-items: center;
   padding: 2px 8px;
   border-radius: 999px;
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-line);
   font-weight: 700;
 }
 
@@ -883,12 +892,13 @@
   }
 
   .observation-metric-card {
-    height: 128px;
+    height: auto;
+    min-height: 144px;
   }
 
   .observation-path-card {
     height: auto;
-    min-height: 158px;
+    min-height: 192px;
     margin-bottom: 18px;
     padding: 20px 18px;
   }
@@ -917,7 +927,7 @@
 
   .live-log-panel,
   .observation-control-card {
-    min-height: 360px;
+    min-height: 400px;
   }
 
   .live-log-panel {
@@ -930,5 +940,11 @@
 
   .observation-control-card {
     padding-inline: 18px;
+  }
+
+  .observation-case-drawer {
+    width: 100%;
+    max-width: none;
+    padding: 24px 18px;
   }
 }

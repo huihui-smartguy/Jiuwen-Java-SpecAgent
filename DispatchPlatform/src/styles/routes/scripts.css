@@ -58,12 +58,13 @@
 
 .scripts-summary-card {
   display: flex;
-  height: 128px;
+  height: auto;
+  min-height: 136px;
   min-width: 0;
   flex-direction: column;
   align-items: flex-start;
-  gap: 3px;
-  padding: 18px 24px 16px;
+  gap: 6px;
+  padding: 20px 24px 18px;
   border: 1px solid var(--color-outline);
   border-radius: 22px;
   background: var(--color-surface-low);
@@ -74,7 +75,7 @@
   font-size: 15px;
   font-weight: 500;
   letter-spacing: 0;
-  line-height: 20px;
+  line-height: var(--type-body-line);
 }
 
 .scripts-summary-card > strong {
@@ -91,12 +92,14 @@
   margin-top: 0;
   color: var(--color-text-secondary);
   font-size: 14px;
-  line-height: 20px;
+  line-height: var(--type-body-line);
+  overflow-wrap: anywhere;
 }
 
 .scripts-table-card {
   display: flex;
-  height: 586px;
+  height: auto;
+  min-height: 606px;
   min-width: 0;
   overflow: hidden;
   flex-direction: column;
@@ -111,7 +114,7 @@
 .scripts-toolbar {
   display: flex;
   width: calc(100% + 2px);
-  height: 48px;
+  min-height: 48px;
   min-width: 0;
   flex: 0 0 48px;
   align-items: center;
@@ -123,7 +126,8 @@
 .scripts-search-control {
   display: flex;
   width: 430px;
-  height: 44px;
+  height: 48px;
+  min-height: 48px;
   min-width: 0;
   flex: 0 0 430px;
   align-items: center;
@@ -167,7 +171,8 @@
 .scripts-filter-control {
   position: relative;
   display: flex;
-  height: 44px;
+  height: 48px;
+  min-height: 48px;
   min-width: 0;
   align-items: center;
   border: 1px solid var(--color-outline);
@@ -191,7 +196,7 @@
 .scripts-filter-control select {
   width: 100%;
   min-width: 0;
-  height: 42px;
+  height: 46px;
   padding: 0 38px 0 14px;
   overflow: hidden;
   border: 0;
@@ -327,8 +332,8 @@
   margin-top: 0;
   color: var(--color-text-secondary);
   font-family: var(--font-ui);
-  font-size: 12px;
-  line-height: 20px;
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-line);
 }
 
 .scripts-level {
@@ -376,7 +381,7 @@
   .scripts-import-action,
   .scripts-search-control,
   .scripts-filter-control {
-    min-height: 44px;
+    min-height: 48px;
   }
 }
 
@@ -387,12 +392,12 @@
 
   .scripts-summary-card {
     height: auto;
-    min-height: 128px;
+    min-height: 136px;
   }
 
   .scripts-table-card {
     height: auto;
-    min-height: 586px;
+    min-height: 606px;
   }
 
   .scripts-toolbar {
@@ -406,7 +411,7 @@
 
   .scripts-search-control {
     width: 100%;
-    flex-basis: 44px;
+    flex-basis: 48px;
   }
 
   .scripts-filter-controls {
@@ -435,7 +440,7 @@
   }
 
   .scripts-table-card {
-    min-height: 586px;
+    min-height: 606px;
     padding: 18px;
   }
 
@@ -445,7 +450,7 @@
 
   .scripts-filter-control {
     width: 100%;
-    min-height: 44px;
+    min-height: 48px;
   }
 }
 
