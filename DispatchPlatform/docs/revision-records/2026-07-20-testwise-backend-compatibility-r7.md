@@ -47,8 +47,21 @@ Automated browser geometry checks at `1440 × 1100` and `390 × 844` found no vi
 
 ## Deployment and rollback
 
-Status: pending source commit and production rollout.
+Status: atomically deployed and verified at `2026-07-20T10:31:36+08:00`.
 
-The release will be staged beneath `/data1/testwise/releases`, will preserve the installed `config/runtime.json` byte-for-byte, and will atomically switch `/data1/testwise/current`. The previous symlink target is the rollback release. Nginx configuration is not changed by R7 and must validate before and after the switch.
+- Deployed source commit: `0ca75ccbf35d542a977998dc59b27d64788a4d9a` on `develop` (`c080d72` contains the main R7 adaptation; `0ca75cc` aligns the raw pytest status contract).
+- Release path: `/data1/testwise/releases/20260720-101953-0ca75cc`.
+- Previous release / rollback target: `/data1/testwise/releases/20260717-171626-512e498`.
+- Release archive SHA-256: `611bad72a7daad80348a6d1b6a80a71a45efacac8dc236bf88ad37466d3c48df`.
+- `index.html` SHA-256: `fed20844984aee8de625ff10bbd9ec740682c055273e11cd9080d19bf53ff0e2`.
+- JavaScript SHA-256: `c3aad2a8fd33b6ead52e408f75f5a77e96fd6fe446381afeb0939aace3d52b6d`.
+- CSS SHA-256: `2ccfe392d31fd05fa708d6b4fe20c5f26af010bc65ac4dd0016d099d343916eb`.
+- Installed runtime SHA-256 before and after the switch: `216a056145da45da17ec2e74b0ad64cf3fe8f8a02d741a8f5ab81b1262901203`. The previous runtime was preserved byte-for-byte; repository demo runtime data was not installed.
+- Nginx validation passed before staging and after the atomic symlink switch. No Nginx configuration or reload was required, and backend listeners on ports `3000` and `3001` remained available.
+- `/testwise/`, the six direct child routes, runtime JSON, R7 JavaScript and CSS assets, health, task versions, and report listing all returned HTTP `200` through the public Nginx gateway with the expected content types.
+- Live browser verification loaded the R7 bundle and repeated the `1440 × 1100` / `390 × 844` typography and geometry audit. The deployed Scripts route showed 126 scripts across 14 Features; Results showed the four existing `release1` reports; the known persisted report detail rendered at 390px without overflow, undersized text, clipping, or `undefined` values.
+- Controlled execution verification: `task-a1d036cb`, version `release1`, one read-only API-key-list script. The task reached the valid terminal `failed` state because the backend runner returned test-command code 4. Version, progress, final counts, lowercase display status, nullable raw `actual_status`, and the uppercase `PASSED|FAILED|SKIPPED|ERROR` distribution remained available through the public gateway.
+- Temporary report verification: `49e4d033-be52-4dac-a4ed-486d0972f6ef`, title `[TEMP VERIFY] TestWise R7 2026-07-20 task-a1d036cb`. Exact Object-plus-version listing, detail, Markdown, and HTML downloads returned `200`. Its narrow time window contained zero execution rows while the backend verdict was passed; the deployed UI correctly rendered the neutral `无匹配执行数据` state, a dash success rate, and no inferred Task link.
+- Only that temporary report was deleted. Deletion returned `200`, the exact Object-plus-version list returned to four reports, and the deleted detail returned `404`.
 
 No credential, token, raw sensitive response, password, or private backend filesystem path is recorded in this revision record.
