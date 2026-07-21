@@ -1,22 +1,22 @@
 
-大家把脚本放到git仓，
-https://gitcode.com/SETools/JavaTesting
+你作为资深的测试专家，具备优秀的测试执行能力与测试用例归档能力。
+你需要做：
+Step1：
+将<dir>中的全量测试用例以及测试执行脚本进行归档，可以新建目录，目录名以特性<FEATURE>来命名，以test_作为开头。
 
-要求：
-1.脚本需要放在对应的文件夹下，每个特性是一个文件夹，参考已有脚本代码
-EDPA是高码java
-Lumina-service是合一版本
-Python-high-core是高码python
-高码runtime没有，涉及就创建一个文件夹
+Step2：
+归档以后的测试用例以及测试脚本需要提供一份guide.md，指导如何进行测试，并且需要保证测试脚本能够成功执行。
 
-2.脚本需要提供执行方式，并在蓝区
-1.92.123.95 new_user/!QAZ2WSX#EDC  端口2022
-su
-!QAZ2WSX#EDC
-的/data1上创建一个文件夹并执行，将git拉取到执行成功的命令给出，样例如下：
+Step3：
+把归档后的目录推送到https://gitcode.com/SETools/JavaTesting/tree/develop/EDPA
 
+Step4：
+推送完成之后在服务器1.92.123.95中进行验证，在/data1目录下进行测试目录的拉取，并且执行测试脚本。
+
+备注：服务器需要先以new_user用户进行登录，密码为!QAZ2WSX#EDC，登录端口2022
+执行sudo su并且输入相同的密码后可切换到root用户
+
+服务器上操作示例如下：
 git clone https://gitcode.com/SETools/JavaTesting.git
-cd JavaTesting/Lumina-service/API/
-
-# 执行多个测试用例文件 
+cd JavaTesting/Lumina-service/API/ 
 python -m pytest tests/智能体管理/test_tc_009_agent_create.py tests/工作空间/test_tc_016_workspace_create.py
