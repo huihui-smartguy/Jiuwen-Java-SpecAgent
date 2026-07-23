@@ -247,7 +247,7 @@ export function Tasks({
   }, [features, selectedFeature]);
 
   useEffect(() => {
-    setSelectedFeature('');
+    setSelectedFeature(catalogObject?.features[0]?.name ?? '');
     setSelectedVersion('');
     setSelectedScriptIds([]);
     setScriptSearch('');

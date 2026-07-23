@@ -108,6 +108,60 @@ afterEach(() => {
 });
 
 describe('live catalog application integration', () => {
+  test('initializes the first Feature when Tasks mounts after the catalog is already cached', async () => {
+    const user = userEvent.setup();
+    const catalog = fullCatalog('catalog-preloaded-before-tasks');
+    const selectedObject = catalog.objects[0];
+    const runtimeConfig = resolveRuntimeConfig({
+      apiBaseUrl: '/runtime-api',
+      defaultLanguage: 'en',
+      enableMockFallback: false,
+      sutTargets: [{
+        id: selectedObject.id,
+        name: 'Catalog Object',
+        product: selectedObject.product,
+        scene: selectedObject.scene,
+        version: 'live',
+        apiBaseUrl: '/runtime-api',
+        status: 'healthy'
+      }]
+    });
+    vi.stubGlobal('EventSource', undefined);
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = new URL(String(input), 'http://local.test');
+      if (url.pathname === '/runtime-api/catalog') {
+        return response(catalog, {
+          headers: { ETag: '"catalog-preloaded-before-tasks"' }
+        });
+      }
+      if (url.pathname === '/runtime-api/versions') {
+        return response({
+          success: true,
+          default_version: 'release1',
+          versions: [{
+            code: 'release1',
+            name: 'Release 1',
+            description: 'Stable test batch',
+            created_at: '2026-07-01T00:00:00Z',
+            is_default: true
+          }]
+        });
+      }
+      return Promise.reject(new Error(`Unexpected request: ${url.pathname}`));
+    });
+
+    renderCatalogApp(runtimeConfig);
+
+    expect(await screen.findByText('catalog_script_0_base')).toBeInTheDocument();
+    await user.click(screen.getByRole('link', { name: 'Tasks' }));
+
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Feature' }))
+      .toHaveValue('Feature 0'));
+    expect(screen.getByText('catalog_script_0_base')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Launch execution' }))
+      .toBeEnabled());
+  });
+
   test('migrates a legacy Object id, renders all 12 Objects without fanout, and shares them with Observe and Settings', async () => {
     const user = userEvent.setup();
     const catalog = fullCatalog();
