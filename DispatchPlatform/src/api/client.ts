@@ -1,5 +1,6 @@
 import type {
   ApiContext,
+  CatalogSnapshot,
   Feature,
   NormalizedTaskStatus,
   Script,
@@ -34,6 +35,7 @@ import type {
   TaskScriptStatusResponse,
   TestVersionResponse
 } from '../types';
+import { parseCatalogSnapshot } from '../catalog/model';
 
 interface FeatureResponse {
   success: boolean;
@@ -81,7 +83,19 @@ interface LiveTaskCreateResponse {
   created_at?: string;
   estimated_duration?: string;
   version?: string;
+  catalog_revision?: string;
 }
+
+export type CatalogFetchResult =
+  | {
+      kind: 'modified';
+      snapshot: CatalogSnapshot;
+      etag?: string;
+    }
+  | {
+      kind: 'not-modified';
+      etag?: string;
+    };
 
 interface LiveTask {
   id?: string;
@@ -184,6 +198,43 @@ async function readJson<T>(response: Response): Promise<T> {
   }
 
   return body;
+}
+
+export async function getCatalog(
+  context: ApiContext,
+  options: { etag?: string; signal?: AbortSignal } = {}
+): Promise<CatalogFetchResult> {
+  const headers = new Headers({ Accept: 'application/json' });
+  if (options.etag) {
+    headers.set('If-None-Match', options.etag);
+  }
+  const response = await fetch(buildApiUrl(context.apiBaseUrl, '/catalog'), {
+    headers,
+    cache: 'no-cache',
+    signal: options.signal
+  });
+  const etag = response.headers.get('ETag') ?? options.etag;
+  if (response.status === 304) {
+    return { kind: 'not-modified', etag: etag ?? undefined };
+  }
+  const body = await readJson<unknown>(response);
+  try {
+    return {
+      kind: 'modified',
+      snapshot: parseCatalogSnapshot(body),
+      etag: etag ?? undefined
+    };
+  } catch (error) {
+    throw new ApiError('The catalog response is malformed', {
+      code: 'INVALID_CATALOG_RESPONSE',
+      status: response.status,
+      details: error instanceof Error ? error.message : error
+    });
+  }
+}
+
+export function getCatalogEventsUrl(context: ApiContext): string {
+  return buildApiUrl(context.apiBaseUrl, '/catalog/events');
 }
 
 export async function getFeatures(
@@ -506,7 +557,8 @@ export async function createTask(
     backend_status: body.status,
     queue_position: body.queue_position,
     total_scripts: body.total_scripts,
-    version: body.version ?? payload.version
+    version: body.version ?? payload.version,
+    catalog_revision: body.catalog_revision ?? payload.catalog_revision
   };
 }
 

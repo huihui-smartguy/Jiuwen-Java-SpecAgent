@@ -217,6 +217,29 @@ describe('Observation', () => {
     expect(fetchSpy.mock.calls.filter(([input]) => String(input).includes('/tasks?'))).toHaveLength(1);
   });
 
+  test('presents backend-native task scope with canonical product and scene labels', async () => {
+    const nativeTask = listTask('task-native-labels', {
+      product: '高码python',
+      scene: 'DFx',
+      feature: 'Native feature'
+    });
+    mockTaskApi([liveDetail(nativeTask)], [], [], [listEnvelope([nativeTask])]);
+
+    renderObservation({
+      task: null,
+      runtimeOverrides: { enableMockFallback: false }
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(nativeTask.task_id)).toBeInTheDocument();
+      expect(screen.getByText('High-Code Python')).toBeInTheDocument();
+      expect(screen.getByText('DFX · Native feature')).toBeInTheDocument();
+      expect(screen.queryByText('高码python')).not.toBeInTheDocument();
+      expect(within(screen.getByRole('article', { name: 'Object' }))
+        .getByText('High-Code Python DFX')).toBeInTheDocument();
+    });
+  });
+
   test('merges tasks from unique backends, selects the newest directly, and switches pinned detail sources', async () => {
     const alphaTarget: SutTarget = {
       id: 'alpha',
@@ -332,10 +355,10 @@ describe('Observation', () => {
     const objectMetric = await screen.findByRole('article', { name: 'Object' });
     expect(within(objectMetric).getByText('External product Workflow')).toBeInTheDocument();
     expect(within(objectMetric).queryByText('Configured Object')).not.toBeInTheDocument();
-    expect(fetchSpy).toHaveBeenCalledWith(
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledWith(
       '/shared-executor/tasks/task-outside-config',
       expect.any(Object)
-    );
+    ));
   });
 
   test('a fresh Observation mount ignores a terminal shell task and selects the newest active row', async () => {

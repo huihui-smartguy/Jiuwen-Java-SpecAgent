@@ -1,8 +1,23 @@
-import { ChevronDown, Menu, X } from 'lucide-react';
-import { useEffect, useRef, type Ref } from 'react';
+import { Check, ChevronDown, Menu, Search, X } from 'lucide-react';
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type Ref
+} from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { getCopy } from '../i18n';
-import { objectOptionLabel } from '../objectLabels';
+import {
+  groupObjectsByProduct,
+  objectIdentityLabel,
+  objectMatchesSearch,
+  objectOptionLabel,
+  productDisplayLabel,
+  sceneDisplayLabel
+} from '../objectLabels';
 import type { AuthConfig, Language, SutTarget } from '../types';
 import { AccountMenu } from './AccountMenu';
 import { GradientGhostLogo } from './GradientGhostLogo';
@@ -24,49 +39,336 @@ export interface ConsoleHeaderProps {
   auth?: AuthConfig;
   drawerOpen: boolean;
   objectFocusRequest: number;
+  objectMetadata?: Readonly<Record<string, { scriptCount: number }>>;
+  catalogState?: 'connecting' | 'live' | 'polling' | 'stale' | 'unavailable' | 'mock';
   onObjectChange: (id: string) => void;
   onLanguageToggle: () => void;
   onDrawerOpenChange: (open: boolean) => void;
 }
 
 interface ObjectControlProps {
+  language: Language;
   selectedObject: SutTarget;
   objects: readonly SutTarget[];
+  objectMetadata?: Readonly<Record<string, { scriptCount: number }>>;
+  catalogState?: ConsoleHeaderProps['catalogState'];
   testId: string;
-  selectRef?: Ref<HTMLSelectElement>;
+  triggerRef?: Ref<HTMLButtonElement>;
   onObjectChange: (id: string) => void;
 }
 
+const pickerCopy = {
+  en: {
+    object: 'Object',
+    chooseObject: 'Choose Object',
+    product: 'Product',
+    scene: 'Scene',
+    search: 'Search products or scenes',
+    results: 'Available Objects',
+    empty: 'No Objects match this search.',
+    removed: 'Removed',
+    scripts: (count: number) => `${count} ${count === 1 ? 'script' : 'scripts'}`,
+    states: {
+      connecting: 'Connecting',
+      live: 'Live',
+      polling: 'Updating',
+      stale: 'Stale',
+      unavailable: 'Unavailable',
+      mock: 'Demo data'
+    }
+  },
+  zh: {
+    object: 'Object',
+    chooseObject: '选择 Object',
+    product: '产品',
+    scene: '场景',
+    search: '搜索产品或场景',
+    results: '可用 Object',
+    empty: '没有匹配的 Object。',
+    removed: '已移除',
+    scripts: (count: number) => `${count} 个脚本`,
+    states: {
+      connecting: '正在连接',
+      live: '实时',
+      polling: '正在更新',
+      stale: '数据可能过期',
+      unavailable: '不可用',
+      mock: '演示数据'
+    }
+  }
+} as const;
+
 function ObjectControl({
+  language,
   selectedObject,
   objects,
+  objectMetadata,
+  catalogState,
   testId,
-  selectRef,
+  triggerRef: externalTriggerRef,
   onObjectChange
 }: ObjectControlProps) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const controlRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const optionRefs = useRef(new Map<string, HTMLButtonElement>());
+  const pickerId = useId();
+  const copy = pickerCopy[language];
+  const matchingObjects = useMemo(
+    () => objects.filter((object) => objectMatchesSearch(object, query)),
+    [objects, query]
+  );
+  const groups = useMemo(() => groupObjectsByProduct(matchingObjects), [matchingObjects]);
+  const selectedIdentity = objectIdentityLabel(selectedObject);
+  const selectedObjectIsLive = objects.some((object) => object.id === selectedObject.id);
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!controlRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) {
+      setQuery('');
+      return;
+    }
+    searchRef.current?.focus();
+  }, [open]);
+
+  const closeAndFocusTrigger = () => {
+    setOpen(false);
+    triggerRef.current?.focus();
+  };
+
+  const chooseObject = (id: string) => {
+    onObjectChange(id);
+    closeAndFocusTrigger();
+  };
+
+  const focusOption = (index: number) => {
+    const boundedIndex = Math.max(0, Math.min(index, matchingObjects.length - 1));
+    const object = matchingObjects[boundedIndex];
+    if (object) {
+      optionRefs.current.get(object.id)?.focus();
+    }
+  };
+
+  const handleSearchKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      closeAndFocusTrigger();
+    } else if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      focusOption(0);
+    }
+  };
+
+  const handleOptionKeyDown = (
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    objectIndex: number,
+    objectId: string
+  ) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      closeAndFocusTrigger();
+    } else if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      focusOption(objectIndex + 1);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (objectIndex === 0) {
+        searchRef.current?.focus();
+      } else {
+        focusOption(objectIndex - 1);
+      }
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      focusOption(0);
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      focusOption(matchingObjects.length - 1);
+    } else if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      chooseObject(objectId);
+    }
+  };
+
+  const handleTriggerKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      setOpen(true);
+    }
+  };
+
   return (
-    <label className="object-control" data-testid={testId}>
-      <span className="object-control__label">Object</span>
-      <span className="object-control__summary" aria-hidden="true">
-        <span className="object-control__identity">
-          <strong>{selectedObject.product} {selectedObject.scene}</strong>
-        </span>
-        <ChevronDown aria-hidden="true" />
-      </span>
-      <select
-        ref={selectRef}
-        className="object-control__select"
-        aria-label="Object"
-        value={selectedObject.id}
-        onChange={(event) => onObjectChange(event.target.value)}
+    <div
+      ref={controlRef}
+      className={`object-control ${open ? 'is-open' : ''}`}
+      data-testid={testId}
+    >
+      <button
+        ref={(element) => {
+          triggerRef.current = element;
+          if (typeof externalTriggerRef === 'function') {
+            externalTriggerRef(element);
+          } else if (externalTriggerRef) {
+            externalTriggerRef.current = element;
+          }
+        }}
+        type="button"
+        className="object-control__trigger"
+        aria-label={[
+          `${copy.chooseObject}: ${selectedIdentity}`,
+          !selectedObjectIsLive ? copy.removed : undefined
+        ].filter(Boolean).join(' · ')}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={pickerId}
+        onClick={() => setOpen((current) => !current)}
+        onKeyDown={handleTriggerKeyDown}
       >
-        {objects.map((object) => (
-          <option key={object.id} value={object.id}>
-            {objectOptionLabel(object, objects)}
-          </option>
-        ))}
-      </select>
-    </label>
+        <span className="object-control__label">{copy.object}</span>
+        <span className="object-control__summary" aria-hidden="true">
+          <span className="object-control__identity">
+            <strong>{selectedIdentity}</strong>
+          </span>
+          <ChevronDown aria-hidden="true" />
+        </span>
+      </button>
+
+      {open && (
+        <div
+          id={pickerId}
+          className="object-picker"
+          role="dialog"
+          aria-label={copy.chooseObject}
+        >
+          <div className="object-picker__header">
+            <div>
+              <strong>{copy.chooseObject}</strong>
+              {catalogState && (
+                <span
+                  className={`object-picker__state object-picker__state--${catalogState}`}
+                  role="status"
+                >
+                  <span aria-hidden="true" />
+                  {copy.states[catalogState]}
+                </span>
+              )}
+            </div>
+            <label className="object-picker__search">
+              <Search aria-hidden="true" />
+              <span className="sr-only">{copy.search}</span>
+              <input
+                ref={searchRef}
+                type="search"
+                value={query}
+                placeholder={copy.search}
+                onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={handleSearchKeyDown}
+              />
+            </label>
+          </div>
+
+          <div className="object-picker__labels" aria-hidden="true">
+            <span>{copy.product}</span>
+            <span>{copy.scene}</span>
+          </div>
+
+          {groups.length > 0 ? (
+            <div className="object-picker__list" role="listbox" aria-label={copy.results}>
+              {groups.map((group, groupIndex) => {
+                const groupId = `${pickerId}-product-${groupIndex}`;
+                return (
+                  <div
+                    key={group.product}
+                    className="object-picker__group"
+                    role="group"
+                    aria-labelledby={groupId}
+                  >
+                    <div id={groupId} className="object-picker__product">
+                      {productDisplayLabel(group.product)}
+                    </div>
+                    <div className="object-picker__scenes">
+                      {group.objects.map((object) => {
+                        const objectIndex = matchingObjects.findIndex(
+                          (candidate) => candidate.id === object.id
+                        );
+                        const scriptCount = objectMetadata?.[object.id]?.scriptCount
+                          ?? ('scriptCount' in object && typeof object.scriptCount === 'number'
+                            ? object.scriptCount
+                            : undefined);
+                        const selected = object.id === selectedObject.id;
+                        const baseIdentity = objectIdentityLabel(object);
+                        const optionIdentity = objectOptionLabel(object, objects);
+                        const disambiguator = optionIdentity === baseIdentity
+                          ? undefined
+                          : object.id;
+                        return (
+                          <button
+                            key={object.id}
+                            ref={(element) => {
+                              if (element) {
+                                optionRefs.current.set(object.id, element);
+                              } else {
+                                optionRefs.current.delete(object.id);
+                              }
+                            }}
+                            type="button"
+                            className={`object-picker__option ${selected ? 'is-selected' : ''}`}
+                            role="option"
+                            aria-selected={selected}
+                            aria-label={[
+                              optionIdentity,
+                              scriptCount !== undefined
+                                ? copy.scripts(scriptCount)
+                                : undefined
+                            ].filter(Boolean).join(' · ')}
+                            onClick={() => chooseObject(object.id)}
+                            onKeyDown={(event) => handleOptionKeyDown(
+                              event,
+                              objectIndex,
+                              object.id
+                            )}
+                          >
+                            <span className="object-picker__option-copy">
+                              <strong>
+                                {sceneDisplayLabel(object.scene)}
+                                {disambiguator ? ` · ${disambiguator}` : ''}
+                              </strong>
+                              {scriptCount !== undefined && (
+                                <small>{copy.scripts(scriptCount)}</small>
+                              )}
+                            </span>
+                            {selected && <Check aria-hidden="true" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="object-picker__empty" role="status">{copy.empty}</p>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -77,6 +379,8 @@ export function ConsoleHeader({
   auth,
   drawerOpen,
   objectFocusRequest,
+  objectMetadata,
+  catalogState,
   onObjectChange,
   onLanguageToggle,
   onDrawerOpenChange
@@ -86,8 +390,8 @@ export function ConsoleHeader({
   const drawerRef = useRef<HTMLElement>(null);
   const drawerTriggerRef = useRef<HTMLButtonElement>(null);
   const drawerCloseRef = useRef<HTMLButtonElement>(null);
-  const desktopObjectRef = useRef<HTMLSelectElement>(null);
-  const drawerObjectRef = useRef<HTMLSelectElement>(null);
+  const desktopObjectRef = useRef<HTMLButtonElement>(null);
+  const drawerObjectRef = useRef<HTMLButtonElement>(null);
   const lastObjectFocusRequestRef = useRef(0);
   const pendingDrawerObjectFocusRef = useRef(false);
   const languageLabel = language === 'zh' ? t.switchToEnglish : t.switchToChinese;
@@ -106,7 +410,7 @@ export function ConsoleHeader({
     const trigger = drawerTriggerRef.current;
     const focusableElements = () => Array.from(
       drawer?.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
       ) ?? []
     );
     const handleDrawerKeyDown = (event: KeyboardEvent) => {
@@ -208,10 +512,13 @@ export function ConsoleHeader({
           <div className="app-header__actions">
             <div className="desktop-object-control">
               <ObjectControl
+                language={language}
                 selectedObject={selectedObject}
                 objects={objects}
+                objectMetadata={objectMetadata}
+                catalogState={catalogState}
                 testId="object-control"
-                selectRef={desktopObjectRef}
+                triggerRef={desktopObjectRef}
                 onObjectChange={onObjectChange}
               />
             </div>
@@ -265,10 +572,13 @@ export function ConsoleHeader({
             </div>
 
             <ObjectControl
+              language={language}
               selectedObject={selectedObject}
               objects={objects}
+              objectMetadata={objectMetadata}
+              catalogState={catalogState}
               testId="drawer-object-control"
-              selectRef={drawerObjectRef}
+              triggerRef={drawerObjectRef}
               onObjectChange={onObjectChange}
             />
             {navigation(true)}

@@ -249,7 +249,7 @@ describe('Results', () => {
     expect(within(trend).getByRole('heading', { level: 2, name: '通过率趋势' })).toBeInTheDocument();
     expect(within(trend).getByText('近 7 天')).toBeInTheDocument();
     expect(within(trend).queryByText('+2.1%')).not.toBeInTheDocument();
-    expect(within(trend).queryByText(/全部级别|合一版本 API ·/)).not.toBeInTheDocument();
+    expect(within(trend).queryByText(/全部级别|Unified Version API ·/)).not.toBeInTheDocument();
 
     const failures = screen.getByRole('region', { name: '失败分布' });
     expect(within(failures).getByText('7 个用例')).toBeInTheDocument();
@@ -280,7 +280,7 @@ describe('Results', () => {
     for (const expected of [
       '回归验证 · API 密钥管理',
       'task-ad06c8e5',
-      '合一版本 API',
+      'Unified Version API',
       '今天 10:42',
       '角色权限边界验证',
       'task-c91b2d4a',
@@ -313,7 +313,7 @@ describe('Results', () => {
       '通过，通过率 100.0%',
       '部分通过，通过率 80.0%'
     ]);
-    expect(within(reports).getAllByText('合一版本 API')).toHaveLength(4);
+    expect(within(reports).getAllByText('Unified Version API')).toHaveLength(4);
     expect(within(reports).getByText('7 月 13 日')).toBeInTheDocument();
     expect(within(reports).getByRole('searchbox', { name: '搜索报告或任务' })).toHaveAttribute(
       'placeholder',
@@ -804,7 +804,7 @@ describe('Results', () => {
     expect(generate).toHaveFocus();
     await user.click(generate);
     modal = await screen.findByRole('dialog', { name: '生成报告' });
-    expect(within(modal).getByText(`${runtimeConfig.sutTargets[0].product} · ${runtimeConfig.sutTargets[0].scene}`))
+    expect(within(modal).getByText('High-Code Java scene'))
       .toBeInTheDocument();
     const reportVersion = within(modal).getByRole('combobox', {
       name: /执行\s*\/\s*报告版本/

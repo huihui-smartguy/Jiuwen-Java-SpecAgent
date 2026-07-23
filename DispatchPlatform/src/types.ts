@@ -65,12 +65,52 @@ export interface Script {
   path: string;
 }
 
+export interface CatalogFeature extends Feature {
+  script_count: number;
+  scripts: Script[];
+}
+
+export interface CatalogObject {
+  id: string;
+  product: string;
+  scene: string;
+  feature_count: number;
+  script_count: number;
+  latest_changed_at?: string;
+  features: CatalogFeature[];
+}
+
+export interface CatalogTotals {
+  products: number;
+  objects: number;
+  features: number;
+  scripts: number;
+}
+
+export interface CatalogSnapshot {
+  success: true;
+  revision: string;
+  generated_at: string;
+  products: string[];
+  objects: CatalogObject[];
+  totals: CatalogTotals;
+}
+
+export interface CatalogSutTarget extends SutTarget {
+  catalogObjectId: string;
+  catalogRevision: string;
+  featureCount: number;
+  scriptCount: number;
+  latestChangedAt?: string;
+}
+
 export type TriggerType = 'feature' | 'level' | 'scripts' | 'scene';
 
 interface TaskCreateBase {
   product: string;
   scene: string;
   version?: string;
+  catalog_revision?: string;
 }
 
 export type TaskCreateRequest =
@@ -87,6 +127,7 @@ export type TaskCreateRequest =
   | (TaskCreateBase & {
       feature: string;
       script_name: string[];
+      script_ids?: string[];
       level?: never;
     })
   | (TaskCreateBase & {
@@ -171,6 +212,7 @@ export interface TaskCreateResponse {
   queue_position?: number;
   total_scripts?: number;
   version?: string;
+  catalog_revision?: string;
 }
 
 export interface TaskCancelResponse {

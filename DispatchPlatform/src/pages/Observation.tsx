@@ -15,6 +15,11 @@ import { PageHeader } from '../components/PageHeader';
 import { StatusBadge } from '../components/StatusBadge';
 import { mockObservationEvents } from '../data/mockData';
 import { getCopy } from '../i18n';
+import {
+  objectNameLabel,
+  productDisplayLabel,
+  sceneDisplayLabel
+} from '../objectLabels';
 import type {
   Language,
   NormalizedTaskStatus,
@@ -453,8 +458,10 @@ function ExecutionTasksCard({
                       <small>{task.execute_mode ?? '—'}</small>
                     </td>
                     <td data-label={copy.scope}>
-                      <strong>{task.product}</strong>
-                      <small>{[task.scene, task.feature].filter(Boolean).join(' · ')}</small>
+                      <strong>{productDisplayLabel(task.product)}</strong>
+                      <small>
+                        {[sceneDisplayLabel(task.scene), task.feature].filter(Boolean).join(' · ')}
+                      </small>
                     </td>
                     <td data-label={copy.version}>{task.version ?? '—'}</td>
                     <td data-label={copy.status}>
@@ -753,7 +760,7 @@ function ObservationDetail({
         />
         <ObservationMetric
           label="Object"
-          value={taskSut.name}
+          value={objectNameLabel(taskSut)}
           detail={`${taskSut.version} · ${t[taskSut.status]}`}
         />
       </section>

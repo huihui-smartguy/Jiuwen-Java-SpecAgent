@@ -111,6 +111,17 @@
   box-shadow: 0 6px 18px rgba(10, 20, 41, 0.06);
 }
 
+.scripts-catalog-warning {
+  margin-bottom: 0;
+  padding: 11px 14px;
+  border: 1px solid color-mix(in srgb, var(--color-warning) 34%, var(--color-outline));
+  border-radius: 12px;
+  color: var(--color-text-secondary);
+  background: color-mix(in srgb, var(--color-warning) 7%, #fff);
+  font-size: 12px;
+  line-height: 18px;
+}
+
 .scripts-toolbar {
   display: flex;
   width: calc(100% + 2px);
@@ -422,6 +433,11 @@
 }
 
 @media (max-width: 680px) {
+  .scripts-catalog-sync {
+    width: 100%;
+    justify-content: space-between;
+  }
+
   .scripts-page > .page-header {
     height: auto;
     min-height: 0;

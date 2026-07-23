@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Route, Routes, useLocation } from 'react-router-dom';
 import { normalizeCreatedTask } from './api/client';
+import { CatalogProvider, useCatalog } from './catalog/CatalogProvider';
+import { findMigratedTargetId, findTargetByScope } from './catalog/model';
 import { ConsoleHeader } from './components/ConsoleHeader';
 import { activeTask as initialActiveTask } from './data/mockData';
 import { Dashboard } from './pages/Dashboard';
@@ -14,16 +16,42 @@ import { Tasks } from './pages/Tasks';
 import {
   applyReducedMotionPreference,
   loadConsolePreferences,
+  saveConsolePreferences,
   subscribeToConsolePreferences,
   type ConsolePreferencesV1
 } from './preferences';
 import type {
+  CatalogObject,
   Language,
   NormalizedTaskStatus,
   RuntimeConfig,
   SutTarget,
   TaskCreateResponse
 } from './types';
+
+function savedSelectionSnapshot(
+  preferences: ConsolePreferencesV1,
+  runtimeConfig: RuntimeConfig
+): SutTarget | undefined {
+  const bootstrapTarget = runtimeConfig.sutTargets.find(
+    (target) => target.id === preferences.defaultSutId
+  );
+  if (bootstrapTarget) {
+    return bootstrapTarget;
+  }
+  if (!preferences.defaultSutProduct || !preferences.defaultSutScene) {
+    return undefined;
+  }
+  return {
+    id: preferences.defaultSutId,
+    name: `${preferences.defaultSutProduct} ${preferences.defaultSutScene}`,
+    product: preferences.defaultSutProduct,
+    scene: preferences.defaultSutScene,
+    version: 'Removed',
+    apiBaseUrl: runtimeConfig.apiBaseUrl,
+    status: 'offline'
+  };
+}
 
 function taskSourceIdentity(task: NormalizedTaskStatus, fallbackApiBaseUrl: string) {
   const source = (task.sourceSut?.apiBaseUrl || fallbackApiBaseUrl || '/api').trim();
@@ -58,7 +86,21 @@ function observationLaunchFromState(state: unknown) {
 }
 
 export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
+  return (
+    <CatalogProvider runtimeConfig={runtimeConfig}>
+      <CatalogAppShell runtimeConfig={runtimeConfig} />
+    </CatalogProvider>
+  );
+}
+
+function CatalogAppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
   const location = useLocation();
+  const catalog = useCatalog();
+  const objects = catalog.snapshot ? catalog.targets : runtimeConfig.sutTargets;
+  const effectiveRuntimeConfig = useMemo<RuntimeConfig>(() => ({
+    ...runtimeConfig,
+    sutTargets: objects
+  }), [objects, runtimeConfig]);
   const [preferences, setPreferences] = useState<ConsolePreferencesV1>(() => (
     loadConsolePreferences(runtimeConfig)
   ));
@@ -78,10 +120,119 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
   const [objectFocusRequest, setObjectFocusRequest] = useState(0);
   const mainContentRef = useRef<HTMLElement>(null);
   const previousPathRef = useRef(location.pathname);
-  const selectedSut = useMemo<SutTarget>(
-    () => runtimeConfig.sutTargets.find((sut) => sut.id === selectedSutId) ?? runtimeConfig.sutTargets[0],
-    [runtimeConfig.sutTargets, selectedSutId]
+  const defaultSutSnapshot = savedSelectionSnapshot(preferences, runtimeConfig);
+  const initialSelectedSut = defaultSutSnapshot;
+  const lastSelectedSutRef = useRef<
+    { selectionId: string; target: SutTarget } | undefined
+  >(initialSelectedSut ? {
+    selectionId: selectedSutId,
+    target: initialSelectedSut
+  } : undefined);
+  const currentSelectedSut = objects.find((sut) => sut.id === selectedSutId);
+  if (currentSelectedSut) {
+    lastSelectedSutRef.current = {
+      selectionId: selectedSutId,
+      target: currentSelectedSut
+    };
+  }
+  const retainedSelectedSut = (
+    lastSelectedSutRef.current?.selectionId === selectedSutId
+      ? lastSelectedSutRef.current.target
+      : undefined
   );
+  const preferenceSelectedSut = selectedSutId === preferences.defaultSutId
+    ? defaultSutSnapshot
+    : undefined;
+  const unavailableSelectedSut: SutTarget = {
+    id: selectedSutId,
+    name: selectedSutId || 'Unavailable Object',
+    product: preferenceSelectedSut?.product ?? 'Unavailable',
+    scene: preferenceSelectedSut?.scene ?? 'Unavailable',
+    version: 'Removed',
+    apiBaseUrl: runtimeConfig.apiBaseUrl,
+    status: 'offline'
+  };
+  const selectedSut = currentSelectedSut
+    ?? retainedSelectedSut
+    ?? preferenceSelectedSut
+    ?? runtimeConfig.sutTargets.find((target) => target.id === selectedSutId)
+    ?? unavailableSelectedSut;
+  const currentCatalogObject = catalog.objectsById.get(selectedSutId);
+  const lastSelectedCatalogObjectRef = useRef<
+    { selectionId: string; object: CatalogObject } | undefined
+  >(currentCatalogObject ? {
+    selectionId: selectedSutId,
+    object: currentCatalogObject
+  } : undefined);
+  if (currentCatalogObject) {
+    lastSelectedCatalogObjectRef.current = {
+      selectionId: selectedSutId,
+      object: currentCatalogObject
+    };
+  }
+  const retainedCatalogObject = (
+    lastSelectedCatalogObjectRef.current?.selectionId === selectedSutId
+      ? lastSelectedCatalogObjectRef.current.object
+      : undefined
+  );
+  const selectedCatalogObject = currentCatalogObject ?? retainedCatalogObject;
+  const catalogSelectionValid = !catalog.snapshot || Boolean(currentCatalogObject);
+  const objectMetadata = useMemo(
+    () => Object.fromEntries(catalog.targets.map((target) => [
+      target.id,
+      { scriptCount: target.scriptCount }
+    ])),
+    [catalog.targets]
+  );
+
+  useEffect(() => {
+    if (!catalog.targets.length || catalog.targets.some((target) => target.id === selectedSutId)) {
+      return;
+    }
+    const savedScope = (
+      preferences.defaultSutProduct
+      && preferences.defaultSutScene
+    ) ? {
+        product: preferences.defaultSutProduct,
+        scene: preferences.defaultSutScene
+      } : undefined;
+    const isSavedDefaultSelection = selectedSutId === preferences.defaultSutId;
+    const scopeMatch = isSavedDefaultSelection && savedScope
+      ? findTargetByScope(catalog.targets, savedScope)?.id
+      : undefined;
+    const migratedId = scopeMatch ?? findMigratedTargetId(
+      catalog.targets,
+      selectedSutId,
+      runtimeConfig.sutTargets
+    );
+    if (!migratedId) {
+      return;
+    }
+    setSelectedSutId(migratedId);
+    if (!isSavedDefaultSelection) {
+      return;
+    }
+
+    const migratedTarget = catalog.targets.find((target) => target.id === migratedId);
+    const nextPreferences = {
+      ...preferences,
+      defaultSutId: migratedId,
+      defaultSutProduct: migratedTarget?.product,
+      defaultSutScene: migratedTarget?.scene
+    };
+    setPreferences(nextPreferences);
+    try {
+      saveConsolePreferences(nextPreferences, effectiveRuntimeConfig);
+    } catch {
+      // Selection migration remains valid for this session when storage is unavailable.
+    }
+  }, [
+    catalog.targets,
+    effectiveRuntimeConfig,
+    preferences,
+    runtimeConfig.sutTargets,
+    selectedSutId
+  ]);
 
   useEffect(() => {
     document.documentElement.classList.remove('lang-zh', 'lang-en');
@@ -114,7 +265,12 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
     mainContentRef.current?.focus({ preventScroll: true });
   }, [location.pathname]);
 
-  const sharedProps = { language, selectedSut, activeTask, runtimeConfig };
+  const sharedProps = {
+    language,
+    selectedSut,
+    activeTask,
+    runtimeConfig: effectiveRuntimeConfig
+  };
   const observationLaunch = observationLaunchFromState(location.state);
   const handleTaskCreated = useCallback((response: TaskCreateResponse) => {
     const task = {
@@ -160,10 +316,12 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
       <ConsoleHeader
         language={language}
         selectedObject={selectedSut}
-        objects={runtimeConfig.sutTargets}
-        auth={runtimeConfig.auth}
+        objects={objects}
+        auth={effectiveRuntimeConfig.auth}
         drawerOpen={drawerOpen}
         objectFocusRequest={objectFocusRequest}
+        objectMetadata={objectMetadata}
+        catalogState={catalog.state}
         onObjectChange={setSelectedSutId}
         onLanguageToggle={() => setLanguage((current) => (current === 'zh' ? 'en' : 'zh'))}
         onDrawerOpenChange={setDrawerOpen}
@@ -185,7 +343,9 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
               <Tasks
                 language={language}
                 selectedSut={selectedSut}
-                runtimeConfig={runtimeConfig}
+                runtimeConfig={effectiveRuntimeConfig}
+                catalogObject={selectedCatalogObject}
+                catalogSelectionValid={catalogSelectionValid}
                 onTaskCreated={handleTaskCreated}
                 onRequestObjectChange={handleRequestObjectChange}
               />
@@ -198,7 +358,7 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
                 language={language}
                 selectedSut={selectedSut}
                 activeTask={activeTask}
-                runtimeConfig={runtimeConfig}
+                runtimeConfig={effectiveRuntimeConfig}
                 launchedTask={observationLaunch}
                 onTaskStatusChange={handleTaskStatusChange}
               />
@@ -214,12 +374,21 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
               <ReportDetailPage
                 language={language}
                 selectedSut={selectedSut}
-                runtimeConfig={runtimeConfig}
+                runtimeConfig={effectiveRuntimeConfig}
                 reportDownloadFormat={preferences.reportDownloadFormat}
               />
             )}
           />
-          <Route path="/scripts" element={<Scripts {...sharedProps} />} />
+          <Route
+            path="/scripts"
+            element={(
+              <Scripts
+                {...sharedProps}
+                catalogObject={selectedCatalogObject}
+                catalogSelectionValid={catalogSelectionValid}
+              />
+            )}
+          />
           <Route path="/knowledge" element={<Knowledge {...sharedProps} />} />
           <Route
             path="/settings"
@@ -227,7 +396,7 @@ export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
               <SettingsPage
                 language={language}
                 selectedSut={selectedSut}
-                runtimeConfig={runtimeConfig}
+                runtimeConfig={effectiveRuntimeConfig}
                 preferences={preferences}
                 onObjectChange={setSelectedSutId}
                 onLanguageChange={setLanguage}

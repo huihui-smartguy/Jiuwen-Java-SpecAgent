@@ -190,7 +190,7 @@ describe('approved Scripts frame', () => {
     );
     expect(within(filters).getByRole('textbox', { name: 'Object' })).toHaveAttribute('readonly');
     expect(within(filters).getByRole('textbox', { name: 'Object' })).toHaveValue(
-      `Object · ${mockRuntimeConfig.sutTargets[0].product} ${mockRuntimeConfig.sutTargets[0].scene}`
+      'Object · High-Code Java scene'
     );
     expect(within(filters).getByRole('combobox', { name: 'Level' })).toHaveValue('All');
     expect(within(filters).getByRole('combobox', { name: 'Feature' })).toHaveValue('All');

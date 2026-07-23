@@ -8,7 +8,7 @@ import {
   CONSOLE_PREFERENCES_STORAGE_KEY,
   type ConsolePreferencesV1
 } from '../preferences';
-import type { Language, SutTarget } from '../types';
+import type { Language, RuntimeConfig, SutTarget } from '../types';
 import { SettingsPage } from './SettingsPage';
 
 const objects: SutTarget[] = [
@@ -51,14 +51,18 @@ const markdownPreferences: ConsolePreferencesV1 = {
 function renderSettings({
   language = 'zh',
   selectedSut = objects[0],
+  defaultSutSnapshot,
   preferences,
+  config = runtimeConfig,
   onObjectChange = vi.fn(),
   onLanguageChange = vi.fn(),
   onPreferencesChange = vi.fn()
 }: {
   language?: Language;
   selectedSut?: SutTarget;
+  defaultSutSnapshot?: SutTarget;
   preferences?: ConsolePreferencesV1;
+  config?: RuntimeConfig;
   onObjectChange?: (id: string) => void;
   onLanguageChange?: (language: Language) => void;
   onPreferencesChange?: (preferences: ConsolePreferencesV1) => void;
@@ -68,7 +72,8 @@ function renderSettings({
       <SettingsPage
         language={language}
         selectedSut={selectedSut}
-        runtimeConfig={runtimeConfig}
+        defaultSutSnapshot={defaultSutSnapshot}
+        runtimeConfig={config}
         preferences={preferences}
         onObjectChange={onObjectChange}
         onLanguageChange={onLanguageChange}
@@ -110,6 +115,15 @@ describe('R8 Settings persistence', () => {
     expect(screen.queryByRole('switch', { name: '连接检查' })).not.toBeInTheDocument();
     expect(screen.queryByRole('combobox', { name: 'Retention' })).not.toBeInTheDocument();
 
+    const defaultObject = screen.getByRole('combobox', { name: '默认 Object' });
+    expect(within(defaultObject).getByRole('option', { name: 'Unified Version API' }))
+      .toHaveValue('object-live');
+    expect(within(defaultObject).getByRole('option', { name: '下一代对象' }))
+      .toHaveValue('object-next');
+    expect(screen.getByText('Unified Version API', {
+      selector: '.settings-select-object-name'
+    })).toBeInTheDocument();
+
     const runtimeCard = screen.getByRole('region', { name: '运行环境' });
     expect(within(runtimeCard).getByRole('textbox', { name: '部署模式' }))
       .toHaveAttribute('readonly');
@@ -145,6 +159,130 @@ describe('R8 Settings persistence', () => {
     expect(screen.getByRole('textbox', { name: 'API base URL' })).toHaveValue('/testwise/api');
   });
 
+  test('represents a removed persisted default without silently selecting another Object', () => {
+    const removedObject: SutTarget = {
+      ...objects[0],
+      id: 'removed-object',
+      name: '合一版本 WEB',
+      scene: 'WEB'
+    };
+    const removedPreferences: ConsolePreferencesV1 = {
+      version: 1,
+      defaultSutId: removedObject.id,
+      defaultSutProduct: removedObject.product,
+      defaultSutScene: removedObject.scene,
+      language: 'en',
+      reducedMotion: false,
+      reportDownloadFormat: 'html'
+    };
+    const liveOnlyConfig = {
+      ...runtimeConfig,
+      sutTargets: [objects[1]]
+    };
+
+    renderSettings({
+      language: 'en',
+      selectedSut: removedObject,
+      preferences: removedPreferences,
+      config: liveOnlyConfig
+    });
+
+    const select = screen.getByRole('combobox', { name: 'Default Object' });
+    expect(select).toHaveValue('removed-object');
+    expect(within(select).getByRole('option', {
+      name: 'Unified Version WEB · Removed'
+    })).toBeDisabled();
+    expect(screen.getByText('Unified Version WEB', {
+      selector: '.settings-select-object-name'
+    })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+  });
+
+  test('preserves a legacy no-scope removed default during an ad-hoc selection and save', async () => {
+    const user = userEvent.setup();
+    const removedObject: SutTarget = {
+      ...objects[0],
+      id: 'legacy-removed-object',
+      name: '合一版本 WEB',
+      scene: 'WEB'
+    };
+    const legacyPreferences: ConsolePreferencesV1 = {
+      version: 1,
+      defaultSutId: removedObject.id,
+      language: 'en',
+      reducedMotion: false,
+      reportDownloadFormat: 'html'
+    };
+    const onObjectChange = vi.fn();
+
+    renderSettings({
+      language: 'en',
+      selectedSut: objects[1],
+      defaultSutSnapshot: removedObject,
+      preferences: legacyPreferences,
+      config: {
+        ...runtimeConfig,
+        sutTargets: [objects[1]]
+      },
+      onObjectChange
+    });
+
+    expect(screen.getByRole('combobox', { name: 'Default Object' }))
+      .toHaveValue(removedObject.id);
+    expect(screen.getByText('Unified Version WEB', {
+      selector: '.settings-select-object-name'
+    })).toBeInTheDocument();
+    expect(within(screen.getByRole('combobox', { name: 'Default Object' })).getByRole(
+      'option',
+      { name: 'Unified Version WEB · Removed' }
+    )).toBeDisabled();
+    await user.click(screen.getByRole('switch', { name: 'Reduced motion' }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(JSON.parse(
+      window.localStorage.getItem(CONSOLE_PREFERENCES_STORAGE_KEY) ?? '{}'
+    )).toMatchObject({
+      defaultSutId: removedObject.id,
+      reducedMotion: true
+    });
+    expect(onObjectChange).toHaveBeenCalledWith(removedObject.id);
+  });
+
+  test('labels a removed persisted default from its saved scope during an ad-hoc live selection', () => {
+    const removedPreferences: ConsolePreferencesV1 = {
+      version: 1,
+      defaultSutId: 'removed-unified-web',
+      defaultSutProduct: '合一版本',
+      defaultSutScene: 'WEB',
+      language: 'en',
+      reducedMotion: false,
+      reportDownloadFormat: 'html'
+    };
+    const liveOnlyConfig = {
+      ...runtimeConfig,
+      sutTargets: [objects[1]]
+    };
+
+    renderSettings({
+      language: 'en',
+      selectedSut: objects[1],
+      preferences: removedPreferences,
+      config: liveOnlyConfig
+    });
+
+    const select = screen.getByRole('combobox', { name: 'Default Object' });
+    expect(select).toHaveValue('removed-unified-web');
+    expect(within(select).getByRole('option', {
+      name: 'Unified Version WEB · Removed'
+    })).toBeDisabled();
+    expect(screen.getByText('Unified Version WEB', {
+      selector: '.settings-select-object-name'
+    })).toBeInTheDocument();
+    expect(screen.queryByText('下一代对象', {
+      selector: '.settings-select-object-name'
+    })).not.toBeInTheDocument();
+  });
+
   test('stages every field and writes the complete object before applying it to the shell', async () => {
     const callOrder: string[] = [];
     const originalSetItem = Storage.prototype.setItem;
@@ -178,6 +316,8 @@ describe('R8 Settings persistence', () => {
     const expectedPreferences: ConsolePreferencesV1 = {
       version: 1,
       defaultSutId: 'object-next',
+      defaultSutProduct: '下一代',
+      defaultSutScene: '场景',
       language: 'en',
       reducedMotion: true,
       reportDownloadFormat: 'md'

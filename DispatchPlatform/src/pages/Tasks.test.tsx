@@ -199,8 +199,9 @@ describe('approved R8 Tasks composition', () => {
     expect(within(steps).getByText('Scope')).toBeInTheDocument();
 
     const objectSummary = screen.getByTestId('task-context-summary');
-    expect(objectSummary).toHaveTextContent(selectedSut.product);
-    expect(objectSummary).toHaveTextContent(selectedSut.scene);
+    expect(objectSummary).toHaveTextContent('High-Code Java scene');
+    expect(objectSummary).not.toHaveTextContent('高码java');
+    expect(objectSummary).not.toHaveTextContent('场景');
     expect(objectSummary).not.toHaveTextContent(selectedSut.version);
     expect(within(objectSummary).getByRole('button', { name: '更换对象' })).toBeInTheDocument();
 
@@ -217,6 +218,8 @@ describe('approved R8 Tasks composition', () => {
     ]);
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Feature' })).toHaveValue('Save API'));
     await waitFor(() => expect(screen.getByLabelText('执行版本')).toHaveValue('release1'));
+    expect(screen.getByRole('region', { name: '启动摘要' }))
+      .toHaveTextContent('High-Code Java scene');
 
     expect(screen.getByRole('heading', { name: '脚本快照 · READ-ONLY SELECTION' })).toBeInTheDocument();
     expect(screen.getByRole('searchbox', { name: '搜索脚本' })).toBeInTheDocument();

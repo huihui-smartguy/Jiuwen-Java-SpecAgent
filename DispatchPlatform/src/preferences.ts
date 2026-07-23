@@ -11,6 +11,9 @@ export interface ConsolePreferencesV1 {
   language: Language;
   reducedMotion: boolean;
   reportDownloadFormat: ReportDownloadFormat;
+  /** Optional canonical scope used to migrate a saved Object when backend ids change. */
+  defaultSutProduct?: string;
+  defaultSutScene?: string;
 }
 
 export interface ConsolePreferenceStorage {
@@ -25,6 +28,7 @@ const PREFERENCE_FIELDS = [
   'reducedMotion',
   'reportDownloadFormat'
 ] as const;
+const OPTIONAL_PREFERENCE_FIELDS = ['defaultSutProduct', 'defaultSutScene'] as const;
 
 function browserPreferenceStorage(): ConsolePreferenceStorage | null {
   if (typeof window === 'undefined') {
@@ -62,18 +66,30 @@ export function isConsolePreferencesV1(
     return false;
   }
 
-  const fields = Object.keys(value).sort();
-  const expectedFields = [...PREFERENCE_FIELDS].sort();
+  const fields = Object.keys(value);
+  const allowedFields = new Set<string>([
+    ...PREFERENCE_FIELDS,
+    ...OPTIONAL_PREFERENCE_FIELDS
+  ]);
   if (
-    fields.length !== expectedFields.length
-    || fields.some((field, index) => field !== expectedFields[index])
+    PREFERENCE_FIELDS.some((field) => !fields.includes(field))
+    || fields.some((field) => !allowedFields.has(field))
   ) {
     return false;
   }
+  const hasProduct = typeof value.defaultSutProduct === 'string' && Boolean(value.defaultSutProduct);
+  const hasScene = typeof value.defaultSutScene === 'string' && Boolean(value.defaultSutScene);
+  if (hasProduct !== hasScene) {
+    return false;
+  }
 
+  const knownBootstrapId = runtimeConfig.sutTargets.some(
+    (sut) => sut.id === value.defaultSutId
+  );
   return value.version === CONSOLE_PREFERENCES_VERSION
     && typeof value.defaultSutId === 'string'
-    && runtimeConfig.sutTargets.some((sut) => sut.id === value.defaultSutId)
+    && Boolean(value.defaultSutId)
+    && (knownBootstrapId || hasProduct)
     && (value.language === 'zh' || value.language === 'en')
     && typeof value.reducedMotion === 'boolean'
     && (value.reportDownloadFormat === 'html' || value.reportDownloadFormat === 'md');
@@ -138,7 +154,13 @@ export function saveConsolePreferences(
     defaultSutId: preferences.defaultSutId,
     language: preferences.language,
     reducedMotion: preferences.reducedMotion,
-    reportDownloadFormat: preferences.reportDownloadFormat
+    reportDownloadFormat: preferences.reportDownloadFormat,
+    ...(preferences.defaultSutProduct && preferences.defaultSutScene
+      ? {
+          defaultSutProduct: preferences.defaultSutProduct,
+          defaultSutScene: preferences.defaultSutScene
+        }
+      : {})
   };
 
   storage.setItem(
@@ -155,7 +177,9 @@ export function areConsolePreferencesEqual(
     && left.defaultSutId === right.defaultSutId
     && left.language === right.language
     && left.reducedMotion === right.reducedMotion
-    && left.reportDownloadFormat === right.reportDownloadFormat;
+    && left.reportDownloadFormat === right.reportDownloadFormat
+    && left.defaultSutProduct === right.defaultSutProduct
+    && left.defaultSutScene === right.defaultSutScene;
 }
 
 export function subscribeToConsolePreferences(

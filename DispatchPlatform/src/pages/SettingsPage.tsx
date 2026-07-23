@@ -2,7 +2,7 @@ import { ChevronDown } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { PageHeader } from '../components/PageHeader';
 import { getCopy } from '../i18n';
-import { objectOptionLabel } from '../objectLabels';
+import { objectNameLabel, objectOptionLabel } from '../objectLabels';
 import {
   areConsolePreferencesEqual,
   loadConsolePreferences,
@@ -28,7 +28,8 @@ const settingsPageCopy = {
     defaultFormat: '默认下载格式',
     defaultFormatHint: '报告下载的主操作将优先使用此格式',
     markdown: 'Markdown',
-    deploymentMode: '部署模式'
+    deploymentMode: '部署模式',
+    removedObject: '已移除'
   },
   en: {
     saving: 'Saving…',
@@ -42,13 +43,15 @@ const settingsPageCopy = {
     defaultFormat: 'Default download format',
     defaultFormatHint: 'The primary report action will prefer this format',
     markdown: 'Markdown',
-    deploymentMode: 'Deployment mode'
+    deploymentMode: 'Deployment mode',
+    removedObject: 'Removed'
   }
 } as const;
 
 export interface SettingsProps {
   language: Language;
   selectedSut: SutTarget;
+  defaultSutSnapshot?: SutTarget;
   runtimeConfig: RuntimeConfig;
   preferences?: ConsolePreferencesV1;
   onObjectChange: (id: string) => void;
@@ -59,6 +62,7 @@ export interface SettingsProps {
 export function SettingsPage({
   language,
   selectedSut,
+  defaultSutSnapshot,
   runtimeConfig,
   preferences,
   onObjectChange,
@@ -67,12 +71,26 @@ export function SettingsPage({
 }: SettingsProps) {
   const t = getCopy(language);
   const settingsCopy = settingsPageCopy[language];
+  const preferenceRuntimeConfig = useMemo<RuntimeConfig>(() => {
+    const sutTargets = [...runtimeConfig.sutTargets];
+    for (const target of [selectedSut, defaultSutSnapshot]) {
+      if (target && !sutTargets.some((candidate) => candidate.id === target.id)) {
+        sutTargets.push(target);
+      }
+    }
+    return {
+      ...runtimeConfig,
+      sutTargets
+    };
+  }, [defaultSutSnapshot, runtimeConfig, selectedSut]);
   const initialPreferences = useMemo(
-    () => resolveConsolePreferences(
-      preferences ?? loadConsolePreferences(runtimeConfig),
-      runtimeConfig
-    ),
-    [preferences, runtimeConfig]
+    () => preferences
+      ? { ...preferences }
+      : resolveConsolePreferences(
+          loadConsolePreferences(preferenceRuntimeConfig),
+          preferenceRuntimeConfig
+        ),
+    [preferences, preferenceRuntimeConfig]
   );
   const [persistedPreferences, setPersistedPreferences] = useState(initialPreferences);
   const [draft, setDraft] = useState(initialPreferences);
@@ -84,7 +102,7 @@ export function SettingsPage({
       return;
     }
 
-    const nextPreferences = resolveConsolePreferences(preferences, runtimeConfig);
+    const nextPreferences = { ...preferences };
     const confirmsLocalSave = Boolean(
       locallySavedPreferencesRef.current
       && areConsolePreferencesEqual(locallySavedPreferencesRef.current, nextPreferences)
@@ -95,14 +113,14 @@ export function SettingsPage({
       setSaveState('idle');
     }
     locallySavedPreferencesRef.current = null;
-  }, [preferences, runtimeConfig]);
+  }, [preferences]);
 
   useEffect(() => {
     if (preferences) {
       return undefined;
     }
 
-    return subscribeToConsolePreferences(runtimeConfig, (nextPreferences) => {
+    return subscribeToConsolePreferences(preferenceRuntimeConfig, (nextPreferences) => {
       setPersistedPreferences(nextPreferences);
       setDraft(nextPreferences);
       setSaveState('idle');
@@ -110,9 +128,38 @@ export function SettingsPage({
       onObjectChange(nextPreferences.defaultSutId);
       onLanguageChange(nextPreferences.language);
     });
-  }, [onLanguageChange, onObjectChange, onPreferencesChange, preferences, runtimeConfig]);
+  }, [
+    onLanguageChange,
+    onObjectChange,
+    onPreferencesChange,
+    preferences,
+    preferenceRuntimeConfig
+  ]);
 
-  const draftSut = runtimeConfig.sutTargets.find((sut) => sut.id === draft.defaultSutId)
+  const liveDraftSut = runtimeConfig.sutTargets.find(
+    (sut) => sut.id === draft.defaultSutId
+  );
+  const removedDraftSut: SutTarget | undefined = (
+    !liveDraftSut
+    && draft.defaultSutProduct
+    && draft.defaultSutScene
+  ) ? {
+      id: draft.defaultSutId,
+      name: `${draft.defaultSutProduct} ${draft.defaultSutScene}`,
+      product: draft.defaultSutProduct,
+      scene: draft.defaultSutScene,
+      version: 'Removed',
+      apiBaseUrl: runtimeConfig.apiBaseUrl,
+      status: 'offline'
+    } : undefined;
+  const draftSut = liveDraftSut
+    ?? (selectedSut.id === draft.defaultSutId ? selectedSut : undefined)
+    ?? (
+      defaultSutSnapshot?.id === draft.defaultSutId
+        ? defaultSutSnapshot
+        : undefined
+    )
+    ?? removedDraftSut
     ?? runtimeConfig.sutTargets[0]
     ?? selectedSut;
   const isDirty = !areConsolePreferencesEqual(draft, persistedPreferences);
@@ -139,7 +186,7 @@ export function SettingsPage({
 
     const nextPreferences: ConsolePreferencesV1 = { ...draft };
     try {
-      saveConsolePreferences(nextPreferences, runtimeConfig);
+      saveConsolePreferences(nextPreferences, preferenceRuntimeConfig);
     } catch {
       setSaveState('error');
       return;
@@ -210,14 +257,30 @@ export function SettingsPage({
                 </div>
                 <label className="settings-select-shell settings-select-shell--object settings-control">
                   <span className="settings-select-visual" aria-hidden="true">
-                    <span className="settings-select-object-name">{draftSut.name}</span>
+                    <span className="settings-select-object-name">
+                      {objectNameLabel(draftSut)}
+                    </span>
                     <ChevronDown />
                   </span>
                   <select
                     aria-label={t.defaultObject}
                     value={draft.defaultSutId}
-                    onChange={(event) => updateDraft({ defaultSutId: event.target.value })}
+                    onChange={(event) => {
+                      const target = runtimeConfig.sutTargets.find(
+                        (object) => object.id === event.target.value
+                      );
+                      updateDraft({
+                        defaultSutId: event.target.value,
+                        defaultSutProduct: target?.product,
+                        defaultSutScene: target?.scene
+                      });
+                    }}
                   >
+                    {!liveDraftSut && (
+                      <option value={draft.defaultSutId} disabled>
+                        {objectNameLabel(draftSut)} · {settingsCopy.removedObject}
+                      </option>
+                    )}
                     {runtimeConfig.sutTargets.map((object) => (
                       <option key={object.id} value={object.id}>
                         {objectOptionLabel(object, runtimeConfig.sutTargets, 'name')}

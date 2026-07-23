@@ -12,6 +12,9 @@ import {
   getFeatures,
   getVersions
 } from '../api/client';
+import { useOptionalCatalog } from '../catalog/CatalogProvider';
+import { objectForTarget } from '../catalog/model';
+import { objectIdentityLabel } from '../objectLabels';
 import type { Language, RuntimeConfig, SutTarget } from '../types';
 
 interface ReportGenerationModalProps {
@@ -41,6 +44,7 @@ export function ReportGenerationModal({
 }: ReportGenerationModalProps) {
   const isChinese = language === 'zh';
   const queryClient = useQueryClient();
+  const catalog = useOptionalCatalog();
   const closeRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const [feature, setFeature] = useState('');
@@ -56,14 +60,23 @@ export function ReportGenerationModal({
     apiBaseUrl
   };
   const api = { apiBaseUrl };
+  const catalogObject = objectForTarget(catalog?.snapshot, selectedSut);
   const versionsQuery = useQuery({
     queryKey: ['versions', targetIdentity],
     queryFn: () => getVersions(api)
   });
   const featuresQuery = useQuery({
     queryKey: ['features', targetIdentity],
-    queryFn: () => getFeatures(api, selectedSut.product, selectedSut.scene)
+    queryFn: () => getFeatures(api, selectedSut.product, selectedSut.scene),
+    enabled: !catalog
   });
+  const features = catalogObject?.features ?? featuresQuery.data?.features ?? [];
+
+  useEffect(() => {
+    if (feature && !features.some((item) => item.name === feature)) {
+      setFeature('');
+    }
+  }, [feature, features]);
 
   useEffect(() => {
     const versions = versionsQuery.data?.versions ?? [];
@@ -161,7 +174,7 @@ export function ReportGenerationModal({
       >
         <header>
           <div>
-            <p>{selectedSut.product} · {selectedSut.scene}</p>
+            <p>{objectIdentityLabel(selectedSut)}</p>
             <h2 id="report-generation-title">{isChinese ? '生成报告' : 'Generate Report'}</h2>
           </div>
           <button
@@ -209,7 +222,7 @@ export function ReportGenerationModal({
             <span>{isChinese ? 'Feature（可选）' : 'Feature (optional)'}</span>
             <select value={feature} onChange={(event) => setFeature(event.target.value)}>
               <option value="">{isChinese ? '全部' : 'All'}</option>
-              {(featuresQuery.data?.features ?? []).map((item) => (
+              {features.map((item) => (
                 <option key={item.id} value={item.name}>{item.name}</option>
               ))}
             </select>

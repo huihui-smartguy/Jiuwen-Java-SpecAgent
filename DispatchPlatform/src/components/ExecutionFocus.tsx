@@ -1,6 +1,7 @@
 import { Flag } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getCopy } from '../i18n';
+import { objectNameLabel } from '../objectLabels';
 import type { Language, NormalizedTaskStatus, SutTarget } from '../types';
 
 export function ExecutionFocus({
@@ -41,7 +42,7 @@ export function ExecutionFocus({
         <div>
           <span className="current-run__label">{t.activeRun} · {statusLabel}</span>
           <strong className="focus-task-id">{task?.task_id ?? t.noActiveTask}</strong>
-          <span className="sr-only">{sut.name} · {sut.version}</span>
+          <span className="sr-only">{objectNameLabel(sut)} · {sut.version}</span>
         </div>
       </div>
       <div className="current-run__progress">

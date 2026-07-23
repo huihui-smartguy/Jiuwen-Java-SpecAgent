@@ -9,6 +9,7 @@ import {
   resolvePublicDownloadUrl
 } from '../api/client';
 import { PageHeader } from '../components/PageHeader';
+import { productDisplayLabel, sceneDisplayLabel } from '../objectLabels';
 import { reportOutcome } from '../reportSemantics';
 import type {
   Language,
@@ -241,8 +242,20 @@ export function ReportDetailPage({
         <dl className="report-provenance-list">
           <div><dt>{isChinese ? '执行/报告版本' : 'Execution/report version'}</dt><dd>{reportVersion}</dd></div>
           <div><dt>{isChinese ? '报告快照' : 'Report snapshot'}</dt><dd>{isChinese ? '已持久化且不可变' : 'Persisted and immutable'} · {report.id || notAvailable}</dd></div>
-          <div><dt>{isChinese ? '产品' : 'Product'}</dt><dd>{report.scope.product?.trim() || notAvailable}</dd></div>
-          <div><dt>{isChinese ? '场景' : 'Scene'}</dt><dd>{displayList(report.scope.scenes, allValues)}</dd></div>
+          <div>
+            <dt>{isChinese ? '产品' : 'Product'}</dt>
+            <dd>
+              {report.scope.product?.trim()
+                ? productDisplayLabel(report.scope.product)
+                : notAvailable}
+            </dd>
+          </div>
+          <div>
+            <dt>{isChinese ? '场景' : 'Scene'}</dt>
+            <dd>
+              {displayList(report.scope.scenes?.map(sceneDisplayLabel), allValues)}
+            </dd>
+          </div>
           <div><dt>Feature</dt><dd>{displayList(features, allValues)}</dd></div>
           <div><dt>{isChinese ? '级别' : 'Level'}</dt><dd>{displayList(report.scope.levels, allValues)}</dd></div>
           <div><dt>{isChinese ? '时间窗口' : 'Time window'}</dt><dd>{timeWindow}</dd></div>

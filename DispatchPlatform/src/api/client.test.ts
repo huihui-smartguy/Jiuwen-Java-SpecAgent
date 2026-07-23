@@ -5,6 +5,8 @@ import {
   createReport,
   createTask,
   deleteReport,
+  getCatalog,
+  getCatalogEventsUrl,
   getFeatures,
   getReport,
   getReportDownloadUrl,
@@ -36,6 +38,122 @@ function mockJson(body: unknown, ok = true, status = 200) {
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
+});
+
+describe('revisioned catalog API client', () => {
+  const snapshot = {
+    success: true,
+    revision: 'catalog-r1',
+    generated_at: '2026-07-23T08:00:00Z',
+    products: ['合一版本'],
+    objects: [{
+      id: 'unified-api',
+      product: '合一版本',
+      scene: 'API',
+      feature_count: 1,
+      script_count: 1,
+      features: [{
+        id: 'feature-auth',
+        name: '认证',
+        type: 'feature',
+        script_count: 1,
+        scripts: [{
+          id: 'script-auth',
+          name: 'test_auth',
+          filename: 'test_auth.py',
+          extension: '.py',
+          product: '合一版本',
+          scene: 'API',
+          feature: '认证',
+          level: 'L0',
+          size: 42,
+          path: 'testcase/合一版本/API/认证/test_auth.py'
+        }]
+      }]
+    }],
+    totals: { products: 1, objects: 1, features: 1, scripts: 1 }
+  };
+
+  test('parses a full snapshot, captures ETag, and forwards AbortSignal', async () => {
+    const controller = new AbortController();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify(snapshot), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', ETag: '"catalog-r1"' }
+      })
+    );
+
+    const result = await getCatalog(
+      { apiBaseUrl: '/testwise/api' },
+      { signal: controller.signal }
+    );
+
+    expect(result).toMatchObject({
+      kind: 'modified',
+      etag: '"catalog-r1"',
+      snapshot: { revision: 'catalog-r1' }
+    });
+    const [, init] = fetchSpy.mock.calls[0];
+    expect(fetchSpy.mock.calls[0][0]).toBe('/testwise/api/catalog');
+    expect(init?.signal).toBe(controller.signal);
+    expect(init?.cache).toBe('no-cache');
+    expect(new Headers(init?.headers).get('Accept')).toBe('application/json');
+  });
+
+  test('sends If-None-Match and handles an empty 304 response without parsing JSON', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(null, { status: 304, headers: { ETag: '"catalog-r1"' } })
+    );
+
+    await expect(getCatalog(api, { etag: '"catalog-r1"' })).resolves.toEqual({
+      kind: 'not-modified',
+      etag: '"catalog-r1"'
+    });
+    expect(new Headers(fetchSpy.mock.calls[0][1]?.headers).get('If-None-Match'))
+      .toBe('"catalog-r1"');
+  });
+
+  test('rejects an internally inconsistent snapshot before it reaches UI state', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        ...snapshot,
+        totals: { ...snapshot.totals, scripts: 99 }
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    );
+
+    await expect(getCatalog(api)).rejects.toMatchObject({
+      code: 'INVALID_CATALOG_RESPONSE'
+    });
+  });
+
+  test('builds the subpath-safe SSE URL and preserves revision fields on task creation', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        success: true,
+        task_id: 'task-revisioned',
+        status: 'queued',
+        message: 'queued',
+        catalog_revision: 'catalog-r1'
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    );
+
+    const task = await createTask({ apiBaseUrl: '/testwise/api' }, {
+      product: '合一版本',
+      scene: 'API',
+      feature: '认证',
+      script_name: ['test_auth'],
+      script_ids: ['script-auth'],
+      catalog_revision: 'catalog-r1'
+    });
+
+    expect(getCatalogEventsUrl({ apiBaseUrl: '/testwise/api' }))
+      .toBe('/testwise/api/catalog/events');
+    expect(task.catalog_revision).toBe('catalog-r1');
+    expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toMatchObject({
+      script_ids: ['script-auth'],
+      catalog_revision: 'catalog-r1'
+    });
+  });
 });
 
 function reportListItem(

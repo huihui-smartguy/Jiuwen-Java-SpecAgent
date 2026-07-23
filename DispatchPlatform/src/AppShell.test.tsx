@@ -102,11 +102,13 @@ describe('AppShell', () => {
 
     const objectControl = screen.getByTestId('object-control');
     expect(objectControl).toHaveTextContent('Object');
-    expect(objectControl).toHaveTextContent('高码java 场景');
+    expect(objectControl).toHaveTextContent('High-Code Java scene');
     expect(objectControl).not.toHaveTextContent('营销系统 Java SUT');
     expect(objectControl).not.toHaveTextContent('v2.4.1');
     expect(objectControl).not.toHaveTextContent('健康');
-    expect(screen.getByLabelText('Object')).not.toHaveAttribute('aria-describedby');
+    expect(within(objectControl).getByRole('button', {
+      name: /选择 Object: High-Code Java scene/i
+    })).not.toHaveAttribute('aria-describedby');
     expect(screen.getByRole('button', { name: /english/i })).toHaveTextContent(/^EN$/);
     expect(screen.getByRole('button', { name: /登录|sign in/i })).toHaveTextContent(/^TW$/);
 
@@ -297,7 +299,9 @@ describe('AppShell', () => {
     renderShell('/settings', { defaultLanguage: 'zh' });
 
     expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
-    expect(within(screen.getByTestId('object-control')).getByLabelText('Object')).toHaveValue('python-sut');
+    expect(within(screen.getByTestId('object-control')).getByRole('button', {
+      name: 'Choose Object: High-Code Python API'
+    })).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Language' })).toHaveValue('en');
     expect(screen.getByRole('combobox', { name: 'Default download format' })).toHaveValue('md');
     expect(document.documentElement).toHaveClass('settings-reduced-motion');
@@ -316,7 +320,9 @@ describe('AppShell', () => {
     });
 
     await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: '设置' })).toBeInTheDocument());
-    expect(within(screen.getByTestId('object-control')).getByLabelText('Object')).toHaveValue('java-sut');
+    expect(within(screen.getByTestId('object-control')).getByRole('button', {
+      name: '选择 Object: High-Code Java scene'
+    })).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: '默认下载格式' })).toHaveValue('html');
     expect(document.documentElement).not.toHaveClass('settings-reduced-motion');
   });
@@ -340,8 +346,10 @@ describe('AppShell', () => {
       link.getAttribute('href')
     ])).toEqual(chineseNavigation);
     const objectControl = within(drawer).getByTestId('drawer-object-control');
-    expect(within(objectControl).getByLabelText('Object')).toHaveValue('java-sut');
-    expect(objectControl).toHaveTextContent('高码java 场景');
+    expect(within(objectControl).getByRole('button', {
+      name: '选择 Object: High-Code Java scene'
+    })).toBeInTheDocument();
+    expect(objectControl).toHaveTextContent('High-Code Java scene');
     expect(objectControl).not.toHaveTextContent('营销系统 Java SUT');
     expect(objectControl).not.toHaveTextContent('v2.4.1');
     expect(objectControl).not.toHaveTextContent('健康');
@@ -392,17 +400,21 @@ describe('AppShell', () => {
     const user = userEvent.setup();
     renderShell('/tasks');
 
-    await user.selectOptions(
-      within(screen.getByTestId('object-control')).getByLabelText('Object'),
-      'python-sut'
-    );
+    await user.click(within(screen.getByTestId('object-control')).getByRole(
+      'button',
+      { name: /选择 Object: High-Code Java scene/i }
+    ));
+    await user.click(screen.getByRole('option', {
+      name: /High-Code Python API/
+    }));
 
     const summary = screen.getByTestId('task-context-summary');
-    expect(within(summary).getByText(/高码python/i)).toBeInTheDocument();
+    expect(within(summary).getByText(/High-Code Python/i)).toBeInTheDocument();
     expect(within(summary).getByText(/API/i)).toBeInTheDocument();
   });
 
-  test('disambiguates duplicate Object choices without changing the approved selected summary', () => {
+  test('disambiguates duplicate Object choices without changing the approved selected summary', async () => {
+    const user = userEvent.setup();
     renderShell('/settings', {
       sutTargets: [
         {
@@ -428,8 +440,11 @@ describe('AppShell', () => {
 
     const control = screen.getByTestId('object-control');
     expect(control).toHaveTextContent('Twin Scene');
-    expect(within(control).getByRole('option', { name: 'Twin Scene · twin-a' })).toBeInTheDocument();
-    expect(within(control).getByRole('option', { name: 'Twin Scene · twin-b' })).toBeInTheDocument();
+    await user.click(within(control).getByRole('button', {
+      name: '选择 Object: Twin Scene'
+    }));
+    expect(screen.getByRole('option', { name: /Twin Scene · twin-a/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Twin Scene · twin-b/ })).toBeInTheDocument();
     const settingsControl = screen.getByRole('combobox', { name: '默认 Object' });
     expect(within(settingsControl).getByRole('option', { name: 'Twin Object · twin-a' }))
       .toBeInTheDocument();
@@ -468,12 +483,12 @@ describe('AppShell', () => {
     });
 
     const settingsObject = screen.getByRole('combobox', { name: '默认 Object' });
-    const headerObject = within(screen.getByTestId('object-control')).getByLabelText('Object');
+    const headerObject = within(screen.getByTestId('object-control')).getByRole('button');
     expect(settingsObject).toHaveValue('object-one');
-    expect(headerObject).toHaveValue('object-one');
+    expect(headerObject).toHaveAccessibleName('选择 Object: 产品一 API');
 
     await user.selectOptions(settingsObject, 'object-two');
-    expect(headerObject).toHaveValue('object-one');
+    expect(headerObject).toHaveAccessibleName('选择 Object: 产品一 API');
     expect(settingsObject).toHaveValue('object-two');
     expect(screen.getByRole('textbox', { name: 'API base URL' })).toHaveValue('/object-one-api');
     expect(within(screen.getByRole('region', { name: 'Object 连接' })).getByText('关注'))
@@ -489,7 +504,7 @@ describe('AppShell', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /switch to chinese/i })).toHaveTextContent('中');
     expect(screen.getByRole('combobox', { name: 'Language' })).toHaveValue('en');
-    expect(headerObject).toHaveValue('object-two');
+    expect(headerObject).toHaveAccessibleName('Choose Object: 产品二 scene');
     expect(storageSpy).toHaveBeenCalledWith(
       CONSOLE_PREFERENCES_STORAGE_KEY,
       JSON.stringify({
@@ -497,11 +512,17 @@ describe('AppShell', () => {
         defaultSutId: 'object-two',
         language: 'en',
         reducedMotion: false,
-        reportDownloadFormat: 'html'
+        reportDownloadFormat: 'html',
+        defaultSutProduct: '产品二',
+        defaultSutScene: '场景'
       })
     );
     expect(screen.getByRole('status')).toHaveTextContent('Settings saved and applied.');
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/runtime-api/catalog',
+      expect.objectContaining({ cache: 'no-cache' })
+    );
   });
 
   test('the Tasks change-Object affordance focuses the desktop Object selector', async () => {
@@ -522,7 +543,9 @@ describe('AppShell', () => {
     await user.click(screen.getByRole('button', { name: '更换对象' }));
 
     expect(matchMedia).toHaveBeenCalledWith('(max-width: 1329px)');
-    expect(within(screen.getByTestId('object-control')).getByLabelText('Object')).toHaveFocus();
+    expect(within(screen.getByTestId('object-control')).getByRole('button', {
+      name: /选择 Object:/i
+    })).toHaveFocus();
   });
 
   test('the Tasks change-Object affordance opens the drawer and focuses its Object selector below 1330px', async () => {
@@ -548,7 +571,7 @@ describe('AppShell', () => {
 
     const drawer = await screen.findByRole('dialog', { name: /导航|navigation/i });
     expect(matchMedia).toHaveBeenCalledWith('(max-width: 1329px)');
-    expect(within(drawer).getByLabelText('Object')).toHaveFocus();
+    expect(within(drawer).getByRole('button', { name: /选择 Object:/i })).toHaveFocus();
   });
 
   test('renders the approved Observe hierarchy while preserving its active-task behavior', () => {
@@ -582,6 +605,59 @@ describe('AppShell', () => {
     const user = userEvent.setup();
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
       const url = new URL(String(input), 'http://local.test');
+      if (url.pathname.endsWith('/catalog')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          success: true,
+          revision: 'catalog-shell-r1',
+          generated_at: '2026-07-14T10:00:00Z',
+          products: ['高码java', '高码python'],
+          objects: [
+            {
+              id: 'java-sut',
+              product: '高码java',
+              scene: '场景',
+              feature_count: 1,
+              script_count: 1,
+              latest_changed_at: '2026-07-14T10:00:00Z',
+              features: [{
+                id: 'shell-feature',
+                name: 'Shell feature',
+                type: 'L0',
+                script_count: 1,
+                scripts: [{
+                  id: 'shell-script',
+                  name: 'shell_script',
+                  filename: 'shell_script.py',
+                  extension: '.py',
+                  product: '高码java',
+                  scene: '场景',
+                  feature: 'Shell feature',
+                  level: 'L0',
+                  size: 100,
+                  uploaded_at: '2026-07-14T10:00:00',
+                  uploaded_by: 'shell-user',
+                  path: 'testcase/shell_script.py'
+                }]
+              }]
+            },
+            {
+              id: 'python-sut',
+              product: '高码python',
+              scene: 'API',
+              feature_count: 0,
+              script_count: 0,
+              features: []
+            }
+          ],
+          totals: { products: 2, objects: 2, features: 1, scripts: 1 }
+        }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            ETag: '"catalog-shell-r1"'
+          }
+        }));
+      }
       if (url.pathname.endsWith('/features')) {
         return Promise.resolve(new Response(JSON.stringify({
           success: true,
@@ -692,10 +768,13 @@ describe('AppShell', () => {
     await user.click(screen.getByRole('button', { name: '启动执行' }));
     expect(await screen.findByRole('heading', { name: '执行观测' })).toBeInTheDocument();
 
-    await user.selectOptions(
-      within(screen.getByTestId('object-control')).getByLabelText('Object'),
-      'python-sut'
-    );
+    await user.click(within(screen.getByTestId('object-control')).getByRole(
+      'button',
+      { name: /选择 Object: High-Code Java scene/i }
+    ));
+    await user.click(screen.getByRole('option', {
+      name: /High-Code Python API/
+    }));
     expect(screen.getByText('营销系统 Java SUT')).toBeInTheDocument();
     expect(fetchSpy.mock.calls.some(([input]) => (
       new URL(String(input), 'http://local.test').pathname
@@ -706,8 +785,8 @@ describe('AppShell', () => {
 
     const reports = await screen.findByRole('region', { name: '最近报告' });
     expect(within(reports).getByText('task_from_app_shell')).toBeInTheDocument();
-    expect(within(reports).getByText('高码java 场景')).toBeInTheDocument();
-    expect(within(reports).queryByText('高码python API')).not.toBeInTheDocument();
+    expect(within(reports).getByText('High-Code Java scene')).toBeInTheDocument();
+    expect(within(reports).queryByText('High-Code Python API')).not.toBeInTheDocument();
     expect(within(reports).getAllByRole('row')).toHaveLength(2);
     expect(fetchSpy.mock.calls.filter(([input]) => (
       new URL(String(input), 'http://local.test').pathname.includes('/reports')

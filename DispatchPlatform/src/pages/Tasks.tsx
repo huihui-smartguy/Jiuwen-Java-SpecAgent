@@ -9,11 +9,23 @@ import {
   getScriptsForFeatures,
   getVersions
 } from '../api/client';
+import {
+  useOptionalCatalog,
+  type CatalogQueryData
+} from '../catalog/CatalogProvider';
+import {
+  diffCatalogObjects,
+  scriptsForCatalogObject,
+  type CatalogObjectDelta
+} from '../catalog/model';
+import { CatalogSyncStatus } from '../components/CatalogSyncStatus';
 import { PageHeader } from '../components/PageHeader';
 import { mockFeatures, mockScripts } from '../data/mockData';
 import { getCopy } from '../i18n';
+import { objectIdentityLabel, sceneDisplayLabel } from '../objectLabels';
 import type {
   Feature,
+  CatalogObject,
   Language,
   RuntimeConfig,
   Script,
@@ -28,6 +40,8 @@ interface TasksProps {
   language: Language;
   selectedSut: SutTarget;
   runtimeConfig: RuntimeConfig;
+  catalogObject?: CatalogObject;
+  catalogSelectionValid?: boolean;
   onTaskCreated: (task: TaskCreateResponse) => void;
   onRequestObjectChange: () => void;
 }
@@ -36,6 +50,12 @@ const emptyFeatures: Feature[] = [];
 const emptyScripts: Script[] = [];
 const emptyVersions: TestVersionResponse['versions'] = [];
 const levels = ['L0', 'L1', 'L2', 'L3', 'L4'] as const;
+
+interface PendingCatalogUpdate {
+  object: CatalogObject;
+  revision: string;
+  delta: CatalogObjectDelta;
+}
 const fallbackVersions: TestVersionResponse = {
   success: true,
   default_version: 'release1',
@@ -75,18 +95,29 @@ export function Tasks({
   language,
   selectedSut,
   runtimeConfig,
+  catalogObject,
+  catalogSelectionValid = true,
   onTaskCreated,
   onRequestObjectChange
 }: TasksProps) {
   const t = getCopy(language);
   const navigate = useNavigate();
+  const catalog = useOptionalCatalog();
   const [mode, setMode] = useState<TriggerType>('feature');
   const [selectedFeature, setSelectedFeature] = useState('');
   const [selectedLevel, setSelectedLevel] = useState('L1');
   const [selectedVersion, setSelectedVersion] = useState('');
-  const [selectedScriptNames, setSelectedScriptNames] = useState<string[]>([]);
+  const [selectedScriptIds, setSelectedScriptIds] = useState<string[]>([]);
   const [scriptSearch, setScriptSearch] = useState('');
+  const [appliedCatalogObject, setAppliedCatalogObject] = useState<CatalogObject | undefined>(
+    catalogObject
+  );
+  const [appliedCatalogRevision, setAppliedCatalogRevision] = useState(
+    catalog?.snapshot?.revision ?? ''
+  );
+  const [pendingCatalogUpdate, setPendingCatalogUpdate] = useState<PendingCatalogUpdate>();
   const resolvedApiBaseUrl = selectedSut.apiBaseUrl || runtimeConfig.apiBaseUrl;
+  const selectedObjectLabel = objectIdentityLabel(selectedSut);
   const targetIdentity = useMemo(
     () => ({
       id: selectedSut.id,
@@ -128,10 +159,11 @@ export function Tasks({
         }
         throw error;
       }
-    }
+    },
+    enabled: !catalog
   });
 
-  const features = featuresQuery.data ?? emptyFeatures;
+  const features = appliedCatalogObject?.features ?? featuresQuery.data ?? emptyFeatures;
   const featureNames = useMemo(() => features.map((feature) => feature.name), [features]);
   const scriptQuery = useQuery({
     queryKey: ['scripts', targetIdentity, mode, selectedFeature, selectedLevel, featureNames],
@@ -161,12 +193,27 @@ export function Tasks({
         throw error;
       }
     },
-    enabled: mode === 'scene'
-      ? featuresQuery.isSuccess && featureNames.length > 0
-      : !requiresFeature || Boolean(selectedFeature)
+    enabled: !catalog && (
+      mode === 'scene'
+        ? featuresQuery.isSuccess && featureNames.length > 0
+        : !requiresFeature || Boolean(selectedFeature)
+    )
   });
 
-  const scripts = scriptQuery.data ?? emptyScripts;
+  const catalogScripts = useMemo(() => {
+    if (!appliedCatalogObject) {
+      return undefined;
+    }
+    const allScripts = scriptsForCatalogObject(appliedCatalogObject);
+    if (mode === 'level') {
+      return allScripts.filter((script) => script.level === selectedLevel);
+    }
+    if (mode === 'scene') {
+      return allScripts;
+    }
+    return allScripts.filter((script) => script.feature === selectedFeature);
+  }, [appliedCatalogObject, mode, selectedFeature, selectedLevel]);
+  const scripts = catalogScripts ?? scriptQuery.data ?? emptyScripts;
   const filteredScripts = useMemo(() => {
     const normalizedSearch = scriptSearch.trim().toLocaleLowerCase();
     if (!normalizedSearch) {
@@ -202,23 +249,100 @@ export function Tasks({
   useEffect(() => {
     setSelectedFeature('');
     setSelectedVersion('');
-    setSelectedScriptNames([]);
+    setSelectedScriptIds([]);
     setScriptSearch('');
+    setAppliedCatalogObject(catalogObject);
+    setAppliedCatalogRevision(catalog?.snapshot?.revision ?? '');
+    setPendingCatalogUpdate(undefined);
   }, [selectedSut.id]);
 
   useEffect(() => {
-    setSelectedScriptNames((current) => {
-      const next = current.filter((name) => scripts.some((script) => script.name === name));
+    setSelectedScriptIds((current) => {
+      const next = current.filter((id) => scripts.some((script) => script.id === id));
       return next.length === current.length ? current : next;
     });
   }, [scripts]);
 
+  useEffect(() => {
+    const revision = catalog?.snapshot?.revision;
+    if (!catalog || !catalogSelectionValid || !catalogObject || !revision) {
+      return;
+    }
+    if (!appliedCatalogObject) {
+      setAppliedCatalogObject(catalogObject);
+      setAppliedCatalogRevision(revision);
+      setPendingCatalogUpdate(undefined);
+      return;
+    }
+    if (revision === appliedCatalogRevision) {
+      return;
+    }
+    const delta = diffCatalogObjects(appliedCatalogObject, catalogObject);
+    if (delta.hasChanges) {
+      setPendingCatalogUpdate({ object: catalogObject, revision, delta });
+      return;
+    }
+    setAppliedCatalogObject(catalogObject);
+    setAppliedCatalogRevision(revision);
+    setPendingCatalogUpdate(undefined);
+  }, [
+    appliedCatalogObject,
+    appliedCatalogRevision,
+    catalog,
+    catalogObject,
+    catalogSelectionValid
+  ]);
+
   const creation = useMutation({
     mutationFn: async (payload: TaskCreateRequest) => {
       try {
-        return await createTask(api, payload);
+        let request = payload;
+        if (catalog) {
+          let latest: CatalogQueryData | undefined;
+          try {
+            latest = await catalog.refresh(true);
+          } catch (error) {
+            if (runtimeConfig.enableMockFallback && catalog.state === 'mock') {
+              return createFallbackTask(payload, mode);
+            }
+            throw error;
+          }
+          if (runtimeConfig.enableMockFallback && latest?.source === 'mock') {
+            return createFallbackTask(payload, mode);
+          }
+          if (!latest || !appliedCatalogObject) {
+            throw new ApiError('The latest catalog could not be verified.', {
+              code: 'CATALOG_UNAVAILABLE'
+            });
+          }
+          const latestObject = latest.snapshot.objects.find((object) => object.id === selectedSut.id)
+            ?? latest.snapshot.objects.find((object) => (
+              object.product === selectedSut.product && object.scene === selectedSut.scene
+            ));
+          if (!latestObject) {
+            throw new ApiError('The selected Object no longer exists in the catalog.', {
+              code: 'CATALOG_CHANGED',
+              status: 409
+            });
+          }
+          if (latest.snapshot.revision !== appliedCatalogRevision) {
+            const delta = diffCatalogObjects(appliedCatalogObject, latestObject);
+            if (delta.hasChanges) {
+              throw new ApiError('The script catalog changed. Review the latest update before launch.', {
+                code: 'CATALOG_CHANGED',
+                status: 409,
+                details: delta
+              });
+            }
+            request = {
+              ...payload,
+              catalog_revision: latest.snapshot.revision
+            } as TaskCreateRequest;
+          }
+        }
+        return await createTask(api, request);
       } catch (error) {
-        if (runtimeConfig.enableMockFallback) {
+        if (runtimeConfig.enableMockFallback && !(error instanceof ApiError)) {
           return createFallbackTask(payload, mode);
         }
         throw error;
@@ -234,14 +358,27 @@ export function Tasks({
           }
         }
       });
+    },
+    onError: (error) => {
+      if (error instanceof ApiError && error.code === 'CATALOG_CHANGED') {
+        void catalog?.refresh().catch(() => undefined);
+      }
     }
   });
 
+  const selectedScripts = useMemo(
+    () => selectedScriptIds.flatMap((id) => {
+      const script = scripts.find((candidate) => candidate.id === id);
+      return script ? [script] : [];
+    }),
+    [scripts, selectedScriptIds]
+  );
   const payload = useMemo<TaskCreateRequest>(() => {
     const base = {
       product: selectedSut.product,
       scene: selectedSut.scene,
-      version: selectedVersion
+      version: selectedVersion,
+      ...(catalog ? { catalog_revision: appliedCatalogRevision } : {})
     };
     if (mode === 'level') {
       return { ...base, level: selectedLevel };
@@ -250,45 +387,79 @@ export function Tasks({
       return {
         ...base,
         feature: selectedFeature,
-        script_name: selectedScriptNames
+        script_name: selectedScripts.map((script) => script.name),
+        ...(catalog ? { script_ids: selectedScripts.map((script) => script.id) } : {})
       };
     }
     if (mode === 'scene') {
       return base;
     }
     return { ...base, feature: selectedFeature };
-  }, [mode, selectedFeature, selectedLevel, selectedScriptNames, selectedSut.product, selectedSut.scene, selectedVersion]);
+  }, [
+    appliedCatalogRevision,
+    catalog,
+    mode,
+    selectedFeature,
+    selectedLevel,
+    selectedScripts,
+    selectedSut.product,
+    selectedSut.scene,
+    selectedVersion
+  ]);
 
+  const catalogBlocksLaunch = Boolean(catalog) && (
+    !catalogSelectionValid
+    || !appliedCatalogRevision
+    || Boolean(pendingCatalogUpdate)
+    || catalog?.state === 'stale'
+    || catalog?.state === 'unavailable'
+    || catalog?.state === 'connecting'
+  );
   const canCreate =
     !creation.isPending &&
+    !catalogBlocksLaunch &&
     Boolean(selectedVersion) &&
-    (mode !== 'scripts' || selectedScriptNames.length > 0) &&
+    (mode !== 'scripts' || selectedScripts.length > 0) &&
     (!requiresFeature || Boolean(selectedFeature));
-  const launchScriptCount = mode === 'scripts' ? selectedScriptNames.length : scripts.length;
+  const launchScriptCount = mode === 'scripts' ? selectedScripts.length : scripts.length;
   const modeSummary = mode === 'feature'
     ? `${t.feature} · ${selectedFeature || '—'}`
     : mode === 'level'
       ? `${t.level} · ${selectedLevel}`
       : mode === 'scripts'
-        ? `${t.byScripts} · ${selectedScriptNames.length} ${t.scriptsCount}`
+        ? `${t.byScripts} · ${selectedScripts.length} ${t.scriptsCount}`
         : `${t.entireScene} · ${t.allScripts}`;
 
-  const toggleScript = (name: string) => {
-    setSelectedScriptNames((current) => (
-      current.includes(name) ? current.filter((item) => item !== name) : [...current, name]
+  const toggleScript = (id: string) => {
+    setSelectedScriptIds((current) => (
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
     ));
   };
-  const handleScriptRowKeyDown = (event: KeyboardEvent<HTMLTableRowElement>, name: string) => {
+  const handleScriptRowKeyDown = (event: KeyboardEvent<HTMLTableRowElement>, id: string) => {
     if (event.key !== 'Enter' && event.key !== ' ') {
       return;
     }
     event.preventDefault();
-    toggleScript(name);
+    toggleScript(id);
   };
-  const handleScriptRowClick = (event: MouseEvent<HTMLTableRowElement>, name: string) => {
+  const handleScriptRowClick = (event: MouseEvent<HTMLTableRowElement>, id: string) => {
     if ((event.target as HTMLElement).tagName !== 'INPUT') {
-      toggleScript(name);
+      toggleScript(id);
     }
+  };
+
+  const applyPendingCatalogUpdate = () => {
+    if (!pendingCatalogUpdate) {
+      return;
+    }
+    const latestIds = new Set(
+      scriptsForCatalogObject(pendingCatalogUpdate.object).map((script) => script.id)
+    );
+    setSelectedScriptIds((current) => current.filter((id) => latestIds.has(id)));
+    setAppliedCatalogObject(pendingCatalogUpdate.object);
+    setAppliedCatalogRevision(pendingCatalogUpdate.revision);
+    setPendingCatalogUpdate(undefined);
+    creation.reset();
   };
 
   return (
@@ -296,6 +467,7 @@ export function Tasks({
       <PageHeader
         title={t.tasks}
         subtitle={t.tasksSubtitle}
+        action={catalog ? <CatalogSyncStatus language={language} /> : undefined}
       />
 
       <div className="tasks-layout">
@@ -326,13 +498,47 @@ export function Tasks({
             <div className="tasks-object-summary" data-testid="task-context-summary">
               <div>
                 <span>{t.selectedObject}</span>
-                <strong>{selectedSut.product} {selectedSut.scene}</strong>
+                <strong>{selectedObjectLabel}</strong>
               </div>
               <button type="button" onClick={onRequestObjectChange}>
                 {t.changeObject}
                 <span aria-hidden="true">→</span>
               </button>
             </div>
+
+            {pendingCatalogUpdate ? (
+              <div className="tasks-catalog-update" role="alert">
+                <div>
+                  <strong>
+                    {language === 'zh' ? '脚本目录已有更新' : 'Script catalog update available'}
+                  </strong>
+                  <span>
+                    {language === 'zh'
+                      ? `新增 ${pendingCatalogUpdate.delta.added.length}，移除 ${pendingCatalogUpdate.delta.removed.length}，变更 ${pendingCatalogUpdate.delta.changed.length}`
+                      : `${pendingCatalogUpdate.delta.added.length} added, ${pendingCatalogUpdate.delta.removed.length} removed, ${pendingCatalogUpdate.delta.changed.length} changed`}
+                  </span>
+                </div>
+                <button type="button" onClick={applyPendingCatalogUpdate}>
+                  {language === 'zh' ? '应用最新目录' : 'Apply latest catalog'}
+                </button>
+              </div>
+            ) : null}
+            {catalog && (!catalogSelectionValid || catalog.state === 'stale' || catalog.state === 'unavailable') ? (
+              <div className="tasks-catalog-update is-blocking" role="alert">
+                <div>
+                  <strong>{language === 'zh' ? '已暂停启动' : 'Launch paused'}</strong>
+                  <span>
+                    {!catalogSelectionValid
+                      ? language === 'zh'
+                        ? '当前测试对象已从目录中移除，请更换对象。'
+                        : 'The current test Object was removed. Select another Object.'
+                      : language === 'zh'
+                        ? '无法验证最新目录。最近一次快照仍可查看，但不能启动任务。'
+                        : 'The latest catalog cannot be verified. The last snapshot remains visible, but launch is disabled.'}
+                  </span>
+                </div>
+              </div>
+            ) : null}
 
             <div className="tasks-mode-row">
               <fieldset className="tasks-segmented" role="radiogroup" aria-label={t.taskModeLabel}>
@@ -381,7 +587,7 @@ export function Tasks({
                 <label className="tasks-field">
                   <span>{language === 'zh' ? '场景' : 'Scene'}</span>
                   <select value={selectedSut.scene} disabled>
-                    <option value={selectedSut.scene}>{selectedSut.scene}</option>
+                    <option value={selectedSut.scene}>{sceneDisplayLabel(selectedSut.scene)}</option>
                   </select>
                 </label>
               )}
@@ -406,7 +612,7 @@ export function Tasks({
               </label>
             </div>
 
-            {(featuresQuery.isError || scriptQuery.isError || versionsQuery.isError) && (
+            {((!catalog && (featuresQuery.isError || scriptQuery.isError)) || versionsQuery.isError) && (
               <p className="tasks-inline-error" role="alert">
                 {getRequestErrorMessage(
                   featuresQuery.error ?? scriptQuery.error ?? versionsQuery.error,
@@ -442,7 +648,7 @@ export function Tasks({
                 </thead>
                 <tbody>
                   {filteredScripts.map((script) => {
-                    const selected = selectedScriptNames.includes(script.name);
+                    const selected = selectedScriptIds.includes(script.id);
                     const explicitlySelectable = mode === 'scripts';
                     return (
                       <tr
@@ -450,8 +656,8 @@ export function Tasks({
                         className={selected ? 'is-selected' : undefined}
                         tabIndex={explicitlySelectable ? 0 : undefined}
                         aria-selected={explicitlySelectable ? selected : undefined}
-                        onClick={explicitlySelectable ? (event) => handleScriptRowClick(event, script.name) : undefined}
-                        onKeyDown={explicitlySelectable ? (event) => handleScriptRowKeyDown(event, script.name) : undefined}
+                        onClick={explicitlySelectable ? (event) => handleScriptRowClick(event, script.id) : undefined}
+                        onKeyDown={explicitlySelectable ? (event) => handleScriptRowKeyDown(event, script.id) : undefined}
                       >
                         <td>
                           {explicitlySelectable && (
@@ -461,7 +667,7 @@ export function Tasks({
                               tabIndex={-1}
                               aria-label={`${t.selectScript} ${script.name}`}
                               checked={selected}
-                              onChange={() => toggleScript(script.name)}
+                              onChange={() => toggleScript(script.id)}
                             />
                           )}
                           <strong>{script.name}</strong>
@@ -491,7 +697,7 @@ export function Tasks({
             <dl className="tasks-launch-list">
               <div>
                 <dt>{t.launchObject}</dt>
-                <dd>{selectedSut.product} · {selectedSut.scene}</dd>
+                <dd>{selectedObjectLabel}</dd>
               </div>
               <div><dt>{t.launchMode}</dt><dd data-testid="task-mode-summary">{modeSummary}</dd></div>
               <div><dt>{t.executionProfile}</dt><dd>{t.liveStandard}</dd></div>
@@ -514,7 +720,11 @@ export function Tasks({
             </dl>
             {creation.isError && (
               <p className="tasks-inline-error tasks-creation-error" role="alert">
-                {getRequestErrorMessage(creation.error, t.taskCreateFailed)}
+                {creation.error instanceof ApiError && creation.error.code === 'CATALOG_CHANGED'
+                  ? language === 'zh'
+                    ? '目录在启动前发生变化。请应用最新目录并核对脚本选择。'
+                    : 'The catalog changed before launch. Apply the latest catalog and review the script selection.'
+                  : getRequestErrorMessage(creation.error, t.taskCreateFailed)}
               </p>
             )}
             <button

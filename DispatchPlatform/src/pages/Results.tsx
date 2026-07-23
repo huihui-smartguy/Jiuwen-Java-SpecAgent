@@ -12,6 +12,7 @@ import { MetricCard } from '../components/MetricCard';
 import { PageHeader } from '../components/PageHeader';
 import { ReportGenerationModal } from '../components/ReportGenerationModal';
 import { getCopy } from '../i18n';
+import { objectIdentityLabel } from '../objectLabels';
 import { reportOutcome } from '../reportSemantics';
 import type {
   Language,
@@ -129,7 +130,7 @@ function mockViewModel(language: Language): ResultsViewModel {
       rowKey: id,
       title: reportTitles[index],
       id,
-      object: '合一版本 API',
+      object: 'Unified Version API',
       result: reportResults[index],
       resultTone: resultTones[index],
       passRate: passRates[index],
@@ -281,7 +282,7 @@ function liveViewModel(
       rowKey: resultTaskIdentity(task, fallbackApiBaseUrl),
       title: `${notes.reportPrefix} · ${task.task_id}`,
       id: task.task_id,
-      object: `${taskSut.product} ${taskSut.scene}`.trim(),
+      object: objectIdentityLabel(taskSut),
       result: result.label,
       resultTone: result.tone,
       passRate: passRateValue === undefined ? '—' : `${passRateValue.toFixed(1)}%`,

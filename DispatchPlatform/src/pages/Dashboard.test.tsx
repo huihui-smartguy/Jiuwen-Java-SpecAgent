@@ -177,6 +177,25 @@ describe('Overview dashboard R8', () => {
     expect(within(currentRun).getByRole('link', { name: /打开观测台/ })).toHaveAttribute('href', '/observation');
   });
 
+  test('uses canonical taxonomy in the accessible current-Object label', () => {
+    const runtimeConfig = resolveRuntimeConfig({ defaultLanguage: 'en', enableMockFallback: true });
+    const selectedSut: SutTarget = {
+      ...runtimeConfig.sutTargets[0],
+      name: '合一版本 场景用例',
+      product: '合一版本',
+      scene: '场景用例',
+      version: 'catalog-r1'
+    };
+
+    renderDashboard({ language: 'en', runtimeConfig, selectedSut });
+
+    const currentRun = screen.getByRole('region', { name: 'Active run' });
+    expect(within(currentRun).getByText('Unified Version scene · catalog-r1'))
+      .toHaveClass('sr-only');
+    expect(within(currentRun).queryByText('合一版本 场景用例 · catalog-r1'))
+      .not.toBeInTheDocument();
+  });
+
   test('counts failed terminal commands and preserves polling-error truthfulness', () => {
     const failedTask: NormalizedTaskStatus = {
       ...activeTask,
