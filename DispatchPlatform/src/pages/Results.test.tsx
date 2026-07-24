@@ -609,6 +609,88 @@ describe('Results', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  test('shows equal 715/615 names and codes once in report filters and generation', async () => {
+    const runtimeConfig = resolveRuntimeConfig({ enableMockFallback: false });
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = new URL(String(input), 'http://local.test');
+      if (url.pathname.endsWith('/versions')) {
+        return json({
+          success: true,
+          default_version: '715:0.2.0.beta3.post3',
+          versions: [
+            {
+              code: '715:0.2.0.beta3.post3',
+              name: '715:0.2.0.beta3.post3',
+              description: 'Modeled quality snapshot',
+              created_at: '2026-07-24',
+              is_default: true
+            },
+            {
+              code: '615:0.2.0.beta3',
+              name: '615:0.2.0.beta3',
+              description: 'Authoritative quality snapshot',
+              created_at: '2026-07-24',
+              is_default: false
+            }
+          ]
+        });
+      }
+      if (url.pathname.endsWith('/reports')) {
+        return json({ success: true, total: 0, reports: [] });
+      }
+      if (url.pathname.endsWith('/features')) {
+        return json({
+          success: true,
+          product: runtimeConfig.sutTargets[0].product,
+          scene: runtimeConfig.sutTargets[0].scene,
+          features: [],
+          total: 0
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    renderResults({ runtimeConfig, activeTask: null, sessionTasks: [] });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: '筛选' }));
+    const filterVersion = await screen.findByRole('combobox', {
+      name: /执行\s*\/\s*报告版本/
+    });
+    expect(filterVersion).toHaveValue('715:0.2.0.beta3.post3');
+    expect(within(filterVersion).getAllByRole('option').map((option) => ({
+      label: option.textContent,
+      value: (option as HTMLOptionElement).value
+    }))).toEqual([
+      {
+        label: '715:0.2.0.beta3.post3',
+        value: '715:0.2.0.beta3.post3'
+      },
+      {
+        label: '615:0.2.0.beta3',
+        value: '615:0.2.0.beta3'
+      }
+    ]);
+
+    await user.click(screen.getByRole('button', { name: '生成报告' }));
+    const modal = await screen.findByRole('dialog', { name: '生成报告' });
+    const modalVersion = within(modal).getByRole('combobox', {
+      name: /执行\s*\/\s*报告版本/
+    });
+    expect(within(modalVersion).getAllByRole('option').map((option) => ({
+      label: option.textContent,
+      value: (option as HTMLOptionElement).value
+    }))).toEqual([
+      {
+        label: '715:0.2.0.beta3.post3',
+        value: '715:0.2.0.beta3.post3'
+      },
+      {
+        label: '615:0.2.0.beta3',
+        value: '615:0.2.0.beta3'
+      }
+    ]);
+  });
+
   test('uses one Object-scoped registered version, reconciles exact matches, and paginates locally', async () => {
     const runtimeConfig = resolveRuntimeConfig({ enableMockFallback: false });
     const exactReports = Array.from({ length: 21 }, (_, index) => ({

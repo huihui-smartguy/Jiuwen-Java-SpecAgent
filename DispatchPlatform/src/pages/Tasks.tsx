@@ -36,6 +36,7 @@ import {
 import { mockFeatures, mockScripts } from '../data/mockData';
 import { getCopy } from '../i18n';
 import { productDisplayLabel } from '../objectLabels';
+import { formatTestVersionLabel } from '../versionLabels';
 import type {
   Feature,
   CatalogObject,
@@ -657,8 +658,10 @@ export function Tasks({
                   ) : null}
                   {versions.map((version) => (
                     <option key={version.code} value={version.code}>
-                      {version.name} · {version.code}
-                      {version.code === versionsQuery.data?.default_version ? ` · ${t.defaultVersion}` : ''}
+                      {formatTestVersionLabel(version, {
+                        isDefault: version.code === versionsQuery.data?.default_version,
+                        defaultLabel: t.defaultVersion
+                      })}
                     </option>
                   ))}
                 </select>

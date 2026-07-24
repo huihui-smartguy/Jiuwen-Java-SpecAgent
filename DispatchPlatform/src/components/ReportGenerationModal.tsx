@@ -15,6 +15,7 @@ import {
 import { useOptionalCatalog } from '../catalog/CatalogProvider';
 import { objectForTarget } from '../catalog/model';
 import { objectIdentityLabel } from '../objectLabels';
+import { formatTestVersionLabel } from '../versionLabels';
 import type { Language, RuntimeConfig, SutTarget } from '../types';
 
 interface ReportGenerationModalProps {
@@ -207,7 +208,7 @@ export function ReportGenerationModal({
               ) : null}
               {(versionsQuery.data?.versions ?? []).map((version) => (
                 <option key={version.code} value={version.code}>
-                  {version.name} · {version.code}
+                  {formatTestVersionLabel(version)}
                 </option>
               ))}
             </select>

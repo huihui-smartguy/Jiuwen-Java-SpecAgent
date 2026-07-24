@@ -7,7 +7,14 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import type { CatalogConnectionState } from '../catalog/CatalogProvider';
 import { resolveRuntimeConfig } from '../config/runtime';
-import type { Feature, Language, Script, SutTarget, TaskCreateResponse } from '../types';
+import type {
+  Feature,
+  Language,
+  Script,
+  SutTarget,
+  TaskCreateResponse,
+  TestVersionResponse
+} from '../types';
 import { Tasks } from './Tasks';
 
 const liveRuntimeConfig = resolveRuntimeConfig({ defaultLanguage: 'zh', enableMockFallback: false });
@@ -77,13 +84,14 @@ function mockTaskApi(options: {
   scriptsByFeature?: Record<string, Script[]>;
   taskId?: string;
   triggerType?: 'feature' | 'level' | 'scripts' | 'scene';
+  versionResponse?: TestVersionResponse;
 } = {}) {
   const availableScripts = options.scripts ?? scripts;
   const availableFeatures = options.features ?? [{ id: 'save', name: 'Save API', type: 'L1' }];
   return vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
     const url = new URL(String(input), 'http://local.test');
     if (url.pathname.endsWith('/versions')) {
-      return json({
+      return json(options.versionResponse ?? {
         success: true,
         default_version: 'release1',
         versions: [
@@ -311,6 +319,80 @@ describe('approved R8 Tasks composition', () => {
     expect(screen.queryByText(/任务队列|本次会话/)).not.toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /上一步|下一步/ })).not.toBeInTheDocument();
+  });
+
+  test('shows equal 715/615 names and codes once while preserving code values and Default', async () => {
+    const fetchSpy = mockTaskApi({
+      versionResponse: {
+        success: true,
+        default_version: '715:0.2.0.beta3.post3',
+        versions: [
+          {
+            code: '715:0.2.0.beta3.post3',
+            name: '715:0.2.0.beta3.post3',
+            description: 'Modeled quality snapshot',
+            created_at: '2026-07-24',
+            is_default: true
+          },
+          {
+            code: '615:0.2.0.beta3',
+            name: '615:0.2.0.beta3',
+            description: 'Authoritative quality snapshot',
+            created_at: '2026-07-24',
+            is_default: false
+          }
+        ]
+      }
+    });
+    renderTasks();
+
+    const versionSelect = screen.getByRole('combobox', { name: '执行版本' });
+    await waitFor(() => expect(versionSelect).toHaveValue('715:0.2.0.beta3.post3'));
+    expect(within(versionSelect).getAllByRole('option').map((option) => ({
+      label: option.textContent,
+      value: (option as HTMLOptionElement).value
+    }))).toEqual([
+      {
+        label: '715:0.2.0.beta3.post3 · 默认',
+        value: '715:0.2.0.beta3.post3'
+      },
+      {
+        label: '615:0.2.0.beta3',
+        value: '615:0.2.0.beta3'
+      }
+    ]);
+    expect(versionSelect).not.toHaveTextContent(
+      '715:0.2.0.beta3.post3 · 715:0.2.0.beta3.post3'
+    );
+
+    await userEvent.selectOptions(versionSelect, '615:0.2.0.beta3');
+    expect(versionSelect).toHaveValue('615:0.2.0.beta3');
+    expect(screen.getByTestId('task-version-summary')).toHaveTextContent('615:0.2.0.beta3');
+    await userEvent.click(screen.getByRole('button', { name: '启动执行' }));
+    await waitFor(() => expect(postPayload(fetchSpy).version).toBe('615:0.2.0.beta3'));
+  });
+
+  test('keeps distinct version names and codes in the Tasks option label', async () => {
+    mockTaskApi({
+      versionResponse: {
+        success: true,
+        default_version: 'release1',
+        versions: [{
+          code: 'release1',
+          name: 'Release 1',
+          description: 'Stable test batch',
+          created_at: '2026-07-01',
+          is_default: true
+        }]
+      }
+    });
+    renderTasks({ language: 'en' });
+
+    const versionSelect = screen.getByRole('combobox', { name: 'Execution version' });
+    await waitFor(() => expect(versionSelect).toHaveValue('release1'));
+    expect(within(versionSelect).getByRole('option')).toHaveTextContent(
+      'Release 1 · release1 · Default'
+    );
   });
 
   test('opens the page-local Test Type selector from the context summary', async () => {

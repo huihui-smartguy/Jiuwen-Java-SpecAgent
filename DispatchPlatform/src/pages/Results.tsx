@@ -14,6 +14,7 @@ import { ReportGenerationModal } from '../components/ReportGenerationModal';
 import { getCopy } from '../i18n';
 import { objectIdentityLabel } from '../objectLabels';
 import { reportOutcome } from '../reportSemantics';
+import { formatTestVersionLabel } from '../versionLabels';
 import type {
   Language,
   NormalizedTaskStatus,
@@ -677,7 +678,9 @@ export function Results({
                   : language === 'zh' ? '暂无已注册版本' : 'No registered versions'}</option>
               ) : null}
               {(versionsQuery.data?.versions ?? []).map((version) => (
-                <option key={version.code} value={version.code}>{version.name} · {version.code}</option>
+                <option key={version.code} value={version.code}>
+                  {formatTestVersionLabel(version)}
+                </option>
               ))}
             </select>
             <small>task.version → report.software_version</small>

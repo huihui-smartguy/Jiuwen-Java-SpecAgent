@@ -287,14 +287,10 @@ describe('Overview live quality integration', () => {
     expect(within(l0).getByText('3354')).toBeInTheDocument();
     expect(within(l0).getByText('89.2%')).toBeInTheDocument();
     expect(within(l0).getAllByText('363').length).toBeGreaterThan(0);
-    expect(within(l0).getByText('模型构造快照')).toHaveAttribute(
-      'data-quality-provenance',
-      'l0-modeled'
-    );
-    expect(within(l1).getByText('模型构造快照')).toHaveAttribute(
-      'data-quality-provenance',
-      'modeled'
-    );
+    expect(screen.queryByText('模型构造快照')).not.toBeInTheDocument();
+    expect(within(l0).queryByText(VERSION_715)).not.toBeInTheDocument();
+    expect(l0.querySelector('[data-quality-provenance]')).toBeNull();
+    expect(l1.querySelector('[data-quality-provenance]')).toBeNull();
 
     const table = within(l1).getByRole('table');
     expect(within(table).getAllByRole('row')).toHaveLength(8);
@@ -346,11 +342,9 @@ describe('Overview live quality integration', () => {
     expect(within(l0).getByText('3107')).toBeInTheDocument();
     expect(within(l0).getByText('85.4%')).toBeInTheDocument();
     expect(within(l0).getAllByText('453').length).toBeGreaterThan(0);
-    expect(within(screen.getByRole('region', { name: '分维度质量评估' }))
-      .getByText('权威质量快照')).toHaveAttribute(
-      'data-quality-provenance',
-      'authoritative'
-    );
+    expect(screen.queryByText('权威质量快照')).not.toBeInTheDocument();
+    expect(within(l0).queryByText(VERSION_615)).not.toBeInTheDocument();
+    expect(l0.querySelector('[data-quality-provenance]')).toBeNull();
     const overviewRow = screen.getByRole('rowheader', { name: '总览' }).closest('tr')!;
     expect(within(overviewRow).getAllByRole('cell').map((cell) => cell.textContent))
       .toEqual(['62', '1', '0', '0%', '1', '100%']);
@@ -373,6 +367,7 @@ describe('Overview live quality integration', () => {
       .toBeInTheDocument();
     expect(within(l1).queryByText('整体质量评估', { exact: true })).not.toBeInTheDocument();
     expect(within(l1).queryByText('发现问题', { exact: true })).not.toBeInTheDocument();
+    expect(within(l1).queryByText(/评分公式|weighted-quality-v1/)).not.toBeInTheDocument();
   });
 
   test('renders null rate denominators as an em dash', async () => {
@@ -425,9 +420,13 @@ describe('Overview live quality integration', () => {
     installQualityBackend({ qualityStatus: 'partial' });
     renderDashboard();
 
-    await screen.findByRole('region', { name: '全局质量' });
-    expect(within(screen.getByRole('region', { name: '分维度质量评估' }))
-      .getByText('部分质量数据')).toHaveAttribute(
+    const l0 = await screen.findByRole('region', { name: '全局质量' });
+    const l1 = screen.getByRole('region', { name: '分维度质量评估' });
+    expect(within(l0).getByText('部分质量数据')).toHaveAttribute(
+      'data-quality-provenance',
+      'l0-partial'
+    );
+    expect(within(l1).getByText('部分质量数据')).toHaveAttribute(
       'data-quality-provenance',
       'partial'
     );
@@ -464,6 +463,11 @@ describe('Overview live quality integration', () => {
         'stale'
       );
     });
+    expect(within(screen.getByRole('region', { name: '全局质量' }))
+      .getByText('缓存质量数据 · 更新失败')).toHaveAttribute(
+      'data-quality-provenance',
+      'l0-stale'
+    );
     expect(screen.getByRole('table')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '选择质量维度: 基础功能' }));
@@ -549,6 +553,9 @@ describe('Overview live quality integration', () => {
   test('encodes responsive sticky matrix behavior and has no Basic mock lookup', () => {
     expect(dashboardSource).not.toContain('overviewMockData');
     expect(dashboardSource).not.toContain('getOverviewQualityMock');
+    expect(dashboardSource).not.toContain('overview-version-badge');
+    expect(dashboardSource).not.toContain('basic-dimension-quality__formula');
+    expect(dashboardSource).not.toContain('qualityScoreFormula');
     expect(overviewStyles).toMatch(
       /\.feature-quality-table-scroll\s*\{[^}]*overflow:\s*auto;[^}]*scrollbar-gutter:\s*stable;/s
     );
@@ -561,6 +568,33 @@ describe('Overview live quality integration', () => {
     expect(overviewStyles).toMatch(
       /@media \(max-width:\s*980px\)[\s\S]*?\.basic-quality-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/s
     );
+    expect(overviewStyles).toMatch(
+      /\.basic-quality-grid\s*\{[^}]*grid-template-columns:\s*minmax\(300px,\s*0\.42fr\)\s+minmax\(0,\s*1\.58fr\);[^}]*gap:\s*20px;/s
+    );
+    expect(overviewStyles).toMatch(
+      /\.basic-dimension-quality\s*\{[^}]*padding:\s*24px;/s
+    );
+    expect(overviewStyles).toMatch(
+      /\.feature-quality-card__heading p\s*\{[^}]*font-size:\s*16px;[^}]*line-height:\s*24px;/s
+    );
+    expect(overviewStyles).toMatch(
+      /\.feature-quality-card__heading span\s*\{[^}]*font-size:\s*13px;[^}]*line-height:\s*20px;/s
+    );
+    expect(overviewStyles).toMatch(
+      /\.feature-quality-table\s*\{[^}]*font-size:\s*13px;[^}]*line-height:\s*20px;/s
+    );
+    expect(overviewStyles).toMatch(
+      /\.basic-dimension-quality > \.dimension-summary-zone__eyebrow\s*\{[^}]*font-size:\s*14px;[^}]*line-height:\s*22px;/s
+    );
+    expect(overviewStyles).toMatch(
+      /\.overview-quality-ring\.is-compact \.overview-quality-ring__visual strong\s*\{[^}]*font-size:\s*28px;[^}]*line-height:\s*34px;/s
+    );
+    expect(overviewStyles).toMatch(
+      /\.overview-quality-ring\.is-compact \.overview-quality-ring__caption\s*\{[^}]*font-size:\s*14px;[^}]*line-height:\s*22px;/s
+    );
+    expect(overviewStyles).toMatch(
+      /@media \(max-width:\s*440px\)[\s\S]*?\.feature-quality-card__heading\s*\{[^}]*flex-direction:\s*column;/s
+    );
   });
 
   test('provides complete English copy for the live Basic view', async () => {
@@ -568,7 +602,8 @@ describe('Overview live quality integration', () => {
     renderDashboard({ language: 'en' });
 
     await screen.findByRole('region', { name: 'Global quality' });
-    expect(screen.getAllByText('Modeled quality snapshot')).toHaveLength(2);
+    expect(screen.queryByText('Modeled quality snapshot')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Score formula|weighted-quality-v1/)).not.toBeInTheDocument();
     expect(screen.getByText('FEATURE QUALITY ASSESSMENT · Feature quality assessment'))
       .toBeInTheDocument();
     for (const heading of [

@@ -745,9 +745,6 @@ function BasicDimensionSummary({
             <p>{t.nonPassedCases} {core.non_passed_case_count}</p>
           </div>
         </div>
-        <p className="basic-dimension-quality__formula">
-          {t.qualityScoreFormula} · {core.score_formula_version}
-        </p>
       </section>
       <FeatureQualityMatrix language={language} features={quality.features} />
     </div>
@@ -1035,9 +1032,12 @@ export function Dashboard({
     ? getLegacyDimensionSnapshot(product, selectedVersion)
     : undefined;
   const selectedLabel = dimensionLabel(language, selectedDimension);
+  const hasExceptionalQualityState = presentationState === 'partial'
+    || presentationState === 'stale';
   const l1ProvenanceState = selectedDimension === 'basic' ? presentationState : 'simulated';
+  const showL1Provenance = selectedDimension !== 'basic' || hasExceptionalQualityState;
   const showL0WarningAlongsideSimulation = selectedDimension !== 'basic'
-    && (presentationState === 'partial' || presentationState === 'stale');
+    && hasExceptionalQualityState;
 
   const handleVersionChange = (version: string) => {
     if (!availableVersions.includes(version)) {
@@ -1086,20 +1086,17 @@ export function Dashboard({
                   <p>{t.l0QualityEyebrow}</p>
                   <h2 id="overview-l0-title">{t.globalQuality}</h2>
                 </div>
-                <div className="overview-l0-badges">
-                  <span
-                    className={`overview-provenance-badge is-${presentationState}`}
-                    data-quality-provenance={`l0-${presentationState}`}
-                  >
-                    {provenanceLabel(language, presentationState)}
-                  </span>
-                  <span
-                    className="overview-version-badge"
-                    aria-label={`${t.currentVersion}: ${selectedVersion}`}
-                  >
-                    {selectedVersion}
-                  </span>
-                </div>
+                {hasExceptionalQualityState ? (
+                  <div className="overview-l0-badges">
+                    <span
+                      className={`overview-provenance-badge is-${presentationState}`}
+                      data-quality-provenance={`l0-${presentationState}`}
+                      role="status"
+                    >
+                      {provenanceLabel(language, presentationState)}
+                    </span>
+                  </div>
+                ) : null}
               </div>
 
               <div className="overview-l0-score-summary">
@@ -1164,22 +1161,30 @@ export function Dashboard({
                   <h2 id="overview-l1-title">{t.dimensionQualityAssessment}</h2>
                 </div>
               </div>
-              <div className="overview-provenance-badges">
-                {showL0WarningAlongsideSimulation ? (
+              {showL1Provenance ? (
+                <div className="overview-provenance-badges">
+                  {showL0WarningAlongsideSimulation ? (
+                    <span
+                      className={`overview-provenance-badge is-${presentationState}`}
+                      data-quality-provenance={`l0-${presentationState}`}
+                      role="status"
+                    >
+                      L0 · {provenanceLabel(language, presentationState)}
+                    </span>
+                  ) : null}
                   <span
-                    className={`overview-provenance-badge is-${presentationState}`}
-                    data-quality-provenance={`l0-${presentationState}`}
+                    className={`overview-provenance-badge is-${l1ProvenanceState}`}
+                    data-quality-provenance={l1ProvenanceState}
+                    role={
+                      l1ProvenanceState === 'partial' || l1ProvenanceState === 'stale'
+                        ? 'status'
+                        : undefined
+                    }
                   >
-                    L0 · {provenanceLabel(language, presentationState)}
+                    {provenanceLabel(language, l1ProvenanceState)}
                   </span>
-                ) : null}
-                <span
-                  className={`overview-provenance-badge is-${l1ProvenanceState}`}
-                  data-quality-provenance={l1ProvenanceState}
-                >
-                  {provenanceLabel(language, l1ProvenanceState)}
-                </span>
-              </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="overview-l1-card" data-dimension={selectedDimension}>
