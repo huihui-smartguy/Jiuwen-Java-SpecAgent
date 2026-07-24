@@ -1011,16 +1011,23 @@
   border-collapse: separate;
   border-spacing: 0;
   color: var(--color-text-secondary);
-  font-size: 13px;
-  line-height: 20px;
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line);
 }
 
 .feature-quality-table th,
 .feature-quality-table td {
   padding: 10px 12px;
   border-bottom: 1px solid var(--color-outline);
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line);
   text-align: right;
   white-space: nowrap;
+}
+
+.feature-quality-table th {
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 .feature-quality-table thead th {

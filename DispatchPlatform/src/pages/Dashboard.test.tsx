@@ -581,7 +581,13 @@ describe('Overview live quality integration', () => {
       /\.feature-quality-card__heading span\s*\{[^}]*font-size:\s*13px;[^}]*line-height:\s*20px;/s
     );
     expect(overviewStyles).toMatch(
-      /\.feature-quality-table\s*\{[^}]*font-size:\s*13px;[^}]*line-height:\s*20px;/s
+      /\.feature-quality-table\s*\{[^}]*font-size:\s*var\(--type-body-size\);[^}]*line-height:\s*var\(--type-body-line\);/s
+    );
+    expect(overviewStyles).toMatch(
+      /\.feature-quality-table th,\s*\.feature-quality-table td\s*\{[^}]*font-size:\s*var\(--type-body-size\);[^}]*line-height:\s*var\(--type-body-line\);/s
+    );
+    expect(overviewStyles).toMatch(
+      /\.feature-quality-table th\s*\{[^}]*letter-spacing:\s*normal;[^}]*text-transform:\s*none;/s
     );
     expect(overviewStyles).toMatch(
       /\.basic-dimension-quality > \.dimension-summary-zone__eyebrow\s*\{[^}]*font-size:\s*14px;[^}]*line-height:\s*22px;/s
