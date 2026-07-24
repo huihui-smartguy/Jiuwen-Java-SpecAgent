@@ -1245,6 +1245,7 @@
   .overview-l0-divider {
     width: 100%;
     height: 1px;
+    min-height: 1px;
   }
 
   .overview-l0-score-zone {

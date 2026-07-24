@@ -88,6 +88,9 @@ describe('Overview dashboard R10', () => {
       /\.dimension-summary-grid\s*\{[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\);/s
     );
     expect(overviewStyles).toMatch(
+      /@media \(max-width:\s*980px\)[\s\S]*?\.overview-l0-divider\s*\{[^}]*width:\s*100%;[^}]*height:\s*1px;[^}]*min-height:\s*1px;/s
+    );
+    expect(overviewStyles).toMatch(
       /@media \(max-width:\s*680px\)[\s\S]*?\.overview-create-task\s*\{[^}]*flex:\s*0 0 auto;[^}]*min-height:\s*52px;/s
     );
     expect(overviewStyles).toMatch(
