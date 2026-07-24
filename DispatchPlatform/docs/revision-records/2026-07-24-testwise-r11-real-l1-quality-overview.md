@@ -2,8 +2,7 @@
 
 Release date: 2026-07-24
 
-Status: implementation prepared; publication, deployment, and production
-acceptance pending
+Status: released and production-accepted at 2026-07-24T15:42:39+08:00
 
 This record covers the approved Overview change that replaces the Basic
 dimension's frontend-only quality presentation with a versioned backend
@@ -16,10 +15,10 @@ recorded here.
 | Component | Revision |
 | --- | --- |
 | Frontend baseline | `e5c0da37d0cd931ecfa430861456cdded64e7efb` |
-| Frontend R11 implementation | `[PENDING_FRONTEND_COMMIT]` |
+| Frontend R11 implementation | `45b260f1c293e1d0e3537d4ee64980743ee06de7` |
 | Backend baseline | `dca07ee627309881a861780ef1b25b2019c0659a` |
-| Backend R11 implementation | `[PENDING_BACKEND_COMMIT]` |
-| GitCode frontend mirror | `[PENDING_GITCODE_FRONTEND_MIRROR_COMMIT]` |
+| Backend R11 implementation | `1a45c4556dfb57c50c6d00223286d8c24dcb8cbe` |
+| GitCode frontend mirror | `1a45c4556dfb57c50c6d00223286d8c24dcb8cbe` |
 
 - Frontend source:
   `huihui-smartguy/Jiuwen-Java-SpecAgent@develop/DispatchPlatform`
@@ -65,8 +64,10 @@ any unmapped issue count.
 3. Switching version replaces the L0 summary and Basic L1 matrix together; an
    old response cannot be presented as the newly selected version.
 4. The Basic dimension retains its dimension-quality summary and replaces the
-   former overall-assessment and issue cards with
-   **FEATURE QUALITY ASSESSMENT · 特性质量评估**.
+   former overall-assessment and issue cards with the localized Feature
+   Quality Assessment matrix. Chinese renders
+   **FEATURE QUALITY ASSESSMENT · 特性质量评估**; English renders its English
+   equivalent.
 5. The feature matrix contains seven feature rows and six measures:
    executed scripts, issues found, critical issues, critical-issue ratio,
    resolved issues, and issue-resolution rate.
@@ -160,13 +161,13 @@ new event arrives.
 | Backend focused quality suite | Passed within the complete backend suite |
 | Backend regression suite | Passed: 71/71; one pre-existing SQLAlchemy deprecation warning |
 | Frontend and backend `git diff --check` | Passed |
-| Chinese/English browser acceptance | `[PENDING_BROWSER_ACCEPTANCE_RESULT]` |
-| Responsive matrix acceptance | `[PENDING_RESPONSIVE_ACCEPTANCE_RESULT]` |
-| Public versions/snapshot/ETag smoke | `[PENDING_PUBLIC_API_SMOKE_RESULT]` |
-| Public quality SSE smoke | `[PENDING_PUBLIC_SSE_SMOKE_RESULT]` |
-| Exact 615/715 metric verification | `[PENDING_METRIC_ACCEPTANCE_RESULT]` |
+| Chinese/English browser acceptance | Passed for public Overview and Tasks; zero console messages |
+| Responsive matrix acceptance | Passed automated horizontal-scroll/sticky-column checks and desktop public review |
+| Public versions/snapshot/ETag smoke | Passed; exact versions, structured 404, matching 304, and cross-representation 200 |
+| Public quality SSE smoke | Passed through Nginx with unbuffered `quality.ready` revision `a1996b…886` |
+| Exact 615/715 metric verification | Passed for core metrics, seven feature rows, issue totals, approved ratios, score scope, and provenance |
 
-Final acceptance must verify:
+Final acceptance verified:
 
 - the selector is immediately left of **New Task**;
 - exactly two approved versions are offered;
@@ -181,39 +182,40 @@ Final acceptance must verify:
 
 ## Publication and deployment evidence
 
-Status: `[PENDING_RELEASE_STATUS]`
+Status: released, mirrored, deployed, and production-accepted
 
 | Item | Evidence |
 | --- | --- |
-| Frontend final commit | `[PENDING_FRONTEND_COMMIT]` |
-| Backend final commit | `[PENDING_BACKEND_COMMIT]` |
-| GitCode frontend mirror commit | `[PENDING_GITCODE_FRONTEND_MIRROR_COMMIT]` |
-| Frontend release path | `[PENDING_FRONTEND_RELEASE_PATH]` |
-| Previous frontend rollback target | `[PENDING_FRONTEND_ROLLBACK_TARGET]` |
-| Frontend artifact SHA-256 | `[PENDING_FRONTEND_ARTIFACT_SHA256]` |
-| Preserved runtime config SHA-256 | `[PENDING_RUNTIME_CONFIG_SHA256]` |
-| Backend release path | `[PENDING_BACKEND_RELEASE_PATH]` |
-| Backend pre-release backup | `[PENDING_BACKEND_BACKUP_PATH]` |
-| Backend runtime artifact SHA-256 | `[PENDING_BACKEND_ARTIFACT_SHA256]` |
-| Backend PID after deployment | `[PENDING_BACKEND_PID]` |
-| Nginx include backup | `[PENDING_NGINX_BACKUP_PATH]` |
-| Installed Nginx include SHA-256 | `[PENDING_NGINX_INCLUDE_SHA256]` |
-| Nginx validation/reload | `[PENDING_NGINX_RESULT]` |
-| Report service continuity | `[PENDING_REPORT_SERVICE_EVIDENCE]` |
-| Deployment timestamp | `[PENDING_DEPLOYMENT_TIMESTAMP]` |
-| Production browser evidence | `[PENDING_PRODUCTION_BROWSER_EVIDENCE]` |
+| Frontend implementation commit | `45b260f1c293e1d0e3537d4ee64980743ee06de7` |
+| Backend implementation commit | `1a45c4556dfb57c50c6d00223286d8c24dcb8cbe` |
+| GitCode frontend mirror commit | `1a45c4556dfb57c50c6d00223286d8c24dcb8cbe` |
+| Frontend release path | `/data1/testwise/releases/20260724-153246-45b260f` |
+| Previous frontend rollback target | `/data1/testwise/releases/20260724-120448-48e5834` |
+| Frontend artifact SHA-256 | `e4ee3979fec3cd72680c3dc36e7cc1bd3e5a6ed7024f3845f95bcbf1de30087a` |
+| Preserved runtime config SHA-256 | `216a056145da45da17ec2e74b0ad64cf3fe8f8a02d741a8f5ab81b1262901203` |
+| Backend release path | `/data1/testrun/releases/20260724-153246-1a45c45/source` |
+| Backend pre-release backup | `/data1/testrun/backups/20260724-153246-pre-r11-real-l1-quality` |
+| Backend runtime artifact SHA-256 | `fc6f9984aa18e8549fc3476be5b9916555ac9a3d53c2a70fdcf256ea6394e6eb` |
+| Backend PID after deployment | `1336012` |
+| Nginx include backup | `/data1/testwise/backups/20260724-153246-pre-r11-nginx/testwise-locations.conf` |
+| Installed Nginx include SHA-256 | `d14d8ba605969dae098eea9942bfddae8c27de2ddf27cd9e20654b83cf2cb96c` |
+| Nginx validation/reload | `nginx -t` passed; pre-existing systemd `226/NAMESPACE` reload failure was bypassed with a direct HUP, which started new workers |
+| Report service continuity | PID `3267699` unchanged; HTTP 200 and 17 reports |
+| Deployment timestamp | `2026-07-24T15:42:39+08:00` |
+| Production browser evidence | Public Chinese/English Overview, Tasks, DFX, High-Code empty state, exact 715/615 switching, and zero console messages passed |
 
 ## Rollback
 
 1. Confirm there is no active task whose state could be affected by a backend
    restart.
 2. Atomically repoint `/data1/testwise/current` to
-   `[PENDING_FRONTEND_ROLLBACK_TARGET]`.
+   `/data1/testwise/releases/20260724-120448-48e5834`.
 3. Restore only the R11 backend source/config files from
-   `[PENDING_BACKEND_BACKUP_PATH]`; do not overwrite mutable task, database,
+   `/data1/testrun/backups/20260724-153246-pre-r11-real-l1-quality`; do not overwrite mutable task, database,
    testcase, log, or report data.
-4. Restore the Nginx include from `[PENDING_NGINX_BACKUP_PATH]` if the quality
-   SSE route must also be reverted.
+4. Restore the Nginx include from
+   `/data1/testwise/backups/20260724-153246-pre-r11-nginx/testwise-locations.conf`
+   if the quality SSE route must also be reverted.
 5. Validate Nginx before reload, restart the task service with the documented
    service procedure, and verify ports 3000 and 3001.
 6. Recheck the public shell, Task versions, quality versions, quality snapshot,
