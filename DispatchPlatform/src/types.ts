@@ -304,6 +304,93 @@ export interface ApiContext {
   apiBaseUrl: string;
 }
 
+export type OverviewQualityDataStatus = 'authoritative' | 'modeled' | 'partial';
+
+export interface OverviewQualityVersion {
+  version: string;
+  label: string;
+  data_status: OverviewQualityDataStatus;
+  is_default: boolean;
+  generated_at: string;
+}
+
+export interface OverviewQualityVersionsResponse {
+  success: true;
+  schema_version: '1.0';
+  revision: string;
+  generated_at: string;
+  product: {
+    key: string;
+    label: string;
+  };
+  versions: OverviewQualityVersion[];
+}
+
+export interface OverviewQualityScoreInputs {
+  population_scope: 'approved_version_quality_assessment';
+  pass_rate: number;
+  issue_resolution_rate: number;
+  critical_issue_ratio: number;
+  weights: {
+    pass_rate: number;
+    issue_resolution_rate: number;
+    non_critical_ratio: number;
+  };
+}
+
+export interface OverviewQualityCore {
+  total_case_count: number;
+  passed_case_count: number;
+  non_passed_case_count: number;
+  pass_rate: number;
+  quality_score: number;
+  score_formula_version: string;
+  score_inputs: OverviewQualityScoreInputs;
+}
+
+export interface OverviewFeatureQuality {
+  feature_key: string;
+  label_zh: string;
+  label_en: string;
+  execution_script_count: number;
+  issues_found_total: number;
+  critical_issue_count: number;
+  critical_issue_ratio: number | null;
+  resolved_issue_count: number;
+  issue_resolution_rate: number | null;
+}
+
+export interface OverviewQualityCoverage {
+  status: 'complete' | 'partial';
+  source_type: 'quality_snapshot' | 'modeled_snapshot';
+  feature_issue_count_total: number;
+  unmapped_issue_count: number | null;
+}
+
+export interface OverviewQualityResponse {
+  success: true;
+  schema_version: '1.0';
+  revision: string;
+  generated_at: string;
+  data_status: OverviewQualityDataStatus;
+  filters: {
+    product: string;
+    version: string;
+    dimension: 'basic_function';
+  };
+  core: OverviewQualityCore;
+  features: OverviewFeatureQuality[];
+  coverage: OverviewQualityCoverage;
+}
+
+export interface OverviewQualityEvent {
+  event: 'quality.ready' | 'quality.changed';
+  revision: string;
+  generated_at: string;
+  product: string;
+  versions: string[];
+}
+
 export interface ScriptQuery {
   product: string;
   scene: string;

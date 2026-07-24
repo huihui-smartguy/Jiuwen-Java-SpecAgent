@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
+  ApiError,
   buildApiUrl,
   cancelTask,
   createReport,
@@ -8,6 +9,9 @@ import {
   getCatalog,
   getCatalogEventsUrl,
   getFeatures,
+  getOverviewQuality,
+  getOverviewQualityEventsUrl,
+  getOverviewQualityVersions,
   getReport,
   getReportDownloadUrl,
   getScriptsForScene,
@@ -21,6 +25,7 @@ import {
   listReports,
   normalizeCreatedTask,
   normalizeTaskStatus,
+  parseOverviewQualityEvent,
   ReportOutcomeUnknownError,
   resolvePublicDownloadUrl
 } from './client';
@@ -153,6 +158,246 @@ describe('revisioned catalog API client', () => {
       script_ids: ['script-auth'],
       catalog_revision: 'catalog-r1'
     });
+  });
+});
+
+describe('L1 quality overview API client', () => {
+  const versionsResponse = {
+    success: true,
+    schema_version: '1.0',
+    revision: 'quality-r1',
+    generated_at: '2026-07-24T08:00:00Z',
+    product: { key: 'unified', label: '合一版本' },
+    versions: [
+      {
+        version: '715:0.2.0.beta3.post3',
+        label: '715 · 0.2.0.beta3.post3',
+        data_status: 'modeled',
+        is_default: true,
+        generated_at: '2026-07-24T08:00:00Z'
+      },
+      {
+        version: '615:0.2.0.beta3',
+        label: '615 · 0.2.0.beta3',
+        data_status: 'authoritative',
+        is_default: false,
+        generated_at: '2026-07-24T08:00:00Z'
+      }
+    ]
+  } as const;
+
+  test('requests version snapshots with native product names, ETag, and AbortSignal', async () => {
+    const controller = new AbortController();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify(versionsResponse), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', ETag: '"quality-r1"' }
+      })
+    );
+
+    const result = await getOverviewQualityVersions(
+      { apiBaseUrl: '/testwise/api' },
+      '合一版本',
+      { etag: '"quality-r0"', signal: controller.signal }
+    );
+
+    expect(result).toMatchObject({
+      kind: 'modified',
+      etag: '"quality-r1"',
+      data: { revision: 'quality-r1' }
+    });
+    const [input, init] = fetchSpy.mock.calls[0];
+    expect(input).toBe(
+      '/testwise/api/quality/overview/versions?product=%E5%90%88%E4%B8%80%E7%89%88%E6%9C%AC'
+    );
+    expect(init?.cache).toBe('no-cache');
+    expect(init?.signal).toBe(controller.signal);
+    expect(new Headers(init?.headers).get('Accept')).toBe('application/json');
+    expect(new Headers(init?.headers).get('If-None-Match')).toBe('"quality-r0"');
+  });
+
+  test('preserves the ASCII version colon and basic-function dimension in overview filters', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        success: true,
+        schema_version: '1.0',
+        revision: 'quality-r1',
+        generated_at: '2026-07-24T08:00:00Z',
+        data_status: 'authoritative',
+        filters: {
+          product: '合一版本',
+          version: '615:0.2.0.beta3',
+          dimension: 'basic_function'
+        },
+        core: {
+          total_case_count: 3107,
+          passed_case_count: 2654,
+          non_passed_case_count: 453,
+          pass_rate: 85.42,
+          quality_score: 81.4,
+          score_formula_version: 'weighted-quality-v1',
+          score_inputs: {
+            population_scope: 'approved_version_quality_assessment',
+            pass_rate: 85.42,
+            issue_resolution_rate: 77.92,
+            critical_issue_ratio: 28.92,
+            weights: {
+              pass_rate: 0.6,
+              issue_resolution_rate: 0.25,
+              non_critical_ratio: 0.15
+            }
+          }
+        },
+        features: Array.from({ length: 7 }, (_, index) => ({
+          feature_key: `feature-${index}`,
+          label_zh: `特性${index}`,
+          label_en: `Feature ${index}`,
+          execution_script_count: index,
+          issues_found_total: index,
+          critical_issue_count: 0,
+          critical_issue_ratio: index ? 0 : null,
+          resolved_issue_count: 0,
+          issue_resolution_rate: index ? 0 : null
+        })),
+        coverage: {
+          status: 'complete',
+          source_type: 'quality_snapshot',
+          feature_issue_count_total: 388,
+          unmapped_issue_count: 0
+        }
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+
+    await getOverviewQuality(
+      { apiBaseUrl: '/testwise/api' },
+      { product: '合一版本', version: '615:0.2.0.beta3' }
+    );
+
+    const url = new URL(String(fetchSpy.mock.calls[0][0]), 'http://local.test');
+    expect(url.pathname).toBe('/testwise/api/quality/overview');
+    expect(url.searchParams.get('product')).toBe('合一版本');
+    expect(url.searchParams.get('version')).toBe('615:0.2.0.beta3');
+    expect(url.searchParams.get('dimension')).toBe('basic_function');
+  });
+
+  test('handles 304 without reading an empty body and retains the caller ETag', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(null, { status: 304 })
+    );
+
+    await expect(getOverviewQuality(
+      api,
+      {
+        product: '合一版本',
+        version: '715:0.2.0.beta3.post3',
+        dimension: 'basic_function'
+      },
+      { etag: '"quality-r1"' }
+    )).resolves.toEqual({
+      kind: 'not-modified',
+      etag: '"quality-r1"'
+    });
+  });
+
+  test('surfaces the nested backend error contract for unavailable snapshots', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        success: false,
+        error: {
+          code: 'QUALITY_SNAPSHOT_NOT_FOUND',
+          message: 'No quality snapshot exists for this version.',
+          details: { product: '合一版本', version: '999:R000' }
+        }
+      }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+
+    await expect(getOverviewQuality(api, {
+      product: '合一版本',
+      version: '999:R000'
+    })).rejects.toEqual(expect.objectContaining<Partial<ApiError>>({
+      name: 'ApiError',
+      code: 'QUALITY_SNAPSHOT_NOT_FOUND',
+      status: 404,
+      message: 'No quality snapshot exists for this version.',
+      details: { product: '合一版本', version: '999:R000' }
+    }));
+  });
+
+  test('rejects malformed successful quality payloads before the UI can render them', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ...versionsResponse,
+        product: { key: 'unified' }
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        success: true,
+        schema_version: '1.0',
+        revision: 'quality-r1',
+        generated_at: '2026-07-24T08:00:00Z',
+        data_status: 'authoritative',
+        filters: {
+          product: '合一版本',
+          version: '615:0.2.0.beta3',
+          dimension: 'basic_function'
+        },
+        core: null,
+        features: [],
+        coverage: null
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      }));
+
+    await expect(getOverviewQualityVersions(api, '合一版本')).rejects.toEqual(
+      expect.objectContaining<Partial<ApiError>>({
+        code: 'INVALID_QUALITY_VERSIONS_RESPONSE',
+        message: 'The quality version response is malformed'
+      })
+    );
+    await expect(getOverviewQuality(api, {
+      product: '合一版本',
+      version: '615:0.2.0.beta3'
+    })).rejects.toEqual(expect.objectContaining<Partial<ApiError>>({
+      code: 'INVALID_QUALITY_OVERVIEW_RESPONSE',
+      message: 'The quality overview response is malformed'
+    }));
+  });
+
+  test('builds the product-scoped SSE URL and rejects malformed event payloads', () => {
+    expect(getOverviewQualityEventsUrl(
+      { apiBaseUrl: '/testwise/api' },
+      '合一版本'
+    )).toBe(
+      '/testwise/api/quality/overview/events?product=%E5%90%88%E4%B8%80%E7%89%88%E6%9C%AC'
+    );
+
+    expect(parseOverviewQualityEvent(new MessageEvent('quality.changed', {
+      data: JSON.stringify({
+        event: 'quality.changed',
+        revision: 'quality-r2',
+        generated_at: '2026-07-24T08:05:00Z',
+        product: '合一版本',
+        versions: ['715:0.2.0.beta3.post3', '615:0.2.0.beta3']
+      })
+    }))).toEqual({
+      event: 'quality.changed',
+      revision: 'quality-r2',
+      generated_at: '2026-07-24T08:05:00Z',
+      product: '合一版本',
+      versions: ['715:0.2.0.beta3.post3', '615:0.2.0.beta3']
+    });
+    expect(parseOverviewQualityEvent(new MessageEvent('quality.changed', {
+      data: '{"event":"quality.changed","revision":42}'
+    }))).toBeUndefined();
   });
 });
 

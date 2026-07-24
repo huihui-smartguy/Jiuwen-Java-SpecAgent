@@ -1,3 +1,4 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, ChevronDown } from 'lucide-react';
 import {
   type KeyboardEvent as ReactKeyboardEvent,
@@ -8,18 +9,32 @@ import {
   useState
 } from 'react';
 import { Link } from 'react-router-dom';
+import {
+  ApiError,
+  getOverviewQuality,
+  getOverviewQualityEventsUrl,
+  getOverviewQualityVersions,
+  parseOverviewQualityEvent
+} from '../api/client';
 import { ExecutionFocus } from '../components/ExecutionFocus';
 import { PageHeader } from '../components/PageHeader';
 import {
-  type DimensionQualityMock,
-  getDefaultOverviewQualityVersion,
-  getOverviewQualityMock,
-  getOverviewQualityVersions,
-  type OverviewQualityMock,
-  type QualityDimensionId
-} from '../data/overviewMockData';
+  getLegacyDimensionSnapshot,
+  type LegacyDimensionQuality,
+  type LegacyDimensionSnapshot,
+  type LegacyQualityDimensionId
+} from '../data/overviewLegacyDimensionData';
 import { getCopy } from '../i18n';
-import type { Language, NormalizedTaskStatus, RuntimeConfig, SutTarget } from '../types';
+import type {
+  Language,
+  NormalizedTaskStatus,
+  OverviewFeatureQuality,
+  OverviewQualityDataStatus,
+  OverviewQualityResponse,
+  OverviewQualityVersionsResponse,
+  RuntimeConfig,
+  SutTarget
+} from '../types';
 
 interface PageProps {
   language: Language;
@@ -27,6 +42,16 @@ interface PageProps {
   activeTask: NormalizedTaskStatus | null;
   runtimeConfig: RuntimeConfig;
 }
+
+type QualityDimensionId = 'basic' | LegacyQualityDimensionId;
+
+interface QualityQueryData<T> {
+  response: T;
+  etag?: string;
+  checkedAt: string;
+}
+
+const QUALITY_FALLBACK_POLL_INTERVAL_MS = 30_000;
 
 const dimensionIds: readonly QualityDimensionId[] = [
   'basic',
@@ -64,19 +89,22 @@ function dimensionConclusion(language: Language, id: Exclude<QualityDimensionId,
 function QualityRing({
   score,
   label,
-  size = 'large'
+  size = 'large',
+  precision = 2
 }: {
   score: number;
   label: string;
   size?: 'large' | 'compact';
+  precision?: number;
 }) {
   const boundedScore = Math.min(100, Math.max(0, score));
+  const formattedScore = boundedScore.toFixed(precision);
 
   return (
     <div
       className={`overview-quality-ring is-${size}`}
       role="img"
-      aria-label={`${label} ${boundedScore.toFixed(2)}`}
+      aria-label={`${label} ${formattedScore}`}
     >
       <div className="overview-quality-ring__visual" aria-hidden="true">
         <svg viewBox="0 0 106 106">
@@ -90,7 +118,7 @@ function QualityRing({
             strokeDasharray={`${boundedScore} 100`}
           />
         </svg>
-        <strong>{boundedScore.toFixed(2)}</strong>
+        <strong>{formattedScore}</strong>
       </div>
       <span className="overview-quality-ring__caption">{label}</span>
     </div>
@@ -270,12 +298,14 @@ function VersionSelector({
   language,
   versions,
   value,
-  onChange
+  onChange,
+  disabled = false
 }: {
   language: Language;
   versions: readonly string[];
   value: string;
   onChange: (value: string) => void;
+  disabled?: boolean;
 }) {
   const t = getCopy(language);
   const [open, setOpen] = useState(false);
@@ -392,6 +422,7 @@ function VersionSelector({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={listboxId}
+        disabled={disabled}
         onClick={() => {
           setActiveIndex(Math.max(0, versions.indexOf(value)));
           setOpen((current) => !current);
@@ -403,7 +434,7 @@ function VersionSelector({
         <ChevronDown aria-hidden="true" />
       </button>
 
-      {open ? (
+      {open && versions.length ? (
         <ul
           id={listboxId}
           className="version-selector__menu"
@@ -446,7 +477,7 @@ function StandardDimensionSummary({
   dimension
 }: {
   language: Language;
-  dimension: DimensionQualityMock & { id: Exclude<QualityDimensionId, 'performance'> };
+  dimension: LegacyDimensionQuality;
 }) {
   const t = getCopy(language);
   const issueTotal = Math.max(dimension.issues, 1);
@@ -494,7 +525,10 @@ function StandardDimensionSummary({
           </div>
         </div>
         <p className="dimension-conclusion">
-          {t.conclusion}: {dimensionConclusion(language, dimension.id)}
+          {t.conclusion}: {dimensionConclusion(
+            language,
+            dimension.id as Exclude<LegacyQualityDimensionId, 'performance'>
+          )}
         </p>
       </section>
 
@@ -530,14 +564,14 @@ function StandardDimensionSummary({
 
 function PerformanceDimensionSummary({
   language,
-  quality
+  snapshot
 }: {
   language: Language;
-  quality: OverviewQualityMock;
+  snapshot: LegacyDimensionSnapshot;
 }) {
   const t = getCopy(language);
-  const dimension = quality.dimensions.performance;
-  const performance = quality.performance;
+  const dimension = snapshot.dimensions.performance;
+  const performance = snapshot.performance;
   const chart = useMemo(() => {
     const width = 600;
     const left = 8;
@@ -622,34 +656,400 @@ function PerformanceDimensionSummary({
   );
 }
 
-export function Dashboard({ language, selectedSut, activeTask }: PageProps) {
+function formatPercent(value: number | null, precision = 2) {
+  if (value === null || !Number.isFinite(value)) {
+    return '—';
+  }
+  return `${Number(value.toFixed(precision))}%`;
+}
+
+function FeatureQualityMatrix({
+  language,
+  features
+}: {
+  language: Language;
+  features: readonly OverviewFeatureQuality[];
+}) {
   const t = getCopy(language);
+
+  return (
+    <section className="feature-quality-card" aria-labelledby="feature-quality-title">
+      <div className="feature-quality-card__heading">
+        <p id="feature-quality-title">{t.featureQualityAssessment}</p>
+        <span>{features.length} {t.featuresUnit}</span>
+      </div>
+      <div
+        className="feature-quality-table-scroll"
+        role="region"
+        aria-label={t.featureQualityAssessment}
+        tabIndex={0}
+      >
+        <table className="feature-quality-table">
+          <thead>
+            <tr>
+              <th scope="col">{t.featureColumn}</th>
+              <th scope="col">{t.executionScriptCount}</th>
+              <th scope="col">{t.issuesFoundTotal}</th>
+              <th scope="col">{t.criticalIssueCount}</th>
+              <th scope="col">{t.criticalIssueRatio}</th>
+              <th scope="col">{t.resolvedIssueCount}</th>
+              <th scope="col">{t.issueResolutionRate}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {features.map((feature) => (
+              <tr key={feature.feature_key}>
+                <th scope="row">{language === 'zh' ? feature.label_zh : feature.label_en}</th>
+                <td>{feature.execution_script_count}</td>
+                <td>{feature.issues_found_total}</td>
+                <td>{feature.critical_issue_count}</td>
+                <td>{formatPercent(feature.critical_issue_ratio)}</td>
+                <td>{feature.resolved_issue_count}</td>
+                <td>{formatPercent(feature.issue_resolution_rate)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function BasicDimensionSummary({
+  language,
+  quality
+}: {
+  language: Language;
+  quality: OverviewQualityResponse;
+}) {
+  const t = getCopy(language);
+  const { core } = quality;
+
+  return (
+    <div className="basic-quality-grid">
+      <section className="basic-dimension-quality" aria-labelledby="basic-dimension-quality-title">
+        <p id="basic-dimension-quality-title" className="dimension-summary-zone__eyebrow">
+          {t.dimensionQuality}
+        </p>
+        <div className="basic-dimension-quality__score">
+          <QualityRing
+            score={core.quality_score}
+            label={t.dimensionQuality}
+            size="compact"
+            precision={1}
+          />
+          <div>
+            <strong>{core.passed_case_count}</strong>
+            <span>/ {core.total_case_count} {t.testScriptsUnit}</span>
+            <p>{t.passRate} {formatPercent(core.pass_rate, 1)}</p>
+            <p>{t.nonPassedCases} {core.non_passed_case_count}</p>
+          </div>
+        </div>
+        <p className="basic-dimension-quality__formula">
+          {t.qualityScoreFormula} · {core.score_formula_version}
+        </p>
+      </section>
+      <FeatureQualityMatrix language={language} features={quality.features} />
+    </div>
+  );
+}
+
+type QualityPresentationState =
+  | OverviewQualityDataStatus
+  | 'stale'
+  | 'loading'
+  | 'empty'
+  | 'error'
+  | 'simulated';
+
+function provenanceLabel(language: Language, state: QualityPresentationState) {
+  const t = getCopy(language);
+  switch (state) {
+    case 'authoritative':
+      return t.qualityAuthoritative;
+    case 'modeled':
+      return t.qualityModeled;
+    case 'partial':
+      return t.qualityPartial;
+    case 'stale':
+      return t.qualityStale;
+    case 'loading':
+      return t.qualityLoading;
+    case 'empty':
+      return t.qualityEmpty;
+    case 'error':
+      return t.qualityError;
+    case 'simulated':
+      return t.qualitySimulated;
+  }
+}
+
+function QualityStatePanel({
+  language,
+  state,
+  onRetry
+}: {
+  language: Language;
+  state: Extract<QualityPresentationState, 'loading' | 'empty' | 'error'>;
+  onRetry?: () => void;
+}) {
+  const t = getCopy(language);
+  const detail = state === 'loading'
+    ? t.qualityLoadingHint
+    : state === 'empty'
+      ? t.qualityEmptyHint
+      : t.qualityErrorHint;
+
+  return (
+    <section
+      className={`overview-quality-state is-${state}`}
+      role={state === 'error' ? 'alert' : 'status'}
+      aria-live={state === 'loading' ? 'polite' : 'assertive'}
+      data-quality-state={state}
+    >
+      <span className="overview-quality-state__mark" aria-hidden="true" />
+      <div>
+        <h2>{provenanceLabel(language, state)}</h2>
+        <p>{detail}</p>
+      </div>
+      {state !== 'loading' && onRetry ? (
+        <button className="button button--secondary" type="button" onClick={onRetry}>
+          {t.retry}
+        </button>
+      ) : null}
+    </section>
+  );
+}
+
+export function Dashboard({
+  language,
+  selectedSut,
+  activeTask,
+  runtimeConfig
+}: PageProps) {
+  const t = getCopy(language);
+  const queryClient = useQueryClient();
   const [selectedDimension, setSelectedDimension] = useState<QualityDimensionId>('basic');
   const [versionByProduct, setVersionByProduct] = useState<Record<string, string>>({});
-  const availableVersions = useMemo(
-    () => getOverviewQualityVersions(selectedSut.product),
-    [selectedSut.product]
+  const [streamState, setStreamState] = useState<'connecting' | 'live' | 'polling'>('connecting');
+  const apiBaseUrl = selectedSut.apiBaseUrl || runtimeConfig.apiBaseUrl;
+  const product = selectedSut.product;
+  const api = useMemo(() => ({ apiBaseUrl }), [apiBaseUrl]);
+  const versionsKey = useMemo(
+    () => ['overview-quality-versions', apiBaseUrl, product] as const,
+    [apiBaseUrl, product]
   );
-  const defaultVersion = getDefaultOverviewQualityVersion(selectedSut.product);
-  const rememberedVersion = versionByProduct[selectedSut.product];
+
+  const versionsQuery = useQuery<QualityQueryData<OverviewQualityVersionsResponse>>({
+    queryKey: versionsKey,
+    queryFn: async ({ signal }) => {
+      const previous = queryClient.getQueryData<QualityQueryData<OverviewQualityVersionsResponse>>(
+        versionsKey
+      );
+      const result = await getOverviewQualityVersions(api, product, {
+        etag: previous?.etag,
+        signal
+      });
+      const checkedAt = new Date().toISOString();
+      if (result.kind === 'not-modified') {
+        if (!previous) {
+          throw new ApiError('Quality versions returned 304 before a snapshot was cached.', {
+            code: 'QUALITY_VERSIONS_CACHE_MISS'
+          });
+        }
+        return { ...previous, etag: result.etag ?? previous.etag, checkedAt };
+      }
+      return { response: result.data, etag: result.etag, checkedAt };
+    },
+    refetchInterval: streamState === 'live' ? false : QUALITY_FALLBACK_POLL_INTERVAL_MS,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: 'always',
+    retryDelay: 100,
+    retry: (failureCount, error) => (
+      !(error instanceof ApiError && error.status === 404) && failureCount < 1
+    )
+  });
+
+  const versions = versionsQuery.data?.response.versions ?? [];
+  const canonicalProduct = versionsQuery.data?.response.product.label;
+  const availableVersions = useMemo(
+    () => versions.map((version) => version.version),
+    [versions]
+  );
+  const rememberedVersion = versionByProduct[product];
+  const defaultVersion = versions.find((version) => version.is_default)?.version
+    ?? versions[0]?.version
+    ?? '';
   const selectedVersion = rememberedVersion && availableVersions.includes(rememberedVersion)
     ? rememberedVersion
     : defaultVersion;
-  const selectedQuality = selectedVersion
-    ? getOverviewQualityMock(selectedSut.product, selectedVersion)
+  const qualityKey = useMemo(
+    () => ['overview-quality', apiBaseUrl, product, selectedVersion, 'basic_function'] as const,
+    [apiBaseUrl, product, selectedVersion]
+  );
+
+  const qualityQuery = useQuery<QualityQueryData<OverviewQualityResponse>>({
+    queryKey: qualityKey,
+    queryFn: async ({ signal }) => {
+      const previous = queryClient.getQueryData<QualityQueryData<OverviewQualityResponse>>(
+        qualityKey
+      );
+      const result = await getOverviewQuality(api, {
+        product,
+        version: selectedVersion,
+        dimension: 'basic_function'
+      }, {
+        etag: previous?.etag,
+        signal
+      });
+      const checkedAt = new Date().toISOString();
+      if (result.kind === 'not-modified') {
+        if (!previous) {
+          throw new ApiError('Quality overview returned 304 before a snapshot was cached.', {
+            code: 'QUALITY_OVERVIEW_CACHE_MISS'
+          });
+        }
+        return { ...previous, etag: result.etag ?? previous.etag, checkedAt };
+      }
+      return { response: result.data, etag: result.etag, checkedAt };
+    },
+    enabled: Boolean(selectedVersion),
+    refetchInterval: streamState === 'live' ? false : QUALITY_FALLBACK_POLL_INTERVAL_MS,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: 'always',
+    retryDelay: 100,
+    retry: (failureCount, error) => (
+      !(error instanceof ApiError && error.status === 404) && failureCount < 1
+    )
+  });
+
+  useEffect(() => {
+    if (typeof EventSource === 'undefined') {
+      setStreamState('polling');
+      return undefined;
+    }
+    let disposed = false;
+    const source = new EventSource(getOverviewQualityEventsUrl(api, product), {
+      withCredentials: true
+    });
+    setStreamState('connecting');
+    const handleQualityEvent = (event: Event) => {
+      const qualityEvent = parseOverviewQualityEvent(event as MessageEvent<string>);
+      if (
+        !qualityEvent
+        || (
+          qualityEvent.product !== product
+          && qualityEvent.product !== canonicalProduct
+        )
+      ) {
+        return;
+      }
+      const versionsRevision = queryClient.getQueryData<
+        QualityQueryData<OverviewQualityVersionsResponse>
+      >(versionsKey)?.response.revision;
+      const overviewRevision = queryClient.getQueryData<
+        QualityQueryData<OverviewQualityResponse>
+      >(qualityKey)?.response.revision;
+      if (
+        qualityEvent.event === 'quality.changed'
+        || versionsRevision !== qualityEvent.revision
+        || (selectedVersion && overviewRevision !== qualityEvent.revision)
+      ) {
+        void queryClient.invalidateQueries({ queryKey: versionsKey, exact: true });
+        if (selectedVersion) {
+          void queryClient.invalidateQueries({ queryKey: qualityKey, exact: true });
+        }
+      }
+    };
+    source.onopen = () => {
+      if (!disposed) {
+        setStreamState('live');
+      }
+    };
+    source.onerror = () => {
+      if (!disposed) {
+        setStreamState('polling');
+      }
+    };
+    source.addEventListener('quality.ready', handleQualityEvent);
+    source.addEventListener('quality.changed', handleQualityEvent);
+    return () => {
+      disposed = true;
+      source.removeEventListener('quality.ready', handleQualityEvent);
+      source.removeEventListener('quality.changed', handleQualityEvent);
+      source.close();
+    };
+  }, [
+    api,
+    canonicalProduct,
+    product,
+    qualityKey,
+    queryClient,
+    selectedVersion,
+    versionsKey
+  ]);
+
+  useEffect(() => {
+    if (activeTask?.isTerminal) {
+      void queryClient.invalidateQueries({
+        queryKey: ['overview-quality', apiBaseUrl, product],
+        exact: false
+      });
+    }
+  }, [activeTask?.isTerminal, activeTask?.task_id, apiBaseUrl, product, queryClient]);
+
+  const selectedQuality = qualityQuery.data?.response;
+  const qualityMatchesSelection = Boolean(
+    selectedQuality
+    && (
+      selectedQuality.filters.product === product
+      || (
+        Boolean(canonicalProduct)
+        && selectedQuality.filters.product === canonicalProduct
+      )
+    )
+    && selectedQuality.filters.version === selectedVersion
+    && selectedQuality.filters.dimension === 'basic_function'
+  );
+  const currentQuality = qualityMatchesSelection ? selectedQuality : undefined;
+  const versionsNotFound = versionsQuery.error instanceof ApiError
+    && versionsQuery.error.status === 404;
+  const qualityNotFound = qualityQuery.error instanceof ApiError
+    && (
+      qualityQuery.error.status === 404
+      || qualityQuery.error.code === 'QUALITY_SNAPSHOT_NOT_FOUND'
+    );
+  const presentationState: QualityPresentationState = currentQuality
+    ? versionsQuery.isError || qualityQuery.isError
+      ? 'stale'
+      : currentQuality.data_status === 'partial'
+        || currentQuality.coverage.status === 'partial'
+        ? 'partial'
+        : currentQuality.data_status
+    : versionsQuery.isPending || (selectedVersion && qualityQuery.isPending)
+      ? 'loading'
+      : versionsNotFound || qualityNotFound || versionsQuery.data?.response.versions.length === 0
+        ? 'empty'
+        : 'error';
+  const legacySnapshot = selectedVersion
+    ? getLegacyDimensionSnapshot(product, selectedVersion)
     : undefined;
-  const selectedMock = selectedQuality?.dimensions[selectedDimension];
   const selectedLabel = dimensionLabel(language, selectedDimension);
+  const l1ProvenanceState = selectedDimension === 'basic' ? presentationState : 'simulated';
+  const showL0WarningAlongsideSimulation = selectedDimension !== 'basic'
+    && (presentationState === 'partial' || presentationState === 'stale');
 
   const handleVersionChange = (version: string) => {
     if (!availableVersions.includes(version)) {
       return;
     }
-
-    setVersionByProduct((current) => ({
-      ...current,
-      [selectedSut.product]: version
-    }));
+    setVersionByProduct((current) => ({ ...current, [product]: version }));
+  };
+  const handleRetry = () => {
+    void versionsQuery.refetch();
+    if (selectedVersion) {
+      void qualityQuery.refetch();
+    }
   };
 
   return (
@@ -658,17 +1058,26 @@ export function Dashboard({ language, selectedSut, activeTask }: PageProps) {
         title={t.dashboard}
         subtitle={t.dashboardSubtitle}
         action={(
-          <Link className="button button--primary overview-create-task" to="/tasks">
-            {t.newTask}
-            <span aria-hidden="true">→</span>
-          </Link>
+          <div className="overview-header-actions">
+            <VersionSelector
+              language={language}
+              versions={availableVersions}
+              value={selectedVersion || '—'}
+              onChange={handleVersionChange}
+              disabled={!availableVersions.length}
+            />
+            <Link className="button button--primary overview-create-task" to="/tasks">
+              {t.newTask}
+              <span aria-hidden="true">→</span>
+            </Link>
+          </div>
         )}
       />
 
       <ExecutionFocus language={language} sut={selectedSut} task={activeTask} />
 
-      {selectedQuality && selectedVersion && selectedMock ? (
-        <div className="overview-quality-hierarchy">
+      {currentQuality && selectedVersion ? (
+        <div className="overview-quality-hierarchy" data-quality-state={presentationState}>
           <section className="overview-l0-card" aria-labelledby="overview-l0-title">
             <div className="overview-l0-score-zone">
               <div className="overview-hierarchy-heading">
@@ -677,27 +1086,43 @@ export function Dashboard({ language, selectedSut, activeTask }: PageProps) {
                   <p>{t.l0QualityEyebrow}</p>
                   <h2 id="overview-l0-title">{t.globalQuality}</h2>
                 </div>
-                <span
-                  className="overview-version-badge"
-                  aria-label={`${t.currentVersion}: ${selectedVersion}`}
-                >
-                  {selectedVersion}
-                </span>
+                <div className="overview-l0-badges">
+                  <span
+                    className={`overview-provenance-badge is-${presentationState}`}
+                    data-quality-provenance={`l0-${presentationState}`}
+                  >
+                    {provenanceLabel(language, presentationState)}
+                  </span>
+                  <span
+                    className="overview-version-badge"
+                    aria-label={`${t.currentVersion}: ${selectedVersion}`}
+                  >
+                    {selectedVersion}
+                  </span>
+                </div>
               </div>
 
               <div className="overview-l0-score-summary">
-                <QualityRing score={selectedQuality.overallPassRate} label={t.overallQuality} />
+                <QualityRing
+                  score={currentQuality.core.quality_score}
+                  label={t.overallQuality}
+                  precision={1}
+                />
                 <div className="overview-l0-score-status">
-                  <span className={`overview-status-pill is-${selectedQuality.status}`}>
+                  <span className={`overview-status-pill is-${
+                    currentQuality.core.quality_score >= 80 ? 'healthy' : 'attention'
+                  }`}>
                     <span aria-hidden="true" />
-                    {selectedQuality.status === 'attention'
-                      ? t.needsAttention
-                      : t.qualityHealthy}
+                    {currentQuality.core.quality_score >= 80
+                      ? t.qualityHealthy
+                      : t.needsAttention}
                   </span>
-                  <strong>{selectedQuality.totalIssues} {t.overviewIssuesShort}</strong>
+                  <strong>
+                    {currentQuality.core.non_passed_case_count} {t.nonPassedCases}
+                  </strong>
                   <span>
-                    {selectedQuality.executed} / {selectedQuality.totalExecutions}{' '}
-                    {t.overviewExecuted}
+                    {currentQuality.core.passed_case_count} / {currentQuality.core.total_case_count}{' '}
+                    {t.overviewPassed}
                   </span>
                 </div>
               </div>
@@ -708,27 +1133,24 @@ export function Dashboard({ language, selectedSut, activeTask }: PageProps) {
             <div className="overview-l0-metrics" role="list" aria-label={t.globalQuality}>
               <div className="overview-l0-metric" role="listitem">
                 <p>{t.overviewTotalExecutionEyebrow}</p>
-                <span>{t.overviewTotalExecution}</span>
-                <strong>{selectedQuality.totalExecutions}</strong>
-                <small>
-                  {selectedQuality.executed} {t.overviewExecuted} ·{' '}
-                  {selectedQuality.unexecuted} {t.overviewUnexecuted}
-                </small>
+                <span>{t.totalCases}</span>
+                <strong>{currentQuality.core.total_case_count}</strong>
+                <small>{t.qualitySnapshotScope}</small>
               </div>
               <div className="overview-l0-metric" role="listitem">
                 <p>{t.overviewOverallPassRateEyebrow}</p>
                 <span>{t.overviewOverallPassRate}</span>
-                <strong>{selectedQuality.overallPassRate.toFixed(2)}%</strong>
+                <strong>{formatPercent(currentQuality.core.pass_rate, 1)}</strong>
                 <small>
-                  {selectedQuality.passed} {t.overviewPassed} · {selectedQuality.failed}{' '}
-                  {t.overviewFailed}
+                  {currentQuality.core.passed_case_count} {t.overviewPassed} ·{' '}
+                  {currentQuality.core.non_passed_case_count} {t.nonPassed}
                 </small>
               </div>
               <div className="overview-l0-metric is-issues" role="listitem">
-                <p>{t.overviewTotalIssuesEyebrow}</p>
-                <span>{t.overviewTotalIssues}</span>
-                <strong>{selectedQuality.totalIssues}</strong>
-                <small>{t.overviewIssueDataNote}</small>
+                <p>{t.nonPassedCasesEyebrow}</p>
+                <span>{t.nonPassedCases}</span>
+                <strong>{currentQuality.core.non_passed_case_count}</strong>
+                <small>{t.qualityScore} {currentQuality.core.quality_score.toFixed(1)}</small>
               </div>
             </div>
           </section>
@@ -742,7 +1164,22 @@ export function Dashboard({ language, selectedSut, activeTask }: PageProps) {
                   <h2 id="overview-l1-title">{t.dimensionQualityAssessment}</h2>
                 </div>
               </div>
-              <span className="overview-mock-badge">{t.frontendMockData}</span>
+              <div className="overview-provenance-badges">
+                {showL0WarningAlongsideSimulation ? (
+                  <span
+                    className={`overview-provenance-badge is-${presentationState}`}
+                    data-quality-provenance={`l0-${presentationState}`}
+                  >
+                    L0 · {provenanceLabel(language, presentationState)}
+                  </span>
+                ) : null}
+                <span
+                  className={`overview-provenance-badge is-${l1ProvenanceState}`}
+                  data-quality-provenance={l1ProvenanceState}
+                >
+                  {provenanceLabel(language, l1ProvenanceState)}
+                </span>
+              </div>
             </div>
 
             <div className="overview-l1-card" data-dimension={selectedDimension}>
@@ -757,37 +1194,33 @@ export function Dashboard({ language, selectedSut, activeTask }: PageProps) {
                     value={selectedDimension}
                     onChange={setSelectedDimension}
                   />
-                  <VersionSelector
-                    language={language}
-                    versions={availableVersions}
-                    value={selectedVersion}
-                    onChange={handleVersionChange}
-                  />
                 </div>
               </div>
               <div className="overview-l1-card__divider" aria-hidden="true" />
 
-              {selectedDimension === 'performance' ? (
-                <PerformanceDimensionSummary language={language} quality={selectedQuality} />
+              {selectedDimension === 'basic' ? (
+                <BasicDimensionSummary language={language} quality={currentQuality} />
+              ) : !legacySnapshot ? (
+                <p className="overview-empty-state">{t.qualityDataUnavailable}</p>
+              ) : selectedDimension === 'performance' ? (
+                <PerformanceDimensionSummary language={language} snapshot={legacySnapshot} />
               ) : (
                 <StandardDimensionSummary
                   language={language}
-                  dimension={selectedMock as DimensionQualityMock & {
-                    id: Exclude<QualityDimensionId, 'performance'>;
-                  }}
+                  dimension={legacySnapshot.dimensions[selectedDimension]}
                 />
               )}
             </div>
           </section>
         </div>
       ) : (
-        <section className="overview-quality-empty" role="status" aria-live="polite">
-          <span className="overview-quality-empty__mark" aria-hidden="true" />
-          <div>
-            <h2>{t.qualityDataUnavailable}</h2>
-            <p>{t.qualityDataUnavailableHint}</p>
-          </div>
-        </section>
+        <QualityStatePanel
+          language={language}
+          state={presentationState === 'loading' || presentationState === 'empty'
+            ? presentationState
+            : 'error'}
+          onRetry={handleRetry}
+        />
       )}
     </div>
   );

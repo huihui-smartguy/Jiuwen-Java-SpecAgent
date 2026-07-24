@@ -30,6 +30,9 @@ import type {
   ReportListItem,
   ReportListQuery,
   ReportListResponse,
+  OverviewQualityEvent,
+  OverviewQualityResponse,
+  OverviewQualityVersionsResponse,
   StatisticsFilters,
   StatisticsSummaryResponse,
   TaskScriptStatusResponse,
@@ -90,6 +93,17 @@ export type CatalogFetchResult =
   | {
       kind: 'modified';
       snapshot: CatalogSnapshot;
+      etag?: string;
+    }
+  | {
+      kind: 'not-modified';
+      etag?: string;
+    };
+
+export type OverviewQualityFetchResult<T> =
+  | {
+      kind: 'modified';
+      data: T;
       etag?: string;
     }
   | {
@@ -187,13 +201,18 @@ async function readJson<T>(response: Response): Promise<T> {
     message?: string;
     error_code?: string;
     details?: unknown;
+    error?: {
+      code?: string;
+      message?: string;
+      details?: unknown;
+    };
   };
 
   if (!response.ok || body.success === false) {
-    throw new ApiError(body.message ?? 'Request failed', {
-      code: body.error_code,
+    throw new ApiError(body.error?.message ?? body.message ?? 'Request failed', {
+      code: body.error?.code ?? body.error_code,
       status: response.status,
-      details: body.details
+      details: body.error?.details ?? body.details
     });
   }
 
@@ -235,6 +254,206 @@ export async function getCatalog(
 
 export function getCatalogEventsUrl(context: ApiContext): string {
   return buildApiUrl(context.apiBaseUrl, '/catalog/events');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function isQualityNonNegativeInteger(value: unknown): value is number {
+  return Number.isInteger(value) && Number(value) >= 0;
+}
+
+function isQualityDataStatus(value: unknown): boolean {
+  return value === 'authoritative' || value === 'modeled' || value === 'partial';
+}
+
+function isPercentage(value: unknown): value is number {
+  return isFiniteNumber(value) && value >= 0 && value <= 100;
+}
+
+function isNullablePercentage(value: unknown): boolean {
+  return value === null || isPercentage(value);
+}
+
+function isWeight(value: unknown): value is number {
+  return isFiniteNumber(value) && value >= 0 && value <= 1;
+}
+
+function invalidQualityPayload(code: string, message: string): never {
+  throw new ApiError(message, { code });
+}
+
+function parseOverviewQualityVersionsResponse(
+  value: unknown
+): OverviewQualityVersionsResponse {
+  if (
+    !isRecord(value)
+    || value.success !== true
+    || value.schema_version !== '1.0'
+    || typeof value.revision !== 'string'
+    || typeof value.generated_at !== 'string'
+    || !isRecord(value.product)
+    || typeof value.product.key !== 'string'
+    || typeof value.product.label !== 'string'
+    || !Array.isArray(value.versions)
+    || !value.versions.every((version) => (
+      isRecord(version)
+      && typeof version.version === 'string'
+      && typeof version.label === 'string'
+      && isQualityDataStatus(version.data_status)
+      && typeof version.is_default === 'boolean'
+      && typeof version.generated_at === 'string'
+    ))
+  ) {
+    return invalidQualityPayload(
+      'INVALID_QUALITY_VERSIONS_RESPONSE',
+      'The quality version response is malformed'
+    );
+  }
+  return value as unknown as OverviewQualityVersionsResponse;
+}
+
+function parseOverviewQualityResponse(value: unknown): OverviewQualityResponse {
+  if (
+    !isRecord(value)
+    || value.success !== true
+    || value.schema_version !== '1.0'
+    || typeof value.revision !== 'string'
+    || typeof value.generated_at !== 'string'
+    || !isQualityDataStatus(value.data_status)
+    || !isRecord(value.filters)
+    || typeof value.filters.product !== 'string'
+    || typeof value.filters.version !== 'string'
+    || value.filters.dimension !== 'basic_function'
+    || !isRecord(value.core)
+    || !isQualityNonNegativeInteger(value.core.total_case_count)
+    || !isQualityNonNegativeInteger(value.core.passed_case_count)
+    || !isQualityNonNegativeInteger(value.core.non_passed_case_count)
+    || !isPercentage(value.core.pass_rate)
+    || !isPercentage(value.core.quality_score)
+    || typeof value.core.score_formula_version !== 'string'
+    || !isRecord(value.core.score_inputs)
+    || value.core.score_inputs.population_scope !== 'approved_version_quality_assessment'
+    || !isPercentage(value.core.score_inputs.pass_rate)
+    || !isPercentage(value.core.score_inputs.issue_resolution_rate)
+    || !isPercentage(value.core.score_inputs.critical_issue_ratio)
+    || !isRecord(value.core.score_inputs.weights)
+    || !isWeight(value.core.score_inputs.weights.pass_rate)
+    || !isWeight(value.core.score_inputs.weights.issue_resolution_rate)
+    || !isWeight(value.core.score_inputs.weights.non_critical_ratio)
+    || !Array.isArray(value.features)
+    || value.features.length !== 7
+    || !value.features.every((feature) => (
+      isRecord(feature)
+      && typeof feature.feature_key === 'string'
+      && typeof feature.label_zh === 'string'
+      && typeof feature.label_en === 'string'
+      && isQualityNonNegativeInteger(feature.execution_script_count)
+      && isQualityNonNegativeInteger(feature.issues_found_total)
+      && isQualityNonNegativeInteger(feature.critical_issue_count)
+      && isNullablePercentage(feature.critical_issue_ratio)
+      && isQualityNonNegativeInteger(feature.resolved_issue_count)
+      && isNullablePercentage(feature.issue_resolution_rate)
+    ))
+    || !isRecord(value.coverage)
+    || (value.coverage.status !== 'complete' && value.coverage.status !== 'partial')
+    || (
+      value.coverage.source_type !== 'quality_snapshot'
+      && value.coverage.source_type !== 'modeled_snapshot'
+    )
+    || !isQualityNonNegativeInteger(value.coverage.feature_issue_count_total)
+    || !(
+      value.coverage.unmapped_issue_count === null
+      || isQualityNonNegativeInteger(value.coverage.unmapped_issue_count)
+    )
+  ) {
+    return invalidQualityPayload(
+      'INVALID_QUALITY_OVERVIEW_RESPONSE',
+      'The quality overview response is malformed'
+    );
+  }
+  return value as unknown as OverviewQualityResponse;
+}
+
+async function getConditionalJson<T>(
+  context: ApiContext,
+  path: string,
+  params: object,
+  parse: (value: unknown) => T,
+  options: { etag?: string; signal?: AbortSignal } = {}
+): Promise<OverviewQualityFetchResult<T>> {
+  const headers = new Headers({ Accept: 'application/json' });
+  if (options.etag) {
+    headers.set('If-None-Match', options.etag);
+  }
+  const response = await fetch(buildApiUrl(context.apiBaseUrl, path, params), {
+    headers,
+    cache: 'no-cache',
+    signal: options.signal
+  });
+  const etag = response.headers.get('ETag') ?? options.etag;
+  if (response.status === 304) {
+    return { kind: 'not-modified', etag: etag ?? undefined };
+  }
+  return {
+    kind: 'modified',
+    data: parse(await readJson<unknown>(response)),
+    etag: etag ?? undefined
+  };
+}
+
+export function getOverviewQualityVersions(
+  context: ApiContext,
+  product: string,
+  options: { etag?: string; signal?: AbortSignal } = {}
+): Promise<OverviewQualityFetchResult<OverviewQualityVersionsResponse>> {
+  return getConditionalJson(
+    context,
+    '/quality/overview/versions',
+    { product },
+    parseOverviewQualityVersionsResponse,
+    options
+  );
+}
+
+export function getOverviewQuality(
+  context: ApiContext,
+  filters: {
+    product: string;
+    version: string;
+    dimension?: 'basic_function';
+  },
+  options: { etag?: string; signal?: AbortSignal } = {}
+): Promise<OverviewQualityFetchResult<OverviewQualityResponse>> {
+  return getConditionalJson(context, '/quality/overview', {
+    ...filters,
+    dimension: filters.dimension ?? 'basic_function'
+  }, parseOverviewQualityResponse, options);
+}
+
+export function getOverviewQualityEventsUrl(context: ApiContext, product: string): string {
+  return buildApiUrl(context.apiBaseUrl, '/quality/overview/events', { product });
+}
+
+export function parseOverviewQualityEvent(event: MessageEvent<string>): OverviewQualityEvent | undefined {
+  try {
+    const data = JSON.parse(event.data) as Partial<OverviewQualityEvent>;
+    return (
+      (data.event === 'quality.ready' || data.event === 'quality.changed')
+      && typeof data.revision === 'string'
+      && typeof data.generated_at === 'string'
+      && typeof data.product === 'string'
+      && Array.isArray(data.versions)
+      && data.versions.every((version) => typeof version === 'string')
+    ) ? data as OverviewQualityEvent : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export async function getFeatures(

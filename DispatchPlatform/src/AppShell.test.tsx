@@ -233,16 +233,19 @@ describe('AppShell', () => {
     }
   });
 
-  test('renders the approved Overview hierarchy inside the shared shell', () => {
+  test('renders the live Overview loading hierarchy inside the shared shell', () => {
     renderShell();
 
     expect(screen.getByRole('heading', { name: /测试看板/i })).toBeInTheDocument();
     expect(screen.getByText('产品级 L0 质量总览与 L1 分维度测试执行分析')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: /当前执行/i })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: /全局质量/i })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: /分维度质量评估/i })).toBeInTheDocument();
-    expect(screen.getByText('演示数据 · 前端模拟')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /选择质量维度: 基础功能/i })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveAttribute('data-quality-state', 'loading');
+    expect(screen.getByRole('heading', { name: '正在加载质量快照' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /选择版本: —/i })).toBeDisabled();
+    expect(screen.getByRole('link', { name: /新建任务/i })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: /全局质量/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: /分维度质量评估/i })).not.toBeInTheDocument();
+    expect(screen.queryByText('演示数据 · 前端模拟')).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: /执行路径/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: /最近活动/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('complementary', { name: /需要关注/i })).not.toBeInTheDocument();
