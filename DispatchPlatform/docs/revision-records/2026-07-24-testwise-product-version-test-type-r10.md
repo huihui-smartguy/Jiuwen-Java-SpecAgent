@@ -15,6 +15,7 @@ browser acceptance. It contains no credentials or secrets.
 | Frontend baseline | `054e3b27c41c64db085d164780120c6173968a3f` |
 | Frontend implementation | `2b5b417dbd6e56fc0258eb25004427cd3ac2f652` |
 | Frontend shell-cache correction | `03b22dc56b61f1aaed74483b5b3ddfd6dbc6e094` |
+| Frontend responsive Overview correction | `48e58341114086ea9163637a6514459390bfd2de` |
 | Backend real-time catalog implementation | `6cef6e3f1c8a94bf2884e073c95e3449807ce6c8` |
 | GitCode branch baseline used for R10 | `979730f6dd4b7958bd0d492c58635c9b66c693e8` |
 | Initial GitCode R10 frontend mirror | `f7fcdf94eb88596ac33013f3ea13dbe9a1419000` |
@@ -112,6 +113,13 @@ Fingerprint-named CSS and JavaScript assets remain cacheable. A deployment
 regression test covers both the process-mode include and the container Nginx
 configuration.
 
+## Responsive visual correction
+
+Production screenshot review found that the L0 divider changed from vertical
+to horizontal below 980 px but retained the desktop `min-height: 162px`. This
+rendered as a large gray block. The responsive rule now explicitly sets both
+height and minimum height to 1 px, with a static CSS regression assertion.
+
 ## Verification
 
 | Check | Result |
@@ -129,8 +137,8 @@ configuration.
 
 Final frontend assets:
 
-- `assets/index-BIJr80Wl.css`
-- `assets/index-DK9_8Bf0.js`
+- `assets/index-DvE1LM_2.css`
+- `assets/index-BXhAqmqf.js`
 
 ## Production deployment evidence
 
@@ -138,9 +146,10 @@ Deployment host: `1.92.123.95`
 
 | Item | Evidence |
 | --- | --- |
-| Frontend release | `/data1/testwise/releases/20260724-113956-2b5b417` |
-| Previous frontend release | `/data1/testwise/releases/20260723-183409-1a982ac` |
-| Frontend artifact SHA-256 | `c8c9da539b74be4fb1c2643fbae72388e391fe41ec7ede7c2099c8408cb4d1b3` |
+| Frontend release | `/data1/testwise/releases/20260724-120448-48e5834` |
+| Previous R10 frontend release | `/data1/testwise/releases/20260724-113956-2b5b417` |
+| Pre-R10 frontend release | `/data1/testwise/releases/20260723-183409-1a982ac` |
+| Frontend artifact SHA-256 | `bd7b3bf5a9f19477cbf7986a9846df34e1ab8346004ce47978efc067661bffdd` |
 | Runtime config SHA-256 | `216a056145da45da17ec2e74b0ad64cf3fe8f8a02d741a8f5ab81b1262901203` |
 | Nginx include SHA-256 | `510f548dbd2bcabf2a95c8b5efb3ffbc5fb79377848f448e96c276118413574d` |
 | Nginx backup | `/data1/testwise/backups/20260724-114549-pre-r10-cache-policy/testwise-locations.conf` |
@@ -172,12 +181,16 @@ Final catalog:
 - Chinese showed 产品、测试类型、特性、等级、脚本、场景 and other page
   taxonomy without English leakage; English switched the corresponding labels
   back to Product, Test type, Feature, Level, Script, and Scene.
+- Responsive screenshot acceptance confirmed a 1 px L0 separator with visible
+  metrics and adjacent L1 quality-dimension/version controls.
 
 ## Rollback
 
 1. Confirm that no task is active.
-2. Atomically repoint `/data1/testwise/current` to
-   `/data1/testwise/releases/20260723-183409-1a982ac`.
+2. For an immediate R10.1 rollback, atomically repoint
+   `/data1/testwise/current` to
+   `/data1/testwise/releases/20260724-113956-2b5b417`. For a complete R10
+   rollback, use `/data1/testwise/releases/20260723-183409-1a982ac`.
 3. Restore
    `/data1/testwise/backups/20260724-114549-pre-r10-cache-policy/testwise-locations.conf`
    to `/etc/nginx/testwise-locations.conf`.
