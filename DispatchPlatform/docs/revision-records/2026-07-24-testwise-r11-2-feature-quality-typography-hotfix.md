@@ -2,24 +2,23 @@
 
 Release date: 2026-07-24
 
-Status: implementation prepared; publication, GitCode mirror, deployment, and
-production acceptance pending
+Status: released and production-accepted at 2026-07-24T17:07:18+08:00
 
 This record covers the approved R11.2 Feature Quality Assessment typography
 hotfix. It contains no credential, password, token, private key, raw sensitive
-response, or private backend path. Pending publication and production values
-are explicitly marked and must be replaced only with observed evidence.
+response, or private backend path. Every release value below is based on
+observed repository, build, server, API, or browser evidence.
 
 ## Revision identity
 
 | Component | Revision |
 | --- | --- |
 | Frontend baseline | `26c77a5b0bacfe6eac090730740df52ece2d1c51` |
-| Frontend R11.2 implementation | `[PENDING_FRONTEND_COMMIT]` |
-| Frontend production-evidence record | `[PENDING_FRONTEND_EVIDENCE_COMMIT]` |
+| Frontend R11.2 implementation | `5558dc37370be12ca6a25eb836c85cfd2fd2f5a0` |
+| Frontend production-evidence record | This record's docs-only finalization commit; see `develop` branch history |
 | GitCode branch baseline | `b850e333ca865e2227ae81b497a9f460c76c4387` |
-| GitCode R11.2 frontend mirror | `[PENDING_GITCODE_MIRROR_COMMIT]` |
-| GitCode joint release evidence | `[PENDING_GITCODE_EVIDENCE_COMMIT]` |
+| GitCode R11.2 frontend mirror | `044c7f9712751d576cd0164bed0c996f023fe033` |
+| GitCode joint release evidence | The joint records' docs-only finalization commit; see `feature/autotestflow/iteration` branch history |
 | Backend implementation, unchanged | `1a45c4556dfb57c50c6d00223286d8c24dcb8cbe` |
 
 - Frontend source:
@@ -112,27 +111,27 @@ This release requires:
 
 No backend file is changed.
 
-## Verification status before publication
+## Verification and production acceptance
 
-The prepared working tree has completed the following gates. Automated tests
-and the production build must be repeated from the exact committed
-implementation before publication evidence is finalized.
+The automated gates were run against the exact committed implementation.
+Production route and browser checks were then completed against the deployed
+artifact.
 
-| Check | Prepared-state result |
+| Check | Final result |
 | --- | --- |
 | Focused Dashboard suite | Passed: 12/12 tests |
 | Full frontend unit/integration suite | Passed: 29 test files, 284/284 tests |
 | TypeScript and Vite `/testwise/` production build | Passed: 1,673 modules |
-| Frontend `git diff --check` | Prepared working tree passed; committed-tree rerun pending |
-| Chinese and English browser acceptance | Passed for the Basic Overview matrix |
-| Computed matrix typography | Column headers, feature row headers, and data cells all rendered at `14px / 22px` |
+| Frontend `git diff --check` | Passed before release and during final record preparation |
+| Exact source-to-GitCode mirror comparison | Passed |
+| Chinese and English browser acceptance | Passed locally and in production for the Basic Overview matrix |
+| Computed matrix typography | Column headers, feature row headers, and data cells rendered at `14px / 22px`, with normal letter spacing and no text transform |
 | Matrix structure | Preserved: 8 rendered rows including the header and 7 columns |
-| Responsive geometry | No page-level overflow at widths 1440, 980, or 390 |
-| Internal matrix scrolling | Preserved; English matrix content width measured `1006px` |
-| Browser console | No warnings or errors |
-| Exact source-to-GitCode mirror comparison | `[PENDING_FINAL_MIRROR_CHECK]` |
-| Public production route and browser smoke | `[PENDING_PRODUCTION_ACCEPTANCE]` |
-| Task and report process continuity | `[PENDING_PID_CONTINUITY]` |
+| Responsive geometry | Local widths 1440, 980, and 390 passed; production widths 1440 and 390 had no page-level overflow |
+| Internal matrix scrolling | Preserved; production content widths measured `980px` in Chinese and `1007px` in English |
+| Public route smoke | Shell, health, exact assets, runtime, catalog, quality versions, 715/615 snapshots, tasks, and reports passed |
+| Task and report process continuity | Task PID `1336012` and report PID `3267699` remained unchanged |
+| Browser console | No TestWise application or API warning or error |
 
 The regression test statically verifies that:
 
@@ -143,50 +142,57 @@ The regression test statically verifies that:
 
 ## Publication and production evidence
 
-Status: `[PENDING_RELEASE_STATUS]`
+Status: released, mirrored, deployed, and production-accepted
 
 | Item | Evidence |
 | --- | --- |
-| Frontend implementation commit | `[PENDING_FRONTEND_COMMIT]` |
-| Frontend evidence commit | `[PENDING_FRONTEND_EVIDENCE_COMMIT]` |
-| GitCode frontend mirror commit | `[PENDING_GITCODE_MIRROR_COMMIT]` |
-| GitCode evidence commit | `[PENDING_GITCODE_EVIDENCE_COMMIT]` |
-| Frontend release path | `[PENDING_FRONTEND_RELEASE_PATH]` |
-| Previous frontend rollback target | `[PENDING_FRONTEND_ROLLBACK_TARGET]` |
-| Frontend artifact SHA-256 | `[PENDING_FRONTEND_ARTIFACT_SHA256]` |
-| Frontend index SHA-256 | `[PENDING_INDEX_SHA256]` |
-| Frontend JavaScript asset and SHA-256 | `[PENDING_JS_EVIDENCE]` |
-| Frontend CSS asset and SHA-256 | `[PENDING_CSS_EVIDENCE]` |
-| Preserved runtime configuration SHA-256 | `[PENDING_RUNTIME_CONFIG_SHA256]` |
-| Task-service PID continuity | `[PENDING_TASK_SERVICE_PID_EVIDENCE]` |
-| Report-service PID continuity | `[PENDING_REPORT_SERVICE_PID_EVIDENCE]` |
-| Nginx validation and continuity | `[PENDING_NGINX_EVIDENCE]` |
-| Deployment timestamp | `[PENDING_DEPLOYMENT_TIMESTAMP]` |
-| Public route smoke | `[PENDING_PUBLIC_API_SMOKE]` |
-| Public browser evidence | `[PENDING_PRODUCTION_BROWSER_EVIDENCE]` |
+| Frontend implementation commit | `5558dc37370be12ca6a25eb836c85cfd2fd2f5a0` |
+| Frontend evidence commit | This record's docs-only finalization commit; see `develop` branch history |
+| GitCode frontend mirror commit | `044c7f9712751d576cd0164bed0c996f023fe033` |
+| GitCode evidence commit | The joint records' docs-only finalization commit; see `feature/autotestflow/iteration` branch history |
+| Frontend release path | `/data1/testwise/releases/20260724-170332-5558dc3` |
+| Previous frontend rollback target | `/data1/testwise/releases/20260724-163405-fe1fe8f` |
+| Frontend artifact SHA-256 | `64693c5cf81ef3f5fc1aae10dd6f44219b1892b687f444e374e18e30766acba4` |
+| Frontend index SHA-256 | `3a3d1d7e538e2ba2558fffb72b8f8c12ff47b77760286ffb338dedd30211fa5c` |
+| Frontend JavaScript asset and SHA-256 | `assets/index-L8I-aiDf.js`; `26f4b0405efa5fdf97294f3c5d375f8da8deb0c7a352b0343462d531381e56db` |
+| Frontend CSS asset and SHA-256 | `assets/index-C8ZAzdH8.css`; `22458f34b4af5939e47181fef7a7cc1d0b1f701b4b209c670b3499437a36a7f9` |
+| Preserved runtime configuration SHA-256 | `216a056145da45da17ec2e74b0ad64cf3fe8f8a02d741a8f5ab81b1262901203` |
+| Task-service PID continuity | PID `1336012` before and after; no restart |
+| Report-service PID continuity | PID `3267699` before and after; no restart |
+| Nginx validation and continuity | `nginx -t` passed before and after; no reload |
+| Deployment timestamp | `2026-07-24T17:07:18+08:00` |
+| Public route smoke | Shell, health, exact assets, runtime JSON, catalog, quality versions, 715 snapshot, 615 snapshot, task list, and reports passed |
+| Public browser evidence | Chinese and English at 1440 and 390 passed with exact R11.2 assets and no page-level overflow |
+
+Production browser acceptance confirmed:
+
+- table column headers, feature row headers, and data cells rendered at
+  `14px / 22px`, with normal letter spacing and no text transform;
+- the matrix retained 8 rendered rows including the header and 7 columns;
+- internal horizontal scrolling remained available, with content widths of
+  `980px` in Chinese and `1007px` in English;
+- Chinese and English desktop and mobile pages loaded the exact R11.2
+  fingerprinted assets.
+
+Chromium made one automatic request to the bare-host `/favicon.ico`, outside
+the `/testwise/` application path, and that unrelated host route returned
+HTTP `502`. No TestWise application route, asset, API request, interaction, or
+console check failed.
 
 ## Deployment and rollback
 
-The frontend must be rebuilt from the exact implementation commit with
-`VITE_BASE_PATH=/testwise/`, staged in a new immutable directory beneath
-`/data1/testwise/releases`, and activated through an atomic switch of
-`/data1/testwise/current`.
+The frontend was rebuilt from
+`5558dc37370be12ca6a25eb836c85cfd2fd2f5a0` with
+`VITE_BASE_PATH=/testwise/`, staged in the new immutable release directory,
+and activated through an atomic switch of `/data1/testwise/current`.
 
-Deployment must:
+The live `config/runtime.json` was preserved byte-for-byte. Archive, index,
+JavaScript, CSS, and staged runtime hashes were verified. Nginx validation
+passed before and after the switch without a reload, and the task and report
+services remained on their existing PIDs.
 
-1. capture and validate the current release as the rollback target;
-2. preserve the live `config/runtime.json` byte-for-byte;
-3. verify the archive, index, JavaScript, CSS, and staged runtime hashes;
-4. keep the task and report service PIDs unchanged;
-5. validate Nginx without reloading it;
-6. verify the shell, exact fingerprinted assets, runtime JSON, health,
-   catalog, quality versions and snapshots, safe task list, and report list;
-7. verify Chinese and English computed matrix typography and responsive
-   geometry in the public browser;
-8. atomically restore the captured previous symlink target if any post-switch
-   assertion fails.
-
-No Nginx reload or backend restart is part of R11.2. If acceptance fails,
-atomically repoint `/data1/testwise/current` to the captured previous
-immutable release. Do not overwrite or remove backend data or prior frontend
-releases.
+If rollback is required, atomically repoint `/data1/testwise/current` to
+`/data1/testwise/releases/20260724-163405-fe1fe8f`, then repeat the shell,
+asset, runtime, health, catalog, quality, task-list, report, typography,
+responsive, and browser-console checks. Do not overwrite or remove backend
+data or prior immutable frontend releases.
