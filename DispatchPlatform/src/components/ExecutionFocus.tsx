@@ -24,11 +24,8 @@ export function ExecutionFocus({
   const currentCommand = rawCommand
     ? rawCommand.replace(/^(?:执行命令|command)\s*[:：]\s*/iu, '')
     : t.noCurrentCommand;
-  const statusLabel = !task
-    ? t.notAvailable
-    : task.uiStatus === 'polling_error'
-    ? t.polling_error
-    : (task.backend_status ?? task.status).toUpperCase();
+  const statusLabel = task ? t[task.uiStatus] : t.notAvailable;
+  const runSut = task?.sourceSut ?? sut;
 
   return (
     <section className="execution-focus overview-current-run" aria-labelledby="current-run-title">
@@ -42,7 +39,9 @@ export function ExecutionFocus({
         <div>
           <span className="current-run__label">{t.activeRun} · {statusLabel}</span>
           <strong className="focus-task-id">{task?.task_id ?? t.noActiveTask}</strong>
-          <span className="sr-only">{objectNameLabel(sut)} · {sut.version}</span>
+          <span className="sr-only">
+            {objectNameLabel(runSut, language)} · {runSut.version}
+          </span>
         </div>
       </div>
       <div className="current-run__progress">

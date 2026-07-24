@@ -1,4 +1,4 @@
-import type { SutTarget } from './types';
+import type { Language, SutTarget } from './types';
 
 type ObjectLabelKind = 'identity' | 'name';
 
@@ -8,11 +8,13 @@ const productDisplayLabels: Readonly<Record<string, string>> = {
   '合一版本': 'Unified Version'
 };
 
-const sceneDisplayLabels: Readonly<Record<string, string>> = {
-  DFx: 'DFX',
-  DFX: 'DFX',
-  '场景用例': 'scene',
-  '场景': 'scene'
+const sceneDisplayLabels: Readonly<Record<string, Readonly<Record<Language, string>>>> = {
+  DFx: { en: 'DFX', zh: 'DFX' },
+  DFX: { en: 'DFX', zh: 'DFX' },
+  scene: { en: 'Scene', zh: '场景化' },
+  Scene: { en: 'Scene', zh: '场景化' },
+  '场景用例': { en: 'Scene', zh: '场景化' },
+  '场景': { en: 'Scene', zh: '场景化' }
 };
 
 /**
@@ -24,12 +26,12 @@ export function productDisplayLabel(product: string) {
   return productDisplayLabels[product.trim()] ?? product;
 }
 
-export function sceneDisplayLabel(scene: string) {
-  return sceneDisplayLabels[scene.trim()] ?? scene;
+export function sceneDisplayLabel(scene: string, language: Language = 'en') {
+  return sceneDisplayLabels[scene.trim()]?.[language] ?? scene;
 }
 
-export function objectIdentityLabel(target: SutTarget) {
-  return `${productDisplayLabel(target.product)} ${sceneDisplayLabel(target.scene)}`.trim();
+export function objectIdentityLabel(target: SutTarget, language: Language = 'en') {
+  return `${productDisplayLabel(target.product)} ${sceneDisplayLabel(target.scene, language)}`.trim();
 }
 
 function replaceLabelToken(value: string, nativeValue: string, displayValue: string) {
@@ -40,23 +42,23 @@ function replaceLabelToken(value: string, nativeValue: string, displayValue: str
   );
 }
 
-export function objectNameLabel(target: SutTarget) {
+export function objectNameLabel(target: SutTarget, language: Language = 'en') {
   const nativeIdentity = `${target.product} ${target.scene}`.trim();
   if (target.name.trim() === nativeIdentity) {
-    return objectIdentityLabel(target);
+    return objectIdentityLabel(target, language);
   }
 
   return replaceLabelToken(
     replaceLabelToken(target.name, target.product, productDisplayLabel(target.product)),
     target.scene,
-    sceneDisplayLabel(target.scene)
+    sceneDisplayLabel(target.scene, language)
   );
 }
 
-function baseObjectLabel(target: SutTarget, kind: ObjectLabelKind) {
+function baseObjectLabel(target: SutTarget, kind: ObjectLabelKind, language: Language) {
   return kind === 'name'
-    ? objectNameLabel(target)
-    : objectIdentityLabel(target);
+    ? objectNameLabel(target, language)
+    : objectIdentityLabel(target, language);
 }
 
 /**
@@ -66,11 +68,12 @@ function baseObjectLabel(target: SutTarget, kind: ObjectLabelKind) {
 export function objectOptionLabel(
   target: SutTarget,
   targets: readonly SutTarget[],
-  kind: ObjectLabelKind = 'identity'
+  kind: ObjectLabelKind = 'identity',
+  language: Language = 'en'
 ) {
-  const baseLabel = baseObjectLabel(target, kind);
+  const baseLabel = baseObjectLabel(target, kind, language);
   const duplicateCount = targets.filter(
-    (candidate) => baseObjectLabel(candidate, kind) === baseLabel
+    (candidate) => baseObjectLabel(candidate, kind, language) === baseLabel
   ).length;
 
   return duplicateCount > 1 ? `${baseLabel} · ${target.id}` : baseLabel;
@@ -110,7 +113,8 @@ export function objectMatchesSearch(target: SutTarget, query: string) {
     target.product,
     target.scene,
     productDisplayLabel(target.product),
-    sceneDisplayLabel(target.scene),
+    sceneDisplayLabel(target.scene, 'en'),
+    sceneDisplayLabel(target.scene, 'zh'),
     target.name,
     target.id
   ].some((value) => value.toLocaleLowerCase().includes(normalizedQuery));

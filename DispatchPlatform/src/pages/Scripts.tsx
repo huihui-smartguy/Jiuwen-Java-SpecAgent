@@ -2,14 +2,21 @@ import { useQuery } from '@tanstack/react-query';
 import { ChevronDown } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { getScriptsForScene } from '../api/client';
-import { useOptionalCatalog } from '../catalog/CatalogProvider';
+import {
+  useOptionalCatalog,
+  type CatalogConnectionState
+} from '../catalog/CatalogProvider';
 import { scriptsForCatalogObject } from '../catalog/model';
 import { CatalogSyncStatus } from '../components/CatalogSyncStatus';
 import { PageHeader } from '../components/PageHeader';
 import { PresentationOnlyButton } from '../components/PresentationOnlyButton';
+import {
+  TestTypeControl,
+  testTypeDisplayLabel
+} from '../components/TestTypeControl';
 import { mockScripts } from '../data/mockData';
 import { getCopy } from '../i18n';
-import { objectIdentityLabel } from '../objectLabels';
+import { productDisplayLabel } from '../objectLabels';
 import type { CatalogObject, Language, RuntimeConfig, Script, SutTarget } from '../types';
 
 interface ScriptsProps {
@@ -18,6 +25,10 @@ interface ScriptsProps {
   runtimeConfig: RuntimeConfig;
   catalogObject?: CatalogObject;
   catalogSelectionValid?: boolean;
+  objects: readonly SutTarget[];
+  objectMetadata?: Readonly<Record<string, { scriptCount: number }>>;
+  catalogState?: CatalogConnectionState;
+  onObjectChange: (id: string) => void;
 }
 
 type ScriptSource = 'live' | 'mock';
@@ -98,7 +109,7 @@ function formatUpdated(
     return '—';
   }
 
-  return new Intl.DateTimeFormat('en-US', {
+  return new Intl.DateTimeFormat(language === 'zh' ? 'zh-CN' : 'en-US', {
     month: 'short',
     day: 'numeric',
     timeZone: 'Asia/Shanghai'
@@ -126,7 +137,11 @@ export function Scripts({
   selectedSut,
   runtimeConfig,
   catalogObject,
-  catalogSelectionValid = true
+  catalogSelectionValid = true,
+  objects,
+  objectMetadata,
+  catalogState,
+  onObjectChange
 }: ScriptsProps) {
   const t = getCopy(language);
   const catalog = useOptionalCatalog();
@@ -134,7 +149,9 @@ export function Scripts({
   const [level, setLevel] = useState(allFilter);
   const [feature, setFeature] = useState(allFilter);
   const resolvedApiBaseUrl = selectedSut.apiBaseUrl || runtimeConfig.apiBaseUrl;
-  const selectedObjectLabel = objectIdentityLabel(selectedSut);
+  const selectedObjectLabel = `${productDisplayLabel(selectedSut.product)} · ${
+    testTypeDisplayLabel(selectedSut.scene, language)
+  }`;
   const targetIdentity = useMemo(
     () => ({
       id: selectedSut.id,
@@ -222,93 +239,62 @@ export function Scripts({
     : scriptsQuery.isError;
   const summaryValues = isPending || isUnavailable
     ? ['—', '—', '—', '—']
-    : catalog?.snapshot
-      ? [
-          catalog.snapshot.totals.scripts,
-          scripts.length,
-          catalogObject?.feature_count ?? 0,
-          catalog.snapshot.totals.objects
-        ]
-    : source === 'mock'
-      ? [286, 84, 126, 76]
-      : liveSummaryValues;
-  const liveSummaryNotes = useMemo(() => {
-    const objectCount = new Set(scripts.map((script) => `${script.product}\u0000${script.scene}`)).size;
+    : liveSummaryValues;
+  const scopeSummaryNotes = useMemo(() => {
     const featureCount = new Set(scripts.map((script) => script.feature)).size;
     const latestUpload = scripts
       .map((script) => script.uploaded_at)
       .filter((value): value is string => Boolean(value))
       .sort((left, right) => Date.parse(right) - Date.parse(left))[0];
-    const latestLabel = formatUpdated(latestUpload, 'live', language);
-
-    if (catalog?.snapshot) {
-      const checked = formatUpdated(catalog.checkedAt, 'live', language);
-      return language === 'zh'
-        ? [
-            `${catalog.snapshot.totals.products} 个产品`,
-            selectedObjectLabel,
-            `目录检查于 ${checked}`,
-            `${catalog.snapshot.totals.objects} 个测试对象`
-          ]
-        : [
-            `${catalog.snapshot.totals.products} products`,
-            selectedObjectLabel,
-            `Catalog checked ${checked}`,
-            `${catalog.snapshot.totals.objects} test Objects`
-          ];
-    }
+    const latestLabel = formatUpdated(latestUpload, source, language);
     return language === 'zh'
       ? [
-          `${objectCount} 个测试对象`,
-          `最近同步 ${latestLabel}`,
-          `${featureCount} 个 Feature`,
-          `${liveSummaryValues[3]} 个脚本`
+          selectedObjectLabel,
+          `最近更新 ${latestLabel}`,
+          `${featureCount} 个特性`,
+          `${scripts.length} 个脚本`
         ]
       : [
-          `${objectCount} test Objects`,
-          `Last synced ${latestLabel}`,
+          selectedObjectLabel,
+          `Last updated ${latestLabel}`,
           `${featureCount} Features`,
-          `${liveSummaryValues[3]} scripts`
+          `${scripts.length} scripts`
         ];
-  }, [catalog?.checkedAt, catalog?.snapshot, language, liveSummaryValues, scripts, selectedObjectLabel]);
+  }, [language, scripts, selectedObjectLabel, source]);
   const summaryNotes = isPending || isUnavailable
     ? ['—', '—', '—', '—']
-    : catalog?.snapshot
-      ? liveSummaryNotes
-      : source === 'mock'
-      ? [
-          t.allScriptsNote,
-          t.foundationalValidationNote,
-          t.apiTestsNote,
-          t.scenarioAutomationNote
-        ]
-      : liveSummaryNotes;
-  const summaryCards = catalog
-    ? language === 'zh'
-      ? ['全部脚本', '当前对象脚本', '当前对象 Feature', '测试对象']
-      : ['All scripts', 'Selected Object scripts', 'Selected Object Features', 'Test Objects']
-    : [
-        t.allScripts,
-        t.foundationalValidation,
-        t.apiTests,
-        t.scenarioAutomation
-      ];
+    : scopeSummaryNotes;
+  const summaryCards = language === 'zh'
+    ? ['当前类型脚本', 'L0 基础脚本', '接口测试脚本', '场景自动化脚本']
+    : ['Current type scripts', 'L0 foundation scripts', 'API test scripts', 'Scenario automation scripts'];
   const tableHeadings = language === 'zh'
-    ? ['脚本', 'Feature', '级别', '最近结果', '负责人', '更新时间']
-    : ['Script', 'Feature', 'Level', 'Last result', 'Owner', 'Updated'];
+    ? [t.script, t.feature, t.level, '最近结果', t.owner, '更新时间']
+    : [t.script, t.feature, t.level, 'Last result', t.owner, 'Updated'];
 
   return (
     <div className="page-stack scripts-page">
       <PageHeader
         title={t.scripts}
         subtitle={t.scriptsSubtitle}
-        action={catalog ? (
-          <CatalogSyncStatus language={language} className="scripts-catalog-sync" />
-        ) : (
-          <PresentationOnlyButton className="scripts-import-action">
-            {t.importScripts}
-            <span aria-hidden="true">→</span>
-          </PresentationOnlyButton>
+        action={(
+          <div className="scripts-page-actions">
+            <TestTypeControl
+              language={language}
+              selectedObject={selectedSut}
+              objects={objects}
+              objectMetadata={objectMetadata}
+              catalogState={catalogState}
+              onObjectChange={onObjectChange}
+            />
+            {catalog ? (
+              <CatalogSyncStatus language={language} className="scripts-catalog-sync" />
+            ) : (
+              <PresentationOnlyButton className="scripts-import-action">
+                {t.importScripts}
+                <span aria-hidden="true">→</span>
+              </PresentationOnlyButton>
+            )}
+          </div>
         )}
       />
 
@@ -330,8 +316,8 @@ export function Scripts({
         {catalog && !catalogSelectionValid ? (
           <div className="scripts-catalog-warning" role="alert">
             {language === 'zh'
-              ? '此测试对象已从最新目录中移除。当前列表保留为只读快照，请选择其他对象。'
-              : 'This test Object was removed from the latest catalog. The current list is retained as a read-only snapshot; select another Object.'}
+              ? '此测试类型已从最新目录中移除。当前列表保留为只读快照，请选择其他测试类型。'
+              : 'This test type was removed from the latest catalog. The current list is retained as a read-only snapshot; select another test type.'}
           </div>
         ) : null}
         {catalog?.state === 'stale' ? (
@@ -354,20 +340,9 @@ export function Scripts({
           </label>
 
           <div className="scripts-filter-controls">
-            {!catalog ? (
-              <label className="scripts-filter-control scripts-filter-control--object">
-                <span className="sr-only">Object</span>
-                <input
-                  aria-label="Object"
-                  readOnly
-                  value={`Object · ${selectedObjectLabel}`}
-                />
-                <ChevronDown aria-hidden="true" />
-              </label>
-            ) : null}
             <label className="scripts-filter-control scripts-filter-control--level">
-              <span className="sr-only">Level</span>
-              <select aria-label="Level" value={level} onChange={(event) => setLevel(event.target.value)}>
+              <span className="sr-only">{t.level}</span>
+              <select aria-label={t.level} value={level} onChange={(event) => setLevel(event.target.value)}>
                 <option value={allFilter}>{language === 'zh' ? '全部级别' : 'All levels'}</option>
                 {levelOptions.map((option) => (
                   <option key={option} value={option}>
@@ -378,10 +353,14 @@ export function Scripts({
               <ChevronDown aria-hidden="true" />
             </label>
             <label className="scripts-filter-control scripts-filter-control--feature">
-              <span className="sr-only">Feature</span>
-              <select aria-label="Feature" value={feature} onChange={(event) => setFeature(event.target.value)}>
-                <option value={allFilter}>{language === 'zh' ? '全部 Feature' : 'All Features'}</option>
-                {featureOptions.map((option) => <option key={option} value={option}>{`Feature · ${option}`}</option>)}
+              <span className="sr-only">{t.feature}</span>
+              <select aria-label={t.feature} value={feature} onChange={(event) => setFeature(event.target.value)}>
+                <option value={allFilter}>{language === 'zh' ? '全部特性' : 'All Features'}</option>
+                {featureOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {language === 'zh' ? `特性 · ${option}` : `Feature · ${option}`}
+                  </option>
+                ))}
               </select>
               <ChevronDown aria-hidden="true" />
             </label>

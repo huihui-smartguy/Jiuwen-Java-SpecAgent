@@ -12,18 +12,20 @@ const overviewStyles = readFileSync('src/styles/routes/overview.css', 'utf8');
 const foundationStyles = readFileSync('src/styles/foundations.css', 'utf8');
 const primitiveStyles = readFileSync('src/styles/primitives.css', 'utf8');
 
-function renderDashboard({
-  language = 'zh',
-  task = activeTask,
-  runtimeConfig = resolveRuntimeConfig({ defaultLanguage: language, enableMockFallback: true }),
-  selectedSut = runtimeConfig.sutTargets[0]
-}: {
+interface DashboardRenderOptions {
   language?: Language;
   task?: NormalizedTaskStatus | null;
   runtimeConfig?: RuntimeConfig;
   selectedSut?: SutTarget;
-} = {}) {
-  return render(
+}
+
+function dashboardElement({
+  language = 'zh',
+  task = activeTask,
+  runtimeConfig = resolveRuntimeConfig({ defaultLanguage: language, enableMockFallback: true }),
+  selectedSut = runtimeConfig.sutTargets[0]
+}: DashboardRenderOptions = {}) {
+  return (
     <MemoryRouter>
       <Dashboard
         language={language}
@@ -35,11 +37,15 @@ function renderDashboard({
   );
 }
 
+function renderDashboard(options: DashboardRenderOptions = {}) {
+  return render(dashboardElement(options));
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('Overview dashboard R8', () => {
+describe('Overview dashboard R10', () => {
   test('encodes the approved flexible desktop geometry, hierarchy gap, and single-line action', () => {
     expect(foundationStyles).toMatch(/--radius-card:\s*24px;/);
     expect(primitiveStyles).toMatch(
@@ -71,6 +77,12 @@ describe('Overview dashboard R8', () => {
     );
     expect(overviewStyles).toMatch(
       /\.dimension-selector\s*\{[^}]*width:\s*232px;/s
+    );
+    expect(overviewStyles).toMatch(
+      /\.overview-l1-card__controls\s*\{[^}]*display:\s*flex;[^}]*gap:\s*12px;/s
+    );
+    expect(overviewStyles).toMatch(
+      /\.version-selector\s*\{[^}]*width:\s*176px;/s
     );
     expect(overviewStyles).toMatch(
       /\.dimension-summary-grid\s*\{[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\);/s
@@ -113,7 +125,7 @@ describe('Overview dashboard R8', () => {
     renderDashboard();
 
     const pageTitle = screen.getByRole('heading', { name: '测试看板', level: 1 });
-    expect(screen.getByText('对象级 L0 质量总览与 L1 分维度测试执行分析')).toBeInTheDocument();
+    expect(screen.getByText('产品级 L0 质量总览与 L1 分维度测试执行分析')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /新建任务/ })).toHaveAttribute('href', '/tasks');
 
     const currentRun = screen.getByRole('region', { name: '当前执行' });
@@ -131,18 +143,18 @@ describe('Overview dashboard R8', () => {
     expect(screen.queryByText('活动问题')).not.toBeInTheDocument();
   });
 
-  test('integrates object-wide L0 execution, pass rate, and issue totals', () => {
+  test('integrates product-and-version L0 execution, pass rate, and issue totals', () => {
     renderDashboard();
 
     const l0 = screen.getByRole('region', { name: '全局质量' });
     const metrics = within(l0).getAllByRole('listitem');
 
     expect(metrics).toHaveLength(3);
-    expect(within(metrics[0]).getByText('总执行次数')).toBeInTheDocument();
+    expect(within(metrics[0]).getAllByText('总执行次数').length).toBeGreaterThan(0);
     expect(within(metrics[0]).getByText('134')).toBeInTheDocument();
-    expect(within(metrics[1]).getByText('整体通过率')).toBeInTheDocument();
+    expect(within(metrics[1]).getAllByText('整体通过率').length).toBeGreaterThan(0);
     expect(within(metrics[1]).getByText('67.91%')).toBeInTheDocument();
-    expect(within(metrics[2]).getByText('问题总数')).toBeInTheDocument();
+    expect(within(metrics[2]).getAllByText('问题总数').length).toBeGreaterThan(0);
     expect(within(metrics[2]).getByText('42')).toBeInTheDocument();
     expect(within(metrics[2]).getByText('演示问题数据 · 前端模拟')).toBeInTheDocument();
     expect(screen.getByText('演示数据 · 前端模拟')).toBeInTheDocument();
@@ -190,7 +202,7 @@ describe('Overview dashboard R8', () => {
     renderDashboard({ language: 'en', runtimeConfig, selectedSut });
 
     const currentRun = screen.getByRole('region', { name: 'Active run' });
-    expect(within(currentRun).getByText('Unified Version scene · catalog-r1'))
+    expect(within(currentRun).getByText('Unified Version Scene · catalog-r1'))
       .toHaveClass('sr-only');
     expect(within(currentRun).queryByText('合一版本 场景用例 · catalog-r1'))
       .not.toBeInTheDocument();
@@ -239,6 +251,118 @@ describe('Overview dashboard R8', () => {
     expect(within(currentRun).getByText('0 / 0')).toBeInTheDocument();
   });
 
+  test('resolves distinct L0 and L1 fixtures for all three native products', () => {
+    const runtimeConfig = resolveRuntimeConfig({ defaultLanguage: 'zh', enableMockFallback: true });
+    const cases = [
+      { product: '高码java', version: 'v2.4.1', score: '67.91', passed: '91' },
+      { product: '高码python', version: 'v1.8.0', score: '87.93', passed: '102' },
+      { product: '合一版本', version: 'v3.0.0', score: '94.05', passed: '158' }
+    ] as const;
+    const firstSut = runtimeConfig.sutTargets.find(({ product }) => product === cases[0].product)!;
+    const { rerender } = renderDashboard({ runtimeConfig, selectedSut: firstSut });
+
+    for (const fixture of cases) {
+      const selectedSut = runtimeConfig.sutTargets.find(
+        ({ product }) => product === fixture.product
+      )!;
+      rerender(dashboardElement({ runtimeConfig, selectedSut }));
+
+      expect(screen.getByRole('img', { name: `综合质量 ${fixture.score}` }))
+        .toBeInTheDocument();
+      expect(screen.getByRole('button', { name: `选择版本: ${fixture.version}` }))
+        .toBeInTheDocument();
+      expect(
+        within(screen.getByRole('region', { name: '通过的测试脚本' }))
+          .getByText(fixture.passed)
+      ).toBeInTheDocument();
+    }
+  });
+
+  test('switching version updates L0, every L1 dimension, and the performance fixture', async () => {
+    const user = userEvent.setup();
+    renderDashboard();
+
+    await user.click(screen.getByRole('button', { name: '选择版本: v2.4.1' }));
+    const versionListbox = screen.getByRole('listbox', { name: '选择版本' });
+    expect(within(versionListbox).getAllByRole('option').map((option) => option.textContent))
+      .toEqual(['v2.4.1', 'v2.3.0']);
+    await user.click(within(versionListbox).getByRole('option', { name: 'v2.3.0' }));
+
+    expect(screen.getByRole('img', { name: '综合质量 60.94' })).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('region', { name: '通过的测试脚本' })).getByText('78')
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '选择质量维度: 基础功能' }));
+    await user.click(screen.getByRole('option', { name: 'DFX' }));
+    expect(
+      within(screen.getByRole('region', { name: '通过的测试脚本' })).getByText('104')
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '选择质量维度: DFX' }));
+    await user.click(screen.getByRole('option', { name: '场景化测试' }));
+    expect(
+      within(screen.getByRole('region', { name: '通过的测试脚本' })).getByText('90')
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '选择质量维度: 场景化测试' }));
+    await user.click(screen.getByRole('option', { name: '性能' }));
+    expect(screen.getAllByText('488 ms')).toHaveLength(2);
+    expect(screen.getByText('521 ms')).toBeInTheDocument();
+    expect(screen.getByText('通过 75 / 128')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '选择版本: v2.3.0' }));
+    await user.click(screen.getByRole('option', { name: 'v2.4.1' }));
+    expect(screen.getByRole('img', { name: '综合质量 67.91' })).toBeInTheDocument();
+    expect(screen.getAllByText('412 ms')).toHaveLength(2);
+    expect(screen.queryByText('521 ms')).not.toBeInTheDocument();
+  });
+
+  test('remembers a valid version independently for each product', async () => {
+    const user = userEvent.setup();
+    const runtimeConfig = resolveRuntimeConfig({ defaultLanguage: 'zh', enableMockFallback: true });
+    const javaSut = runtimeConfig.sutTargets.find(({ product }) => product === '高码java')!;
+    const pythonSut = runtimeConfig.sutTargets.find(({ product }) => product === '高码python')!;
+    const { rerender } = renderDashboard({ runtimeConfig, selectedSut: javaSut });
+
+    await user.click(screen.getByRole('button', { name: '选择版本: v2.4.1' }));
+    await user.click(screen.getByRole('option', { name: 'v2.3.0' }));
+
+    rerender(dashboardElement({ runtimeConfig, selectedSut: pythonSut }));
+    expect(screen.getByRole('button', { name: '选择版本: v1.8.0' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '选择版本: v1.8.0' }));
+    await user.click(screen.getByRole('option', { name: 'v1.7.2' }));
+
+    rerender(dashboardElement({ runtimeConfig, selectedSut: javaSut }));
+    expect(screen.getByRole('button', { name: '选择版本: v2.3.0' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: '综合质量 60.94' })).toBeInTheDocument();
+
+    rerender(dashboardElement({ runtimeConfig, selectedSut: pythonSut }));
+    expect(screen.getByRole('button', { name: '选择版本: v1.7.2' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: '综合质量 80.77' })).toBeInTheDocument();
+  });
+
+  test('renders an explicit neutral state for an unsupported product without fixture fallback', () => {
+    const runtimeConfig = resolveRuntimeConfig({ defaultLanguage: 'zh', enableMockFallback: true });
+    const selectedSut: SutTarget = {
+      ...runtimeConfig.sutTargets[0],
+      id: 'unknown-product',
+      name: '未知产品 API',
+      product: '未知产品',
+      scene: 'API'
+    };
+
+    renderDashboard({ runtimeConfig, selectedSut });
+
+    const status = screen.getByRole('status');
+    expect(within(status).getByRole('heading', { name: '暂无该产品的质量数据' }))
+      .toBeInTheDocument();
+    expect(within(status).getByText('请选择支持的产品后重试。')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: '全局质量' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /选择版本/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('67.91%')).not.toBeInTheDocument();
+  });
+
   test('opens an accessible four-option selector and updates standard dimensions', async () => {
     const user = userEvent.setup();
     renderDashboard();
@@ -258,7 +382,7 @@ describe('Overview dashboard R8', () => {
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'DFX', level: 3 })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '选择质量维度: DFX' })).toHaveAttribute('aria-expanded', 'false');
-    const passed = screen.getByRole('region', { name: /PASSED TEST SCRIPTS/ });
+    const passed = screen.getByRole('region', { name: '通过的测试脚本' });
     expect(within(passed).getByText('118')).toBeInTheDocument();
     expect(screen.getByText(/质量属性总体受控，可靠性问题需收敛/)).toBeInTheDocument();
   });
@@ -283,6 +407,44 @@ describe('Overview dashboard R8', () => {
     await waitFor(() => expect(dfxTrigger).toHaveFocus());
   });
 
+  test('supports keyboard navigation and focus return in the version selector', async () => {
+    const user = userEvent.setup();
+    renderDashboard();
+
+    const trigger = screen.getByRole('button', { name: '选择版本: v2.4.1' });
+    expect(trigger).toHaveAttribute('aria-haspopup', 'listbox');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    trigger.focus();
+    await user.keyboard('{ArrowDown}');
+
+    const previousVersion = await screen.findByRole('option', { name: 'v2.3.0' });
+    await waitFor(() => expect(previousVersion).toHaveFocus());
+    await user.keyboard('{Enter}');
+
+    const previousTrigger = screen.getByRole('button', { name: '选择版本: v2.3.0' });
+    await waitFor(() => expect(previousTrigger).toHaveFocus());
+    expect(previousTrigger).toHaveAttribute('aria-expanded', 'false');
+
+    await user.click(previousTrigger);
+    await waitFor(() => expect(screen.getByRole('option', { name: 'v2.3.0' })).toHaveFocus());
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('listbox', { name: '选择版本' })).not.toBeInTheDocument();
+    await waitFor(() => expect(previousTrigger).toHaveFocus());
+  });
+
+  test('contains no locale-insensitive Overview taxonomy when Chinese is active', () => {
+    renderDashboard();
+
+    expect(document.body).not.toHaveTextContent(
+      /BASIC FUNCTIONALITY|SCENARIO-BASED|PASSED TEST SCRIPTS|OVERALL QUALITY ASSESSMENT|ISSUES FOUND|VERSION BASELINE|TOTAL EXECUTION|OVERALL PASS RATE|TOTAL ISSUES|DIMENSION VIEW/
+    );
+    expect(screen.getByText('L0 质量 · 产品')).toBeInTheDocument();
+    expect(screen.getByText('L1 质量 · 维度视图')).toBeInTheDocument();
+    expect(screen.getByText('通过的测试脚本')).toBeInTheDocument();
+    expect(screen.getByText('整体质量评估')).toBeInTheDocument();
+    expect(screen.getByText('发现问题')).toBeInTheDocument();
+  });
+
   test('renders Scenario-Based with the same three information zones', async () => {
     const user = userEvent.setup();
     renderDashboard();
@@ -291,9 +453,9 @@ describe('Overview dashboard R8', () => {
     await user.click(screen.getByRole('option', { name: '场景化测试' }));
 
     expect(screen.getByRole('heading', { name: '场景化测试', level: 3 })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: /PASSED TEST SCRIPTS/ })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: /OVERALL QUALITY ASSESSMENT/ })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: /ISSUES FOUND/ })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '通过的测试脚本' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '整体质量评估' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '发现问题' })).toBeInTheDocument();
     expect(screen.getByText(/核心链路可用，复杂场景覆盖仍需加强/)).toBeInTheDocument();
     expect(screen.getByText('9')).toBeInTheDocument();
   });
@@ -307,14 +469,14 @@ describe('Overview dashboard R8', () => {
 
     expect(screen.getByRole('heading', { name: '性能', level: 3 })).toBeInTheDocument();
     expect(screen.getByRole('img', { name: /性能趋势 · 最近 6 个版本/ })).toBeInTheDocument();
-    for (const version of ['v1.0', 'v1.1', 'v1.2', 'v1.3', 'v1.4', 'v1.5']) {
-      expect(screen.getByText(version)).toBeInTheDocument();
+    for (const version of ['v2.0.0', 'v2.1.0', 'v2.2.0', 'v2.3.0', 'v2.4.0', 'v2.4.1']) {
+      expect(screen.getAllByText(version).length).toBeGreaterThan(0);
     }
     expect(screen.getAllByText('412 ms')).toHaveLength(2);
     expect(screen.getByText('450 ms')).toBeInTheDocument();
     expect(screen.getByText(/较基线优化 38 ms · -8.4%/)).toBeInTheDocument();
     expect(screen.getByText('通过 86 / 134')).toBeInTheDocument();
-    expect(screen.getByText('评级 A-')).toBeInTheDocument();
+    expect(screen.getByText('评级 B-')).toBeInTheDocument();
     expect(screen.getByText('问题 4')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '选择质量维度: 性能' }));
@@ -326,11 +488,13 @@ describe('Overview dashboard R8', () => {
   test('provides professional English terminology when language is switched', () => {
     renderDashboard({ language: 'en' });
 
-    expect(screen.getByText('Object-level L0 quality overview and L1 dimension-specific test execution analysis.'))
+    expect(screen.getByText('Product-level L0 quality overview and L1 dimension-specific test execution analysis.'))
       .toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Global quality' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Dimension-level quality assessment' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Select quality dimension: Basic Functionality' }))
+      .toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Select version: v2.4.1' }))
       .toBeInTheDocument();
     const overallRing = screen.getByRole('img', { name: 'Overall quality 67.91' });
     expect(within(overallRing).getByText('Overall quality')).toHaveClass('overview-quality-ring__caption');

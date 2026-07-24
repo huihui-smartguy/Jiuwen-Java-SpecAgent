@@ -804,7 +804,7 @@ describe('Results', () => {
     expect(generate).toHaveFocus();
     await user.click(generate);
     modal = await screen.findByRole('dialog', { name: '生成报告' });
-    expect(within(modal).getByText('High-Code Java scene'))
+    expect(within(modal).getByText('High-Code Java Scene'))
       .toBeInTheDocument();
     const reportVersion = within(modal).getByRole('combobox', {
       name: /执行\s*\/\s*报告版本/

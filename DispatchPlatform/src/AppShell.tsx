@@ -5,6 +5,8 @@ import { CatalogProvider, useCatalog } from './catalog/CatalogProvider';
 import { findMigratedTargetId, findTargetByScope } from './catalog/model';
 import { ConsoleHeader } from './components/ConsoleHeader';
 import { activeTask as initialActiveTask } from './data/mockData';
+import { getCopy } from './i18n';
+import { productDisplayLabel } from './objectLabels';
 import { Dashboard } from './pages/Dashboard';
 import { Knowledge } from './pages/Knowledge';
 import { Observation } from './pages/Observation';
@@ -21,7 +23,6 @@ import {
   type ConsolePreferencesV1
 } from './preferences';
 import type {
-  CatalogObject,
   Language,
   NormalizedTaskStatus,
   RuntimeConfig,
@@ -85,6 +86,37 @@ function observationLaunchFromState(state: unknown) {
     : undefined;
 }
 
+function productKey(product: string) {
+  return productDisplayLabel(product).toLocaleLowerCase();
+}
+
+function isProduct(target: Pick<SutTarget, 'product'>, product: string) {
+  return productKey(target.product) === productKey(product);
+}
+
+function targetForProduct(
+  targets: readonly SutTarget[],
+  product: string,
+  preferredId?: string
+) {
+  return targets.find((target) => target.id === preferredId && isProduct(target, product))
+    ?? targets.find((target) => isProduct(target, product));
+}
+
+function rememberedTargetForProduct(
+  targets: readonly SutTarget[],
+  product: string,
+  remembered?: Pick<SutTarget, 'id' | 'product' | 'scene'>,
+  fallback?: Pick<SutTarget, 'id' | 'product' | 'scene'>
+) {
+  const productTargets = targets.filter((target) => isProduct(target, product));
+  return productTargets.find((target) => target.id === remembered?.id)
+    ?? (remembered ? findTargetByScope(productTargets, remembered) : undefined)
+    ?? productTargets.find((target) => target.id === fallback?.id)
+    ?? (fallback ? findTargetByScope(productTargets, fallback) : undefined)
+    ?? productTargets[0];
+}
+
 export function AppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
   return (
     <CatalogProvider runtimeConfig={runtimeConfig}>
@@ -117,7 +149,19 @@ function CatalogAppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
       : []
   ));
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [objectFocusRequest, setObjectFocusRequest] = useState(0);
+  const [tasksObjectByProduct, setTasksObjectByProduct] = useState<Record<string, SutTarget>>(() => {
+    const target = runtimeConfig.sutTargets.find(
+      (candidate) => candidate.id === preferences.defaultSutId
+    );
+    return target ? { [productKey(target.product)]: target } : {};
+  });
+  const [scriptsObjectByProduct, setScriptsObjectByProduct] = useState<Record<string, SutTarget>>(() => {
+    const target = runtimeConfig.sutTargets.find(
+      (candidate) => candidate.id === preferences.defaultSutId
+    );
+    return target ? { [productKey(target.product)]: target } : {};
+  });
+  const globalObjectByProductRef = useRef(new Map<string, SutTarget>());
   const mainContentRef = useRef<HTMLElement>(null);
   const previousPathRef = useRef(location.pathname);
   const defaultSutSnapshot = savedSelectionSnapshot(preferences, runtimeConfig);
@@ -157,26 +201,31 @@ function CatalogAppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
     ?? preferenceSelectedSut
     ?? runtimeConfig.sutTargets.find((target) => target.id === selectedSutId)
     ?? unavailableSelectedSut;
-  const currentCatalogObject = catalog.objectsById.get(selectedSutId);
-  const lastSelectedCatalogObjectRef = useRef<
-    { selectionId: string; object: CatalogObject } | undefined
-  >(currentCatalogObject ? {
-    selectionId: selectedSutId,
-    object: currentCatalogObject
-  } : undefined);
-  if (currentCatalogObject) {
-    lastSelectedCatalogObjectRef.current = {
-      selectionId: selectedSutId,
-      object: currentCatalogObject
-    };
+  const selectedProduct = selectedSut.product;
+  if (currentSelectedSut) {
+    globalObjectByProductRef.current.set(productKey(selectedProduct), currentSelectedSut);
   }
-  const retainedCatalogObject = (
-    lastSelectedCatalogObjectRef.current?.selectionId === selectedSutId
-      ? lastSelectedCatalogObjectRef.current.object
-      : undefined
+  const selectedProductKey = productKey(selectedProduct);
+  const selectedProductObjects = useMemo(
+    () => objects.filter((target) => isProduct(target, selectedProduct)),
+    [objects, selectedProduct]
   );
-  const selectedCatalogObject = currentCatalogObject ?? retainedCatalogObject;
-  const catalogSelectionValid = !catalog.snapshot || Boolean(currentCatalogObject);
+  const tasksSelectedSut = rememberedTargetForProduct(
+    selectedProductObjects,
+    selectedProduct,
+    tasksObjectByProduct[selectedProductKey],
+    selectedSut
+  ) ?? selectedSut;
+  const scriptsSelectedSut = rememberedTargetForProduct(
+    selectedProductObjects,
+    selectedProduct,
+    scriptsObjectByProduct[selectedProductKey],
+    selectedSut
+  ) ?? selectedSut;
+  const tasksCatalogObject = catalog.objectsById.get(tasksSelectedSut.id);
+  const scriptsCatalogObject = catalog.objectsById.get(scriptsSelectedSut.id);
+  const tasksCatalogSelectionValid = !catalog.snapshot || Boolean(tasksCatalogObject);
+  const scriptsCatalogSelectionValid = !catalog.snapshot || Boolean(scriptsCatalogObject);
   const objectMetadata = useMemo(
     () => Object.fromEntries(catalog.targets.map((target) => [
       target.id,
@@ -184,6 +233,58 @@ function CatalogAppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
     ])),
     [catalog.targets]
   );
+
+  useEffect(() => {
+    if (!selectedProductObjects.length) {
+      return;
+    }
+    setTasksObjectByProduct((current) => {
+      const remembered = current[selectedProductKey];
+      if (
+        remembered?.id === tasksSelectedSut.id
+        && remembered.product === tasksSelectedSut.product
+        && remembered.scene === tasksSelectedSut.scene
+      ) {
+        return current;
+      }
+      return {
+        ...current,
+        [selectedProductKey]: tasksSelectedSut
+      };
+    });
+  }, [
+    selectedProductKey,
+    selectedProductObjects.length,
+    tasksSelectedSut.id,
+    tasksSelectedSut.product,
+    tasksSelectedSut.scene
+  ]);
+
+  useEffect(() => {
+    if (!selectedProductObjects.length) {
+      return;
+    }
+    setScriptsObjectByProduct((current) => {
+      const remembered = current[selectedProductKey];
+      if (
+        remembered?.id === scriptsSelectedSut.id
+        && remembered.product === scriptsSelectedSut.product
+        && remembered.scene === scriptsSelectedSut.scene
+      ) {
+        return current;
+      }
+      return {
+        ...current,
+        [selectedProductKey]: scriptsSelectedSut
+      };
+    });
+  }, [
+    scriptsSelectedSut.id,
+    scriptsSelectedSut.product,
+    scriptsSelectedSut.scene,
+    selectedProductKey,
+    selectedProductObjects.length
+  ]);
 
   useEffect(() => {
     if (!catalog.targets.length || catalog.targets.some((target) => target.id === selectedSutId)) {
@@ -204,7 +305,7 @@ function CatalogAppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
       catalog.targets,
       selectedSutId,
       runtimeConfig.sutTargets
-    );
+    ) ?? targetForProduct(catalog.targets, selectedProduct)?.id;
     if (!migratedId) {
       return;
     }
@@ -231,6 +332,7 @@ function CatalogAppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
     effectiveRuntimeConfig,
     preferences,
     runtimeConfig.sutTargets,
+    selectedProduct,
     selectedSutId
   ]);
 
@@ -271,18 +373,19 @@ function CatalogAppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
     activeTask,
     runtimeConfig: effectiveRuntimeConfig
   };
+  const t = getCopy(language);
   const observationLaunch = observationLaunchFromState(location.state);
   const handleTaskCreated = useCallback((response: TaskCreateResponse) => {
     const task = {
       ...normalizeCreatedTask(response),
-      sourceSut: { ...selectedSut }
+      sourceSut: { ...tasksSelectedSut }
     };
     setActiveTask(task);
     setSessionTasks((current) => [
       task,
       ...current.filter((item) => !isSameTask(item, task, runtimeConfig.apiBaseUrl))
     ]);
-  }, [runtimeConfig.apiBaseUrl, selectedSut]);
+  }, [runtimeConfig.apiBaseUrl, tasksSelectedSut]);
   const handleTaskStatusChange = useCallback((task: NormalizedTaskStatus) => {
     setActiveTask((current) => (current && isSameTask(current, task, runtimeConfig.apiBaseUrl)
       ? {
@@ -303,26 +406,61 @@ function CatalogAppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
       return hasTask ? nextTasks : [task, ...nextTasks];
     });
   }, [runtimeConfig.apiBaseUrl]);
-  const handleRequestObjectChange = useCallback(() => {
-    setObjectFocusRequest((current) => current + 1);
-  }, []);
+  const handleProductChange = useCallback((product: string) => {
+    const nextTarget = rememberedTargetForProduct(
+      objects,
+      product,
+      globalObjectByProductRef.current.get(productKey(product))
+    );
+    if (nextTarget) {
+      globalObjectByProductRef.current.set(productKey(product), nextTarget);
+      setSelectedSutId(nextTarget.id);
+    }
+  }, [objects]);
+  const handleGlobalObjectChange = useCallback((id: string) => {
+    const nextTarget = objects.find((target) => target.id === id)
+      ?? runtimeConfig.sutTargets.find((target) => target.id === id);
+    if (nextTarget) {
+      globalObjectByProductRef.current.set(productKey(nextTarget.product), nextTarget);
+    }
+    setSelectedSutId(id);
+  }, [objects, runtimeConfig.sutTargets]);
+  const handleTasksObjectChange = useCallback((id: string) => {
+    const nextTarget = selectedProductObjects.find((target) => target.id === id);
+    if (!nextTarget) {
+      return;
+    }
+    setTasksObjectByProduct((current) => ({
+      ...current,
+      [selectedProductKey]: nextTarget
+    }));
+  }, [selectedProductKey, selectedProductObjects]);
+  const handleScriptsObjectChange = useCallback((id: string) => {
+    const nextTarget = selectedProductObjects.find((target) => target.id === id);
+    if (!nextTarget) {
+      return;
+    }
+    setScriptsObjectByProduct((current) => ({
+      ...current,
+      [selectedProductKey]: nextTarget
+    }));
+  }, [selectedProductKey, selectedProductObjects]);
   const handlePreferencesChange = useCallback((nextPreferences: ConsolePreferencesV1) => {
     setPreferences(nextPreferences);
   }, []);
 
   return (
     <div className="app-shell">
-      <a className="skip-link" href="#main-content">Skip to main content</a>
+      <a className="skip-link" href="#main-content">{t.skipToMainContent}</a>
       <ConsoleHeader
         language={language}
-        selectedObject={selectedSut}
+        selectedProduct={selectedProduct}
         objects={objects}
         auth={effectiveRuntimeConfig.auth}
         drawerOpen={drawerOpen}
-        objectFocusRequest={objectFocusRequest}
         objectMetadata={objectMetadata}
         catalogState={catalog.state}
-        onObjectChange={setSelectedSutId}
+        onProductChange={handleProductChange}
         onLanguageToggle={() => setLanguage((current) => (current === 'zh' ? 'en' : 'zh'))}
         onDrawerOpenChange={setDrawerOpen}
       />
@@ -342,12 +480,15 @@ function CatalogAppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
             element={(
               <Tasks
                 language={language}
-                selectedSut={selectedSut}
+                selectedSut={tasksSelectedSut}
                 runtimeConfig={effectiveRuntimeConfig}
-                catalogObject={selectedCatalogObject}
-                catalogSelectionValid={catalogSelectionValid}
+                objects={selectedProductObjects}
+                objectMetadata={objectMetadata}
+                catalogState={catalog.state}
+                catalogObject={tasksCatalogObject}
+                catalogSelectionValid={tasksCatalogSelectionValid}
                 onTaskCreated={handleTaskCreated}
-                onRequestObjectChange={handleRequestObjectChange}
+                onObjectChange={handleTasksObjectChange}
               />
             )}
           />
@@ -383,9 +524,15 @@ function CatalogAppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
             path="/scripts"
             element={(
               <Scripts
-                {...sharedProps}
-                catalogObject={selectedCatalogObject}
-                catalogSelectionValid={catalogSelectionValid}
+                language={language}
+                selectedSut={scriptsSelectedSut}
+                runtimeConfig={effectiveRuntimeConfig}
+                objects={selectedProductObjects}
+                objectMetadata={objectMetadata}
+                catalogState={catalog.state}
+                catalogObject={scriptsCatalogObject}
+                catalogSelectionValid={scriptsCatalogSelectionValid}
+                onObjectChange={handleScriptsObjectChange}
               />
             )}
           />
@@ -398,7 +545,7 @@ function CatalogAppShell({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
                 selectedSut={selectedSut}
                 runtimeConfig={effectiveRuntimeConfig}
                 preferences={preferences}
-                onObjectChange={setSelectedSutId}
+                onObjectChange={handleGlobalObjectChange}
                 onLanguageChange={setLanguage}
                 onPreferencesChange={handlePreferencesChange}
               />

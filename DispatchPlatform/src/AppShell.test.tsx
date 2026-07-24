@@ -91,7 +91,7 @@ describe('AppShell', () => {
     expect(screen.getByRole('banner')).toHaveClass('app-header');
     expect(screen.getByRole('img', { name: 'TestWise ghost' })).toBeInTheDocument();
 
-    const navigation = screen.getByRole('navigation', { name: 'Primary navigation' });
+    const navigation = screen.getByRole('navigation', { name: '主导航' });
     expect(within(navigation).getAllByRole('link').map((link) => [
       link.textContent,
       link.getAttribute('href')
@@ -101,15 +101,19 @@ describe('AppShell', () => {
     )).toHaveLength(1);
 
     const objectControl = screen.getByTestId('object-control');
-    expect(objectControl).toHaveTextContent('Object');
-    expect(objectControl).toHaveTextContent('High-Code Java scene');
+    expect(objectControl).toHaveTextContent('产品');
+    expect(objectControl).toHaveTextContent('High-Code Java');
+    expect(objectControl).not.toHaveTextContent('scene');
     expect(objectControl).not.toHaveTextContent('营销系统 Java SUT');
     expect(objectControl).not.toHaveTextContent('v2.4.1');
     expect(objectControl).not.toHaveTextContent('健康');
     expect(within(objectControl).getByRole('button', {
-      name: /选择 Object: High-Code Java scene/i
+      name: /选择产品: High-Code Java/i
     })).not.toHaveAttribute('aria-describedby');
-    expect(screen.getByRole('button', { name: /english/i })).toHaveTextContent(/^EN$/);
+    expect(screen.getByRole('link', { name: '跳转到主要内容' }))
+      .toHaveAttribute('href', '#main-content');
+    expect(screen.getByRole('link', { name: '控制台首页' })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('button', { name: '切换至英文' })).toHaveTextContent(/^EN$/);
     expect(screen.getByRole('button', { name: /登录|sign in/i })).toHaveTextContent(/^TW$/);
 
     for (const removedText of [
@@ -146,7 +150,7 @@ describe('AppShell', () => {
     const { router, container } = renderNavigationShell();
 
     for (const [label, path, heading] of navigationDestinations) {
-      const navigation = screen.getByRole('navigation', { name: 'Primary navigation' });
+      const navigation = screen.getByRole('navigation', { name: '主导航' });
       const destination = within(navigation).getByRole('link', { name: label });
       await user.click(destination);
 
@@ -233,7 +237,7 @@ describe('AppShell', () => {
     renderShell();
 
     expect(screen.getByRole('heading', { name: /测试看板/i })).toBeInTheDocument();
-    expect(screen.getByText('对象级 L0 质量总览与 L1 分维度测试执行分析')).toBeInTheDocument();
+    expect(screen.getByText('产品级 L0 质量总览与 L1 分维度测试执行分析')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: /当前执行/i })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: /全局质量/i })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: /分维度质量评估/i })).toBeInTheDocument();
@@ -276,7 +280,7 @@ describe('AppShell', () => {
     const user = userEvent.setup();
     renderShell();
 
-    await user.click(screen.getByRole('button', { name: /english/i }));
+    await user.click(screen.getByRole('button', { name: '切换至英文' }));
 
     expect(document.documentElement).toHaveClass('lang-en');
     expect(document.documentElement).toHaveAttribute('lang', 'en');
@@ -300,7 +304,7 @@ describe('AppShell', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
     expect(within(screen.getByTestId('object-control')).getByRole('button', {
-      name: 'Choose Object: High-Code Python API'
+      name: 'Choose product: High-Code Python'
     })).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Language' })).toHaveValue('en');
     expect(screen.getByRole('combobox', { name: 'Default download format' })).toHaveValue('md');
@@ -321,7 +325,7 @@ describe('AppShell', () => {
 
     await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: '设置' })).toBeInTheDocument());
     expect(within(screen.getByTestId('object-control')).getByRole('button', {
-      name: '选择 Object: High-Code Java scene'
+      name: '选择产品: High-Code Java'
     })).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: '默认下载格式' })).toHaveValue('html');
     expect(document.documentElement).not.toHaveClass('settings-reduced-motion');
@@ -340,20 +344,21 @@ describe('AppShell', () => {
     expect(screen.getByRole('banner', { hidden: true })).toHaveAttribute('inert');
     expect(screen.getByRole('main', { hidden: true })).toHaveAttribute('inert');
 
-    const navigation = within(drawer).getByRole('navigation', { name: 'Primary navigation' });
+    const navigation = within(drawer).getByRole('navigation', { name: '主导航' });
     expect(within(navigation).getAllByRole('link').map((link) => [
       link.textContent,
       link.getAttribute('href')
     ])).toEqual(chineseNavigation);
     const objectControl = within(drawer).getByTestId('drawer-object-control');
     expect(within(objectControl).getByRole('button', {
-      name: '选择 Object: High-Code Java scene'
+      name: '选择产品: High-Code Java'
     })).toBeInTheDocument();
-    expect(objectControl).toHaveTextContent('High-Code Java scene');
+    expect(objectControl).toHaveTextContent('High-Code Java');
+    expect(objectControl).not.toHaveTextContent('scene');
     expect(objectControl).not.toHaveTextContent('营销系统 Java SUT');
     expect(objectControl).not.toHaveTextContent('v2.4.1');
     expect(objectControl).not.toHaveTextContent('健康');
-    expect(within(drawer).getByRole('button', { name: /english/i })).toHaveTextContent(/^EN$/);
+    expect(within(drawer).getByRole('button', { name: '切换至英文' })).toHaveTextContent(/^EN$/);
     const accountButton = within(drawer).getByRole('button', { name: /登录|sign in/i });
     expect(accountButton).toHaveTextContent(/^TW$/);
 
@@ -375,7 +380,7 @@ describe('AppShell', () => {
     await user.click(within(drawer).getByRole('button', { name: /登录|sign in/i }));
     expect(within(drawer).getByRole('menu')).toBeInTheDocument();
 
-    await user.click(within(drawer).getByRole('button', { name: /english/i }));
+    await user.click(within(drawer).getByRole('button', { name: '切换至英文' }));
 
     expect(within(drawer).queryByRole('menu')).not.toBeInTheDocument();
     expect(drawer).toBeInTheDocument();
@@ -396,24 +401,110 @@ describe('AppShell', () => {
     expect(screen.getByRole('link', { name: 'Tasks' })).toHaveAttribute('aria-current', 'page');
   });
 
-  test('Object selection refreshes task creation context', async () => {
+  test('Product selection refreshes task creation context without exposing scenarios', async () => {
     const user = userEvent.setup();
     renderShell('/tasks');
 
     await user.click(within(screen.getByTestId('object-control')).getByRole(
       'button',
-      { name: /选择 Object: High-Code Java scene/i }
+      { name: /选择产品: High-Code Java/i }
     ));
     await user.click(screen.getByRole('option', {
-      name: /High-Code Python API/
+      name: /High-Code Python/
     }));
 
     const summary = screen.getByTestId('task-context-summary');
     expect(within(summary).getByText(/High-Code Python/i)).toBeInTheDocument();
-    expect(within(summary).getByText(/API/i)).toBeInTheDocument();
+    expect(within(summary).getByText(/已选测试类型 · API/i)).toBeInTheDocument();
   });
 
-  test('disambiguates duplicate Object choices without changing the approved selected summary', async () => {
+  test('keeps Tasks and Scripts Test Type scopes independent and restores them per Product', async () => {
+    const user = userEvent.setup();
+    const { container } = renderShell('/tasks', {
+      sutTargets: [
+        {
+          id: 'alpha-api',
+          name: 'Alpha API',
+          product: 'Alpha',
+          scene: 'API',
+          version: 'v1',
+          apiBaseUrl: '/api',
+          status: 'healthy'
+        },
+        {
+          id: 'alpha-web',
+          name: 'Alpha WEB',
+          product: 'Alpha',
+          scene: 'WEB',
+          version: 'v1',
+          apiBaseUrl: '/api',
+          status: 'healthy'
+        },
+        {
+          id: 'beta-api',
+          name: 'Beta API',
+          product: 'Beta',
+          scene: 'API',
+          version: 'v1',
+          apiBaseUrl: '/api',
+          status: 'healthy'
+        },
+        {
+          id: 'beta-dfx',
+          name: 'Beta DFX',
+          product: 'Beta',
+          scene: 'DFX',
+          version: 'v1',
+          apiBaseUrl: '/api',
+          status: 'healthy'
+        }
+      ]
+    });
+
+    const tasksActions = () => within(
+      container.querySelector('.tasks-page-actions') as HTMLElement
+    );
+    const scriptsActions = () => within(
+      container.querySelector('.scripts-page-actions') as HTMLElement
+    );
+
+    expect(tasksActions().getByRole('button', { name: /选择测试类型/ })).toHaveTextContent('API');
+    await user.click(tasksActions().getByRole('button', { name: /选择测试类型/ }));
+    await user.click(within(screen.getByRole('dialog', { name: '选择测试类型' })).getByRole(
+      'option',
+      { name: /WEB/ }
+    ));
+    expect(tasksActions().getByRole('button', { name: /选择测试类型/ })).toHaveTextContent('WEB');
+
+    await user.click(screen.getByRole('link', { name: '脚本' }));
+    expect(scriptsActions().getByRole('button', { name: /选择测试类型/ })).toHaveTextContent('API');
+
+    await user.click(within(screen.getByTestId('object-control')).getByRole('button', {
+      name: '选择产品: Alpha'
+    }));
+    await user.click(screen.getByRole('option', { name: /Beta/ }));
+    expect(scriptsActions().getByRole('button', { name: /选择测试类型/ })).toHaveTextContent('API');
+
+    await user.click(screen.getByRole('link', { name: '任务' }));
+    expect(tasksActions().getByRole('button', { name: /选择测试类型/ })).toHaveTextContent('API');
+    await user.click(tasksActions().getByRole('button', { name: /选择测试类型/ }));
+    await user.click(within(screen.getByRole('dialog', { name: '选择测试类型' })).getByRole(
+      'option',
+      { name: /DFX/ }
+    ));
+    expect(tasksActions().getByRole('button', { name: /选择测试类型/ })).toHaveTextContent('DFX');
+
+    await user.click(within(screen.getByTestId('object-control')).getByRole('button', {
+      name: '选择产品: Beta'
+    }));
+    await user.click(screen.getByRole('option', { name: /Alpha/ }));
+    expect(tasksActions().getByRole('button', { name: /选择测试类型/ })).toHaveTextContent('WEB');
+
+    await user.click(screen.getByRole('link', { name: '脚本' }));
+    expect(scriptsActions().getByRole('button', { name: /选择测试类型/ })).toHaveTextContent('API');
+  });
+
+  test('deduplicates Product choices while Settings retains native Object choices', async () => {
     const user = userEvent.setup();
     renderShell('/settings', {
       sutTargets: [
@@ -439,12 +530,14 @@ describe('AppShell', () => {
     });
 
     const control = screen.getByTestId('object-control');
-    expect(control).toHaveTextContent('Twin Scene');
+    expect(control).toHaveTextContent('Twin');
+    expect(control).not.toHaveTextContent('Scene');
     await user.click(within(control).getByRole('button', {
-      name: '选择 Object: Twin Scene'
+      name: '选择产品: Twin'
     }));
-    expect(screen.getByRole('option', { name: /Twin Scene · twin-a/ })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: /Twin Scene · twin-b/ })).toBeInTheDocument();
+    const productPicker = screen.getByRole('dialog', { name: '选择产品' });
+    expect(within(productPicker).getAllByRole('option')).toHaveLength(1);
+    expect(within(productPicker).getByRole('option', { name: /Twin/ })).toBeInTheDocument();
     const settingsControl = screen.getByRole('combobox', { name: '默认 Object' });
     expect(within(settingsControl).getByRole('option', { name: 'Twin Object · twin-a' }))
       .toBeInTheDocument();
@@ -485,10 +578,10 @@ describe('AppShell', () => {
     const settingsObject = screen.getByRole('combobox', { name: '默认 Object' });
     const headerObject = within(screen.getByTestId('object-control')).getByRole('button');
     expect(settingsObject).toHaveValue('object-one');
-    expect(headerObject).toHaveAccessibleName('选择 Object: 产品一 API');
+    expect(headerObject).toHaveAccessibleName('选择产品: 产品一');
 
     await user.selectOptions(settingsObject, 'object-two');
-    expect(headerObject).toHaveAccessibleName('选择 Object: 产品一 API');
+    expect(headerObject).toHaveAccessibleName('选择产品: 产品一');
     expect(settingsObject).toHaveValue('object-two');
     expect(screen.getByRole('textbox', { name: 'API base URL' })).toHaveValue('/object-one-api');
     expect(within(screen.getByRole('region', { name: 'Object 连接' })).getByText('关注'))
@@ -504,7 +597,7 @@ describe('AppShell', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /switch to chinese/i })).toHaveTextContent('中');
     expect(screen.getByRole('combobox', { name: 'Language' })).toHaveValue('en');
-    expect(headerObject).toHaveAccessibleName('Choose Object: 产品二 scene');
+    expect(headerObject).toHaveAccessibleName('Choose product: 产品二');
     expect(storageSpy).toHaveBeenCalledWith(
       CONSOLE_PREFERENCES_STORAGE_KEY,
       JSON.stringify({
@@ -523,55 +616,6 @@ describe('AppShell', () => {
       '/runtime-api/catalog',
       expect.objectContaining({ cache: 'no-cache' })
     );
-  });
-
-  test('the Tasks change-Object affordance focuses the desktop Object selector', async () => {
-    const user = userEvent.setup();
-    const matchMedia = vi.fn().mockReturnValue({
-      matches: false,
-      media: '(max-width: 1329px)',
-      onchange: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      dispatchEvent: vi.fn()
-    });
-    vi.stubGlobal('matchMedia', matchMedia);
-    renderShell('/tasks');
-
-    await user.click(screen.getByRole('button', { name: '更换对象' }));
-
-    expect(matchMedia).toHaveBeenCalledWith('(max-width: 1329px)');
-    expect(within(screen.getByTestId('object-control')).getByRole('button', {
-      name: /选择 Object:/i
-    })).toHaveFocus();
-  });
-
-  test('the Tasks change-Object affordance opens the drawer and focuses its Object selector below 1330px', async () => {
-    const user = userEvent.setup();
-    const matchMedia = vi.fn().mockReturnValue({
-      matches: true,
-      media: '(max-width: 1329px)',
-      onchange: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      dispatchEvent: vi.fn()
-    });
-    vi.stubGlobal('matchMedia', matchMedia);
-    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
-      callback(0);
-      return 1;
-    });
-    renderShell('/tasks');
-
-    await user.click(screen.getByRole('button', { name: '更换对象' }));
-
-    const drawer = await screen.findByRole('dialog', { name: /导航|navigation/i });
-    expect(matchMedia).toHaveBeenCalledWith('(max-width: 1329px)');
-    expect(within(drawer).getByRole('button', { name: /选择 Object:/i })).toHaveFocus();
   });
 
   test('renders the approved Observe hierarchy while preserving its active-task behavior', () => {
@@ -763,17 +807,17 @@ describe('AppShell', () => {
       ]
     });
 
-    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Feature' })).toHaveValue('Shell feature'));
+    await waitFor(() => expect(screen.getByRole('combobox', { name: /特性|Feature/ })).toHaveValue('Shell feature'));
     await waitFor(() => expect(screen.getByRole('button', { name: '启动执行' })).toBeEnabled());
     await user.click(screen.getByRole('button', { name: '启动执行' }));
     expect(await screen.findByRole('heading', { name: '执行观测' })).toBeInTheDocument();
 
     await user.click(within(screen.getByTestId('object-control')).getByRole(
       'button',
-      { name: /选择 Object: High-Code Java scene/i }
+      { name: /选择产品: High-Code Java/i }
     ));
     await user.click(screen.getByRole('option', {
-      name: /High-Code Python API/
+      name: /High-Code Python/
     }));
     expect(screen.getByText('营销系统 Java SUT')).toBeInTheDocument();
     expect(fetchSpy.mock.calls.some(([input]) => (
@@ -785,8 +829,8 @@ describe('AppShell', () => {
 
     const reports = await screen.findByRole('region', { name: '最近报告' });
     expect(within(reports).getByText('task_from_app_shell')).toBeInTheDocument();
-    expect(within(reports).getByText('High-Code Java scene')).toBeInTheDocument();
-    expect(within(reports).queryByText('High-Code Python API')).not.toBeInTheDocument();
+    expect(within(reports).getByText(/High-Code Java Scene/i)).toBeInTheDocument();
+    expect(within(reports).queryByText(/High-Code Python API/i)).not.toBeInTheDocument();
     expect(within(reports).getAllByRole('row')).toHaveLength(2);
     expect(fetchSpy.mock.calls.filter(([input]) => (
       new URL(String(input), 'http://local.test').pathname.includes('/reports')

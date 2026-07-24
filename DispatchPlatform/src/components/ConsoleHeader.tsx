@@ -5,19 +5,11 @@ import {
   useMemo,
   useRef,
   useState,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type Ref
+  type KeyboardEvent as ReactKeyboardEvent
 } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { getCopy } from '../i18n';
-import {
-  groupObjectsByProduct,
-  objectIdentityLabel,
-  objectMatchesSearch,
-  objectOptionLabel,
-  productDisplayLabel,
-  sceneDisplayLabel
-} from '../objectLabels';
+import { productDisplayLabel } from '../objectLabels';
 import type { AuthConfig, Language, SutTarget } from '../types';
 import { AccountMenu } from './AccountMenu';
 import { GradientGhostLogo } from './GradientGhostLogo';
@@ -34,39 +26,29 @@ export const navigationItems = [
 
 export interface ConsoleHeaderProps {
   language: Language;
-  selectedObject: SutTarget;
+  selectedProduct: string;
   objects: readonly SutTarget[];
   auth?: AuthConfig;
   drawerOpen: boolean;
-  objectFocusRequest: number;
   objectMetadata?: Readonly<Record<string, { scriptCount: number }>>;
   catalogState?: 'connecting' | 'live' | 'polling' | 'stale' | 'unavailable' | 'mock';
-  onObjectChange: (id: string) => void;
+  onProductChange: (product: string) => void;
   onLanguageToggle: () => void;
   onDrawerOpenChange: (open: boolean) => void;
 }
 
-interface ObjectControlProps {
+interface ProductControlProps {
   language: Language;
-  selectedObject: SutTarget;
+  selectedProduct: string;
   objects: readonly SutTarget[];
   objectMetadata?: Readonly<Record<string, { scriptCount: number }>>;
   catalogState?: ConsoleHeaderProps['catalogState'];
   testId: string;
-  triggerRef?: Ref<HTMLButtonElement>;
-  onObjectChange: (id: string) => void;
+  onProductChange: (product: string) => void;
 }
 
 const pickerCopy = {
   en: {
-    object: 'Object',
-    chooseObject: 'Choose Object',
-    product: 'Product',
-    scene: 'Scene',
-    search: 'Search products or scenes',
-    results: 'Available Objects',
-    empty: 'No Objects match this search.',
-    removed: 'Removed',
     scripts: (count: number) => `${count} ${count === 1 ? 'script' : 'scripts'}`,
     states: {
       connecting: 'Connecting',
@@ -78,14 +60,6 @@ const pickerCopy = {
     }
   },
   zh: {
-    object: 'Object',
-    chooseObject: '选择 Object',
-    product: '产品',
-    scene: '场景',
-    search: '搜索产品或场景',
-    results: '可用 Object',
-    empty: '没有匹配的 Object。',
-    removed: '已移除',
     scripts: (count: number) => `${count} 个脚本`,
     states: {
       connecting: '正在连接',
@@ -98,16 +72,56 @@ const pickerCopy = {
   }
 } as const;
 
-function ObjectControl({
+interface ProductOption {
+  key: string;
+  nativeProduct: string;
+  displayLabel: string;
+  scriptCount?: number;
+}
+
+function productOptions(
+  objects: readonly SutTarget[],
+  objectMetadata?: Readonly<Record<string, { scriptCount: number }>>
+): ProductOption[] {
+  const options = new Map<string, ProductOption>();
+
+  objects.forEach((object) => {
+    const displayLabel = productDisplayLabel(object.product);
+    const key = displayLabel.toLocaleLowerCase();
+    const scriptCount = objectMetadata?.[object.id]?.scriptCount
+      ?? ('scriptCount' in object && typeof object.scriptCount === 'number'
+        ? object.scriptCount
+        : undefined);
+    const current = options.get(key);
+    if (current) {
+      options.set(key, {
+        ...current,
+        scriptCount: current.scriptCount === undefined && scriptCount === undefined
+          ? undefined
+          : (current.scriptCount ?? 0) + (scriptCount ?? 0)
+      });
+      return;
+    }
+    options.set(key, {
+      key,
+      nativeProduct: object.product,
+      displayLabel,
+      scriptCount
+    });
+  });
+
+  return Array.from(options.values());
+}
+
+function ProductControl({
   language,
-  selectedObject,
+  selectedProduct,
   objects,
   objectMetadata,
   catalogState,
   testId,
-  triggerRef: externalTriggerRef,
-  onObjectChange
-}: ObjectControlProps) {
+  onProductChange
+}: ProductControlProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const controlRef = useRef<HTMLDivElement>(null);
@@ -115,14 +129,25 @@ function ObjectControl({
   const searchRef = useRef<HTMLInputElement>(null);
   const optionRefs = useRef(new Map<string, HTMLButtonElement>());
   const pickerId = useId();
+  const t = getCopy(language);
   const copy = pickerCopy[language];
-  const matchingObjects = useMemo(
-    () => objects.filter((object) => objectMatchesSearch(object, query)),
-    [objects, query]
+  const products = useMemo(
+    () => productOptions(objects, objectMetadata),
+    [objectMetadata, objects]
   );
-  const groups = useMemo(() => groupObjectsByProduct(matchingObjects), [matchingObjects]);
-  const selectedIdentity = objectIdentityLabel(selectedObject);
-  const selectedObjectIsLive = objects.some((object) => object.id === selectedObject.id);
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const matchingProducts = useMemo(
+    () => products.filter((product) => (
+      !normalizedQuery
+      || product.nativeProduct.toLocaleLowerCase().includes(normalizedQuery)
+      || product.displayLabel.toLocaleLowerCase().includes(normalizedQuery)
+    )),
+    [normalizedQuery, products]
+  );
+  const selectedIdentity = productDisplayLabel(selectedProduct);
+  const selectedProductIsLive = products.some(
+    (product) => product.displayLabel === selectedIdentity
+  );
 
   useEffect(() => {
     if (!open) {
@@ -152,16 +177,16 @@ function ObjectControl({
     triggerRef.current?.focus();
   };
 
-  const chooseObject = (id: string) => {
-    onObjectChange(id);
+  const chooseProduct = (product: string) => {
+    onProductChange(product);
     closeAndFocusTrigger();
   };
 
   const focusOption = (index: number) => {
-    const boundedIndex = Math.max(0, Math.min(index, matchingObjects.length - 1));
-    const object = matchingObjects[boundedIndex];
-    if (object) {
-      optionRefs.current.get(object.id)?.focus();
+    const boundedIndex = Math.max(0, Math.min(index, matchingProducts.length - 1));
+    const product = matchingProducts[boundedIndex];
+    if (product) {
+      optionRefs.current.get(product.key)?.focus();
     }
   };
 
@@ -178,8 +203,8 @@ function ObjectControl({
 
   const handleOptionKeyDown = (
     event: ReactKeyboardEvent<HTMLButtonElement>,
-    objectIndex: number,
-    objectId: string
+    productIndex: number,
+    product: string
   ) => {
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -187,23 +212,23 @@ function ObjectControl({
       closeAndFocusTrigger();
     } else if (event.key === 'ArrowDown') {
       event.preventDefault();
-      focusOption(objectIndex + 1);
+      focusOption(productIndex + 1);
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
-      if (objectIndex === 0) {
+      if (productIndex === 0) {
         searchRef.current?.focus();
       } else {
-        focusOption(objectIndex - 1);
+        focusOption(productIndex - 1);
       }
     } else if (event.key === 'Home') {
       event.preventDefault();
       focusOption(0);
     } else if (event.key === 'End') {
       event.preventDefault();
-      focusOption(matchingObjects.length - 1);
+      focusOption(matchingProducts.length - 1);
     } else if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
-      chooseObject(objectId);
+      chooseProduct(product);
     }
   };
 
@@ -219,21 +244,21 @@ function ObjectControl({
       ref={controlRef}
       className={`object-control ${open ? 'is-open' : ''}`}
       data-testid={testId}
+      onBlur={(event) => {
+        const nextTarget = event.relatedTarget;
+        if (open && (!nextTarget || !event.currentTarget.contains(nextTarget))) {
+          setOpen(false);
+          setQuery('');
+        }
+      }}
     >
       <button
-        ref={(element) => {
-          triggerRef.current = element;
-          if (typeof externalTriggerRef === 'function') {
-            externalTriggerRef(element);
-          } else if (externalTriggerRef) {
-            externalTriggerRef.current = element;
-          }
-        }}
+        ref={triggerRef}
         type="button"
         className="object-control__trigger"
         aria-label={[
-          `${copy.chooseObject}: ${selectedIdentity}`,
-          !selectedObjectIsLive ? copy.removed : undefined
+          `${t.chooseProduct}: ${selectedIdentity}`,
+          !selectedProductIsLive ? t.removed : undefined
         ].filter(Boolean).join(' · ')}
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -241,7 +266,7 @@ function ObjectControl({
         onClick={() => setOpen((current) => !current)}
         onKeyDown={handleTriggerKeyDown}
       >
-        <span className="object-control__label">{copy.object}</span>
+        <span className="object-control__label">{t.product}</span>
         <span className="object-control__summary" aria-hidden="true">
           <span className="object-control__identity">
             <strong>{selectedIdentity}</strong>
@@ -255,11 +280,11 @@ function ObjectControl({
           id={pickerId}
           className="object-picker"
           role="dialog"
-          aria-label={copy.chooseObject}
+          aria-label={t.chooseProduct}
         >
           <div className="object-picker__header">
             <div>
-              <strong>{copy.chooseObject}</strong>
+              <strong>{t.chooseProduct}</strong>
               {catalogState && (
                 <span
                   className={`object-picker__state object-picker__state--${catalogState}`}
@@ -272,99 +297,62 @@ function ObjectControl({
             </div>
             <label className="object-picker__search">
               <Search aria-hidden="true" />
-              <span className="sr-only">{copy.search}</span>
+              <span className="sr-only">{t.searchProducts}</span>
               <input
                 ref={searchRef}
                 type="search"
                 value={query}
-                placeholder={copy.search}
+                placeholder={t.searchProducts}
                 onChange={(event) => setQuery(event.target.value)}
                 onKeyDown={handleSearchKeyDown}
               />
             </label>
           </div>
 
-          <div className="object-picker__labels" aria-hidden="true">
-            <span>{copy.product}</span>
-            <span>{copy.scene}</span>
-          </div>
-
-          {groups.length > 0 ? (
-            <div className="object-picker__list" role="listbox" aria-label={copy.results}>
-              {groups.map((group, groupIndex) => {
-                const groupId = `${pickerId}-product-${groupIndex}`;
+          {matchingProducts.length > 0 ? (
+            <div className="object-picker__list" role="listbox" aria-label={t.availableProducts}>
+              {matchingProducts.map((product, productIndex) => {
+                const selected = product.displayLabel === selectedIdentity;
                 return (
-                  <div
-                    key={group.product}
-                    className="object-picker__group"
-                    role="group"
-                    aria-labelledby={groupId}
+                  <button
+                    key={product.key}
+                    ref={(element) => {
+                      if (element) {
+                        optionRefs.current.set(product.key, element);
+                      } else {
+                        optionRefs.current.delete(product.key);
+                      }
+                    }}
+                    type="button"
+                    className={`object-picker__option ${selected ? 'is-selected' : ''}`}
+                    role="option"
+                    aria-selected={selected}
+                    aria-label={[
+                      product.displayLabel,
+                      product.scriptCount !== undefined
+                        ? copy.scripts(product.scriptCount)
+                        : undefined
+                    ].filter(Boolean).join(' · ')}
+                    onClick={() => chooseProduct(product.nativeProduct)}
+                    onKeyDown={(event) => handleOptionKeyDown(
+                      event,
+                      productIndex,
+                      product.nativeProduct
+                    )}
                   >
-                    <div id={groupId} className="object-picker__product">
-                      {productDisplayLabel(group.product)}
-                    </div>
-                    <div className="object-picker__scenes">
-                      {group.objects.map((object) => {
-                        const objectIndex = matchingObjects.findIndex(
-                          (candidate) => candidate.id === object.id
-                        );
-                        const scriptCount = objectMetadata?.[object.id]?.scriptCount
-                          ?? ('scriptCount' in object && typeof object.scriptCount === 'number'
-                            ? object.scriptCount
-                            : undefined);
-                        const selected = object.id === selectedObject.id;
-                        const baseIdentity = objectIdentityLabel(object);
-                        const optionIdentity = objectOptionLabel(object, objects);
-                        const disambiguator = optionIdentity === baseIdentity
-                          ? undefined
-                          : object.id;
-                        return (
-                          <button
-                            key={object.id}
-                            ref={(element) => {
-                              if (element) {
-                                optionRefs.current.set(object.id, element);
-                              } else {
-                                optionRefs.current.delete(object.id);
-                              }
-                            }}
-                            type="button"
-                            className={`object-picker__option ${selected ? 'is-selected' : ''}`}
-                            role="option"
-                            aria-selected={selected}
-                            aria-label={[
-                              optionIdentity,
-                              scriptCount !== undefined
-                                ? copy.scripts(scriptCount)
-                                : undefined
-                            ].filter(Boolean).join(' · ')}
-                            onClick={() => chooseObject(object.id)}
-                            onKeyDown={(event) => handleOptionKeyDown(
-                              event,
-                              objectIndex,
-                              object.id
-                            )}
-                          >
-                            <span className="object-picker__option-copy">
-                              <strong>
-                                {sceneDisplayLabel(object.scene)}
-                                {disambiguator ? ` · ${disambiguator}` : ''}
-                              </strong>
-                              {scriptCount !== undefined && (
-                                <small>{copy.scripts(scriptCount)}</small>
-                              )}
-                            </span>
-                            {selected && <Check aria-hidden="true" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                    <span className="object-picker__option-copy">
+                      <strong>{product.displayLabel}</strong>
+                      {product.scriptCount !== undefined && (
+                        <small>{copy.scripts(product.scriptCount)}</small>
+                      )}
+                    </span>
+                    {selected && <Check aria-hidden="true" />}
+                  </button>
                 );
               })}
             </div>
           ) : (
-            <p className="object-picker__empty" role="status">{copy.empty}</p>
+            <p className="object-picker__empty" role="status">{t.noProductsMatch}</p>
           )}
         </div>
       )}
@@ -374,14 +362,13 @@ function ObjectControl({
 
 export function ConsoleHeader({
   language,
-  selectedObject,
+  selectedProduct,
   objects,
   auth,
   drawerOpen,
-  objectFocusRequest,
   objectMetadata,
   catalogState,
-  onObjectChange,
+  onProductChange,
   onLanguageToggle,
   onDrawerOpenChange
 }: ConsoleHeaderProps) {
@@ -390,10 +377,6 @@ export function ConsoleHeader({
   const drawerRef = useRef<HTMLElement>(null);
   const drawerTriggerRef = useRef<HTMLButtonElement>(null);
   const drawerCloseRef = useRef<HTMLButtonElement>(null);
-  const desktopObjectRef = useRef<HTMLButtonElement>(null);
-  const drawerObjectRef = useRef<HTMLButtonElement>(null);
-  const lastObjectFocusRequestRef = useRef(0);
-  const pendingDrawerObjectFocusRef = useRef(false);
   const languageLabel = language === 'zh' ? t.switchToEnglish : t.switchToChinese;
   const languageText = language === 'zh' ? 'EN' : '中';
 
@@ -449,36 +432,11 @@ export function ConsoleHeader({
     };
   }, [drawerOpen, onDrawerOpenChange]);
 
-  useEffect(() => {
-    if (
-      objectFocusRequest <= 0 ||
-      objectFocusRequest === lastObjectFocusRequestRef.current
-    ) {
-      return;
-    }
-    lastObjectFocusRequestRef.current = objectFocusRequest;
-
-    const isDrawerLayout = window.matchMedia?.('(max-width: 1329px)').matches ?? false;
-    if (!isDrawerLayout) {
-      desktopObjectRef.current?.focus();
-      return;
-    }
-
-    pendingDrawerObjectFocusRef.current = true;
-    onDrawerOpenChange(true);
-  }, [objectFocusRequest, onDrawerOpenChange]);
-
-  useEffect(() => {
-    if (!drawerOpen || !pendingDrawerObjectFocusRef.current) {
-      return;
-    }
-
-    pendingDrawerObjectFocusRef.current = false;
-    window.requestAnimationFrame(() => drawerObjectRef.current?.focus());
-  }, [drawerOpen]);
-
   const navigation = (closeDrawer = false) => (
-    <nav className={closeDrawer ? 'mobile-navigation' : 'desktop-navigation'} aria-label="Primary navigation">
+    <nav
+      className={closeDrawer ? 'mobile-navigation' : 'desktop-navigation'}
+      aria-label={t.primaryNavigation}
+    >
       {navigationItems.map((item) => (
         <NavLink
           key={item.to}
@@ -502,7 +460,7 @@ export function ConsoleHeader({
         inert={drawerOpen}
       >
         <div className="app-header__inner">
-          <NavLink className="brand-link" to="/" aria-label="Console home">
+          <NavLink className="brand-link" to="/" aria-label={t.consoleHome}>
             <GradientGhostLogo />
             <span>Console</span>
           </NavLink>
@@ -511,15 +469,14 @@ export function ConsoleHeader({
 
           <div className="app-header__actions">
             <div className="desktop-object-control">
-              <ObjectControl
+              <ProductControl
                 language={language}
-                selectedObject={selectedObject}
+                selectedProduct={selectedProduct}
                 objects={objects}
                 objectMetadata={objectMetadata}
                 catalogState={catalogState}
                 testId="object-control"
-                triggerRef={desktopObjectRef}
-                onObjectChange={onObjectChange}
+                onProductChange={onProductChange}
               />
             </div>
             <button
@@ -571,15 +528,14 @@ export function ConsoleHeader({
               </button>
             </div>
 
-            <ObjectControl
+            <ProductControl
               language={language}
-              selectedObject={selectedObject}
+              selectedProduct={selectedProduct}
               objects={objects}
               objectMetadata={objectMetadata}
               catalogState={catalogState}
               testId="drawer-object-control"
-              triggerRef={drawerObjectRef}
-              onObjectChange={onObjectChange}
+              onProductChange={onProductChange}
             />
             {navigation(true)}
             <div className="mobile-drawer__controls">

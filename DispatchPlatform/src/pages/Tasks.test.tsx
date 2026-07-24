@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { useState } from 'react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, test, vi } from 'vitest';
+import type { CatalogConnectionState } from '../catalog/CatalogProvider';
 import { resolveRuntimeConfig } from '../config/runtime';
 import type { Feature, Language, Script, SutTarget, TaskCreateResponse } from '../types';
 import { Tasks } from './Tasks';
@@ -12,6 +13,28 @@ import { Tasks } from './Tasks';
 const liveRuntimeConfig = resolveRuntimeConfig({ defaultLanguage: 'zh', enableMockFallback: false });
 const selectedSut = liveRuntimeConfig.sutTargets[0];
 const tasksStyles = readFileSync('src/styles/routes/tasks.css', 'utf8');
+
+function targetForScene(
+  scene: string,
+  {
+    id = `java-${scene.toLocaleLowerCase()}`,
+    product = selectedSut.product,
+    apiBaseUrl = selectedSut.apiBaseUrl
+  }: {
+    id?: string;
+    product?: string;
+    apiBaseUrl?: string;
+  } = {}
+): SutTarget {
+  return {
+    ...selectedSut,
+    id,
+    name: `${product} ${scene}`,
+    product,
+    scene,
+    apiBaseUrl
+  };
+}
 
 const scripts: Script[] = [
   {
@@ -140,8 +163,11 @@ function LocationProbe() {
 function renderTasks(options: {
   language?: Language;
   runtimeConfig?: typeof liveRuntimeConfig;
+  objects?: readonly SutTarget[];
+  objectMetadata?: Readonly<Record<string, { scriptCount: number }>>;
+  catalogState?: CatalogConnectionState;
   onTaskCreated?: (task: TaskCreateResponse) => void;
-  onRequestObjectChange?: () => void;
+  onObjectChange?: (id: string) => void;
 } = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } }
@@ -150,8 +176,11 @@ function renderTasks(options: {
     language: options.language ?? 'zh',
     selectedSut,
     runtimeConfig: options.runtimeConfig ?? liveRuntimeConfig,
+    objects: options.objects ?? options.runtimeConfig?.sutTargets ?? liveRuntimeConfig.sutTargets,
+    objectMetadata: options.objectMetadata,
+    catalogState: options.catalogState,
     onTaskCreated: options.onTaskCreated ?? vi.fn(),
-    onRequestObjectChange: options.onRequestObjectChange ?? vi.fn()
+    onObjectChange: options.onObjectChange ?? vi.fn()
   };
 
   return render(
@@ -179,54 +208,86 @@ function postPayload(fetchSpy: ReturnType<typeof mockTaskApi>) {
   return JSON.parse(String(call?.[1]?.body));
 }
 
+function getTasksTestTypeTrigger() {
+  const actions = document.querySelector<HTMLElement>('.tasks-page-actions');
+  if (!actions) {
+    throw new Error('Tasks page actions were not rendered.');
+  }
+  return within(actions).getByRole('button', { name: /选择测试类型/ });
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
 describe('approved R8 Tasks composition', () => {
+  test('keeps backend English error details out of Chinese error states', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(
+      new Response(JSON.stringify({
+        success: false,
+        message: 'English backend detail',
+        error_code: 'BACKEND_DOWN'
+      }), {
+        status: 503,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    ));
+
+    renderTasks();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(
+      '无法加载当前上下文，请检查产品、测试类型或接口连接。 (BACKEND_DOWN)'
+    );
+    expect(alert).not.toHaveTextContent('English backend detail');
+  });
+
   test('renders the permanent one-page hierarchy and removes the queue, tabs, and wizard UI', async () => {
     mockTaskApi();
     const { container } = renderTasks();
 
     expect(screen.getByRole('heading', { level: 1, name: '任务调度' })).toBeInTheDocument();
-    expect(screen.getByText('从测试对象到脚本范围，用清晰的三步流程发起可靠执行。')).toBeInTheDocument();
+    expect(screen.getByText(
+      '从产品与测试类型到脚本范围，用清晰的三步流程发起可靠执行。'
+    )).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '创建任务' })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '配置新任务' })).toBeInTheDocument();
 
     const steps = screen.getByRole('list', { name: '任务配置步骤' });
-    expect(within(steps).getByText('Object')).toBeInTheDocument();
-    expect(within(steps).getByText('Trigger')).toBeInTheDocument();
-    expect(within(steps).getByText('Scope')).toBeInTheDocument();
+    expect(within(steps).getByText('产品 与 测试类型')).toBeInTheDocument();
+    expect(within(steps).getByText('触发方式')).toBeInTheDocument();
+    expect(within(steps).getByText('脚本范围')).toBeInTheDocument();
 
     const objectSummary = screen.getByTestId('task-context-summary');
-    expect(objectSummary).toHaveTextContent('High-Code Java scene');
+    expect(within(objectSummary).getByText('High-Code Java')).toBeInTheDocument();
+    expect(within(objectSummary).getByText('已选测试类型 · 场景化')).toBeInTheDocument();
     expect(objectSummary).not.toHaveTextContent('高码java');
-    expect(objectSummary).not.toHaveTextContent('场景');
+    expect(objectSummary).not.toHaveTextContent('SELECTED OBJECT');
     expect(objectSummary).not.toHaveTextContent(selectedSut.version);
-    expect(within(objectSummary).getByRole('button', { name: '更换对象' })).toBeInTheDocument();
+    expect(within(objectSummary).getByRole('button', { name: '选择测试类型' })).toBeInTheDocument();
 
     const modeSelector = screen.getByRole('radiogroup', { name: '触发方式' });
-    expect(within(modeSelector).getByRole('radio', { name: '按 Feature' })).toBeChecked();
-    expect(within(modeSelector).getByRole('radio', { name: '按 Level' })).toBeInTheDocument();
+    expect(within(modeSelector).getByRole('radio', { name: '按特性' })).toBeChecked();
+    expect(within(modeSelector).getByRole('radio', { name: '按级别' })).toBeInTheDocument();
     expect(within(modeSelector).getByRole('radio', { name: '选择脚本' })).toBeInTheDocument();
     expect(within(modeSelector).getByRole('radio', { name: '整个场景' })).toBeInTheDocument();
     expect(Array.from(modeSelector.querySelectorAll('label > span')).map((item) => item.textContent)).toEqual([
-      'Feature',
-      'Level',
-      'Scripts',
-      'Scene',
+      '特性',
+      '等级',
+      '脚本',
+      '场景',
     ]);
-    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Feature' })).toHaveValue('Save API'));
+    await waitFor(() => expect(screen.getByRole('combobox', { name: '特性' })).toHaveValue('Save API'));
     await waitFor(() => expect(screen.getByLabelText('执行版本')).toHaveValue('release1'));
     expect(screen.getByRole('region', { name: '启动摘要' }))
-      .toHaveTextContent('High-Code Java scene');
+      .toHaveTextContent('High-Code Java · 场景化');
 
-    expect(screen.getByRole('heading', { name: '脚本快照 · READ-ONLY SELECTION' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '脚本快照 · 只读选择' })).toBeInTheDocument();
     expect(screen.getByRole('searchbox', { name: '搜索脚本' })).toBeInTheDocument();
     expect(await screen.findByRole('table', { name: '脚本快照' })).toBeInTheDocument();
     expect(await screen.findByText('save_api_test')).toBeInTheDocument();
     const launchSummary = screen.getByRole('region', { name: '启动摘要' });
-    expect(within(launchSummary).getByText('测试对象')).toBeInTheDocument();
+    expect(within(launchSummary).getByText('产品与测试类型')).toBeInTheDocument();
     expect(within(launchSummary).getByText('触发方式')).toBeInTheDocument();
     expect(within(launchSummary).getByText('执行配置')).toBeInTheDocument();
     expect(within(launchSummary).getByText('执行与报告版本')).toBeInTheDocument();
@@ -238,7 +299,7 @@ describe('approved R8 Tasks composition', () => {
     expect(screen.queryByRole('heading', { name: '执行护栏' })).not.toBeInTheDocument();
     expect(within(screen.getByRole('table', { name: '脚本快照' })).getAllByRole('columnheader').map(
       (header) => header.textContent
-    )).toEqual(['脚本', 'Feature', '级别', '路径']);
+    )).toEqual(['脚本', '特性', '等级', '路径']);
     expect(container.querySelector('.tasks-config-heading p')).not.toBeInTheDocument();
     expect(container.querySelector('.tasks-ready-pill > span')).not.toBeInTheDocument();
     expect(container.querySelector('.tasks-guardrail-card')).not.toBeInTheDocument();
@@ -252,16 +313,127 @@ describe('approved R8 Tasks composition', () => {
     expect(screen.queryByRole('button', { name: /上一步|下一步/ })).not.toBeInTheDocument();
   });
 
-  test('removes the inert page action while Change Object still delegates to the shell', async () => {
+  test('opens the page-local Test Type selector from the context summary', async () => {
     const user = userEvent.setup();
-    const onRequestObjectChange = vi.fn();
     mockTaskApi();
-    renderTasks({ onRequestObjectChange });
+    renderTasks();
 
     expect(screen.queryByRole('button', { name: '创建任务' })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: '更换对象' }));
-    expect(onRequestObjectChange).toHaveBeenCalledTimes(1);
+    await user.click(within(screen.getByTestId('task-context-summary')).getByRole(
+      'button',
+      { name: '选择测试类型' }
+    ));
+    expect(screen.getByRole('dialog', { name: '选择测试类型' })).toBeInTheDocument();
+  });
+
+  test('shows only the current product test types with counts and supports listbox keyboard selection', async () => {
+    const user = userEvent.setup();
+    const apiTarget = targetForScene('API');
+    const webTarget = targetForScene('WEB');
+    const sceneTarget = selectedSut;
+    const otherProductTarget = targetForScene('DFX', {
+      id: 'python-dfx',
+      product: '高码python'
+    });
+    const objects = [sceneTarget, otherProductTarget, webTarget, apiTarget];
+    const onObjectChange = vi.fn();
+    mockTaskApi();
+    renderTasks({
+      objects,
+      onObjectChange,
+      objectMetadata: {
+        [apiTarget.id]: { scriptCount: 12 },
+        [webTarget.id]: { scriptCount: 0 },
+        [sceneTarget.id]: { scriptCount: 4 },
+        [otherProductTarget.id]: { scriptCount: 99 }
+      }
+    });
+
+    const trigger = getTasksTestTypeTrigger();
+    trigger.focus();
+    await user.keyboard('{ArrowDown}');
+
+    const dialog = screen.getByRole('dialog', { name: '选择测试类型' });
+    const listbox = within(dialog).getByRole('listbox', { name: '可用测试类型' });
+    const options = within(listbox).getAllByRole('option');
+    expect(options.map((option) => option.textContent)).toEqual([
+      'API12 个脚本',
+      'WEB0 个脚本',
+      '场景化4 个脚本'
+    ]);
+    expect(within(dialog).getByRole('heading', { name: 'High-Code Java' })).toBeInTheDocument();
+    expect(within(listbox).queryByText('DFX')).not.toBeInTheDocument();
+    expect(options[2]).toHaveAttribute('aria-selected', 'true');
+    expect(options[0]).toHaveFocus();
+
+    await user.keyboard('{ArrowDown}{Enter}');
+
+    expect(onObjectChange).toHaveBeenCalledWith(webTarget.id);
+    await waitFor(() => expect(trigger).toHaveFocus());
+    expect(screen.queryByRole('dialog', { name: '选择测试类型' })).not.toBeInTheDocument();
+  });
+
+  test('reflects a newly published test type from the live objects prop without remounting', async () => {
+    const user = userEvent.setup();
+    const apiTarget = targetForScene('API');
+    const dfxTarget = targetForScene('DFX');
+    mockTaskApi();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    function LiveCatalogHarness() {
+      const [objects, setObjects] = useState<readonly SutTarget[]>([apiTarget]);
+      return (
+        <MemoryRouter initialEntries={['/tasks']}>
+          <button type="button" onClick={() => setObjects([apiTarget, dfxTarget])}>
+            Publish DFX
+          </button>
+          <Tasks
+            language="zh"
+            selectedSut={apiTarget}
+            runtimeConfig={{
+              ...liveRuntimeConfig,
+              sutTargets: [apiTarget]
+            }}
+            objects={objects}
+            objectMetadata={{ [apiTarget.id]: { scriptCount: 2 } }}
+            catalogState="live"
+            onTaskCreated={vi.fn()}
+            onObjectChange={vi.fn()}
+          />
+        </MemoryRouter>
+      );
+    }
+
+    render(
+      <QueryClientProvider client={client}>
+        <LiveCatalogHarness />
+      </QueryClientProvider>
+    );
+
+    await user.click(getTasksTestTypeTrigger());
+    expect(screen.queryByRole('option', { name: /DFX/ })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('button', { name: 'Publish DFX' }));
+    await user.click(getTasksTestTypeTrigger());
+
+    expect(screen.getByRole('option', { name: 'DFX' })).toBeInTheDocument();
+    expect(screen.getByText('实时')).toBeInTheDocument();
+  });
+
+  test('keeps the Test Type action before catalog refresh in the responsive page action row', () => {
+    const tasksSource = readFileSync('src/pages/Tasks.tsx', 'utf8');
+    const actionStart = tasksSource.indexOf('className="tasks-page-actions"');
+    const actionEnd = tasksSource.indexOf('</div>', actionStart);
+    const actionSource = tasksSource.slice(actionStart, actionEnd);
+
+    expect(actionStart).toBeGreaterThanOrEqual(0);
+    expect(actionSource.indexOf('<TestTypeControl')).toBeLessThan(
+      actionSource.indexOf('<CatalogSyncStatus')
+    );
+    expect(tasksStyles).toMatch(
+      /\.tasks-page-actions\s*\{[^}]*display:\s*flex;[^}]*gap:\s*12px;/
+    );
   });
 
   test('filters the fetched script snapshot locally without issuing a search request', async () => {
@@ -324,7 +496,7 @@ describe('approved R8 Tasks composition', () => {
     });
     renderTasks();
 
-    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Feature' })).toHaveValue('Feature A'));
+    await waitFor(() => expect(screen.getByRole('combobox', { name: '特性' })).toHaveValue('Feature A'));
     await user.click(screen.getByRole('radio', { name: '整个场景' }));
 
     const table = screen.getByRole('table', { name: '脚本快照' });
@@ -376,7 +548,7 @@ describe('approved R8 Tasks composition', () => {
     const summary = screen.getByRole('region', { name: 'Launch summary' });
     await waitFor(() => expect(within(summary).getByTestId('launch-estimate')).toHaveTextContent('About 3–5 min'));
     for (const label of [
-      'Object',
+      'Product and test type',
       'Trigger mode',
       'Execution profile',
       'Execution & report version',
@@ -492,7 +664,8 @@ describe('approved R8 Tasks composition', () => {
             selectedSut={target}
             runtimeConfig={runtimeConfig}
             onTaskCreated={vi.fn()}
-            onRequestObjectChange={vi.fn()}
+            objects={runtimeConfig.sutTargets}
+            onObjectChange={vi.fn()}
           />
         </MemoryRouter>
       );
@@ -504,12 +677,12 @@ describe('approved R8 Tasks composition', () => {
       </QueryClientProvider>
     );
 
-    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Feature' })).toHaveValue('Endpoint A'));
+    await waitFor(() => expect(screen.getByRole('combobox', { name: '特性' })).toHaveValue('Endpoint A'));
     await userEvent.click(screen.getByRole('button', { name: 'Switch endpoint' }));
     await waitFor(() => expect(fetchSpy.mock.calls.some(([input]) => (
       new URL(String(input), 'http://local.test').pathname === '/api-two/features'
     ))).toBe(true));
-    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Feature' })).toHaveValue('Endpoint B'));
+    await waitFor(() => expect(screen.getByRole('combobox', { name: '特性' })).toHaveValue('Endpoint B'));
   });
 
   test('encodes the approved spacious desktop Tasks geometry', () => {
@@ -534,6 +707,69 @@ describe('approved R8 Tasks composition', () => {
 });
 
 describe('task creation contracts', () => {
+  test('switches discovery and the create payload to the exact native product and scene', async () => {
+    const user = userEvent.setup();
+    const apiTarget = targetForScene('API');
+    const webTarget = targetForScene('WEB');
+    const runtimeConfig = resolveRuntimeConfig({
+      defaultLanguage: 'zh',
+      enableMockFallback: false,
+      sutTargets: [apiTarget, webTarget]
+    });
+    const fetchSpy = mockTaskApi({ taskId: 'task_web', triggerType: 'feature' });
+    const onTaskCreated = vi.fn();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    function SwitchingHarness() {
+      const [target, setTarget] = useState(apiTarget);
+      return (
+        <MemoryRouter initialEntries={['/tasks']}>
+          <Tasks
+            language="zh"
+            selectedSut={target}
+            runtimeConfig={runtimeConfig}
+            objects={runtimeConfig.sutTargets}
+            objectMetadata={{
+              [apiTarget.id]: { scriptCount: 2 },
+              [webTarget.id]: { scriptCount: 0 }
+            }}
+            onTaskCreated={onTaskCreated}
+            onObjectChange={(id) => {
+              const next = runtimeConfig.sutTargets.find((candidate) => candidate.id === id);
+              if (next) {
+                setTarget(next);
+              }
+            }}
+          />
+        </MemoryRouter>
+      );
+    }
+
+    render(
+      <QueryClientProvider client={client}>
+        <SwitchingHarness />
+      </QueryClientProvider>
+    );
+
+    await user.click(getTasksTestTypeTrigger());
+    await user.click(screen.getByRole('option', { name: 'WEB 0 个脚本' }));
+    await waitFor(() => expect(fetchSpy.mock.calls.some(([input]) => {
+      const url = new URL(String(input), 'http://local.test');
+      return url.pathname.endsWith('/features')
+        && url.searchParams.get('product') === webTarget.product
+        && url.searchParams.get('scene') === webTarget.scene;
+    })).toBe(true));
+    await user.click(await screen.findByRole('button', { name: '启动执行' }));
+
+    await waitFor(() => expect(onTaskCreated).toHaveBeenCalledTimes(1));
+    expect(postPayload(fetchSpy)).toEqual({
+      product: webTarget.product,
+      scene: 'WEB',
+      feature: 'Save API',
+      version: 'release1'
+    });
+  });
+
   test('creates by Feature with only the documented request fields and navigates to Observe', async () => {
     const user = userEvent.setup();
     const onTaskCreated = vi.fn();
@@ -566,8 +802,8 @@ describe('task creation contracts', () => {
     const fetchSpy = mockTaskApi({ taskId: 'task_level', triggerType: 'level' });
     renderTasks({ onTaskCreated });
 
-    await user.click(screen.getByRole('radio', { name: '按 Level' }));
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Level' }), 'L1');
+    await user.click(screen.getByRole('radio', { name: '按级别' }));
+    await user.selectOptions(screen.getByRole('combobox', { name: '等级' }), 'L1');
     await user.click(screen.getByRole('button', { name: '启动执行' }));
 
     await waitFor(() => expect(onTaskCreated).toHaveBeenCalledTimes(1));

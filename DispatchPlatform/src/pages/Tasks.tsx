@@ -1,5 +1,12 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent
+} from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ApiError,
@@ -11,6 +18,7 @@ import {
 } from '../api/client';
 import {
   useOptionalCatalog,
+  type CatalogConnectionState,
   type CatalogQueryData
 } from '../catalog/CatalogProvider';
 import {
@@ -20,9 +28,14 @@ import {
 } from '../catalog/model';
 import { CatalogSyncStatus } from '../components/CatalogSyncStatus';
 import { PageHeader } from '../components/PageHeader';
+import {
+  TestTypeControl,
+  testTypeDisplayLabel,
+  type TestTypeControlHandle
+} from '../components/TestTypeControl';
 import { mockFeatures, mockScripts } from '../data/mockData';
 import { getCopy } from '../i18n';
-import { objectIdentityLabel, sceneDisplayLabel } from '../objectLabels';
+import { productDisplayLabel } from '../objectLabels';
 import type {
   Feature,
   CatalogObject,
@@ -42,8 +55,11 @@ interface TasksProps {
   runtimeConfig: RuntimeConfig;
   catalogObject?: CatalogObject;
   catalogSelectionValid?: boolean;
+  objects: readonly SutTarget[];
+  objectMetadata?: Readonly<Record<string, { scriptCount: number }>>;
+  catalogState?: CatalogConnectionState;
   onTaskCreated: (task: TaskCreateResponse) => void;
-  onRequestObjectChange: () => void;
+  onObjectChange: (id: string) => void;
 }
 
 const emptyFeatures: Feature[] = [];
@@ -83,8 +99,15 @@ function createFallbackTask(payload: TaskCreateRequest, triggerType: TriggerType
   };
 }
 
-function getRequestErrorMessage(error: unknown, fallback: string): string {
+function getRequestErrorMessage(
+  error: unknown,
+  fallback: string,
+  language: Language
+): string {
   if (error instanceof ApiError) {
+    if (language === 'zh') {
+      return error.code ? `${fallback} (${error.code})` : fallback;
+    }
     return error.code ? `${error.message} (${error.code})` : error.message;
   }
 
@@ -97,12 +120,16 @@ export function Tasks({
   runtimeConfig,
   catalogObject,
   catalogSelectionValid = true,
+  objects,
+  objectMetadata,
+  catalogState,
   onTaskCreated,
-  onRequestObjectChange
+  onObjectChange
 }: TasksProps) {
   const t = getCopy(language);
   const navigate = useNavigate();
   const catalog = useOptionalCatalog();
+  const testTypeControlRef = useRef<TestTypeControlHandle>(null);
   const [mode, setMode] = useState<TriggerType>('feature');
   const [selectedFeature, setSelectedFeature] = useState('');
   const [selectedLevel, setSelectedLevel] = useState('L1');
@@ -117,7 +144,9 @@ export function Tasks({
   );
   const [pendingCatalogUpdate, setPendingCatalogUpdate] = useState<PendingCatalogUpdate>();
   const resolvedApiBaseUrl = selectedSut.apiBaseUrl || runtimeConfig.apiBaseUrl;
-  const selectedObjectLabel = objectIdentityLabel(selectedSut);
+  const selectedObjectLabel = `${productDisplayLabel(selectedSut.product)} · ${
+    testTypeDisplayLabel(selectedSut.scene, language)
+  }`;
   const targetIdentity = useMemo(
     () => ({
       id: selectedSut.id,
@@ -467,7 +496,20 @@ export function Tasks({
       <PageHeader
         title={t.tasks}
         subtitle={t.tasksSubtitle}
-        action={catalog ? <CatalogSyncStatus language={language} /> : undefined}
+        action={(
+          <div className="tasks-page-actions">
+            <TestTypeControl
+              ref={testTypeControlRef}
+              language={language}
+              selectedObject={selectedSut}
+              objects={objects}
+              objectMetadata={objectMetadata}
+              catalogState={catalogState}
+              onObjectChange={onObjectChange}
+            />
+            {catalog ? <CatalogSyncStatus language={language} /> : null}
+          </div>
+        )}
       />
 
       <div className="tasks-layout">
@@ -483,25 +525,34 @@ export function Tasks({
             <ol className="tasks-steps" aria-label={t.taskStepsLabel}>
               <li>
                 <span className="tasks-step-number">1</span>
-                <span><strong>Object</strong><small>{t.objectStepDescription}</small></span>
+                <span>
+                  <strong>
+                    {t.product} {language === 'zh' ? '与' : '&'} {t.testType}
+                  </strong>
+                  <small>{t.objectStepDescription}</small>
+                </span>
               </li>
               <li>
                 <span className="tasks-step-number">2</span>
-                <span><strong>Trigger</strong><small>{t.triggerStepDescription}</small></span>
+                <span><strong>{t.triggerMode}</strong><small>{t.triggerStepDescription}</small></span>
               </li>
               <li>
                 <span className="tasks-step-number">3</span>
-                <span><strong>Scope</strong><small>{t.scopeStepDescription}</small></span>
+                <span>
+                  <strong>{language === 'zh' ? '脚本范围' : 'Script scope'}</strong>
+                  <small>{t.scopeStepDescription}</small>
+                </span>
               </li>
             </ol>
 
             <div className="tasks-object-summary" data-testid="task-context-summary">
               <div>
-                <span>{t.selectedObject}</span>
-                <strong>{selectedObjectLabel}</strong>
+                <span>{t.selectedProduct}</span>
+                <strong>{productDisplayLabel(selectedSut.product)}</strong>
+                <small>{t.selectedTestType} · {testTypeDisplayLabel(selectedSut.scene, language)}</small>
               </div>
-              <button type="button" onClick={onRequestObjectChange}>
-                {t.changeObject}
+              <button type="button" onClick={() => testTypeControlRef.current?.open()}>
+                {t.selectTestType}
                 <span aria-hidden="true">→</span>
               </button>
             </div>
@@ -544,10 +595,10 @@ export function Tasks({
               <fieldset className="tasks-segmented" role="radiogroup" aria-label={t.taskModeLabel}>
                 <legend className="sr-only">{t.taskModeLabel}</legend>
                 {([
-                  ['feature', t.byFeature, 'Feature'],
-                  ['level', t.byLevel, 'Level'],
-                  ['scripts', t.byScripts, 'Scripts'],
-                  ['scene', t.entireScene, 'Scene']
+                  ['feature', t.byFeature, t.feature],
+                  ['level', t.byLevel, t.level],
+                  ['scripts', t.byScripts, t.script],
+                  ['scene', t.entireScene, language === 'zh' ? '场景' : 'Scene']
                 ] as const).map(([value, label, visibleLabel]) => (
                   <label key={value}>
                     <input
@@ -569,7 +620,7 @@ export function Tasks({
             <div className="tasks-fields">
               {requiresFeature ? (
                 <label className="tasks-field">
-                  <span>Feature</span>
+                  <span>{t.feature}</span>
                   <select value={selectedFeature} onChange={(event) => setSelectedFeature(event.target.value)}>
                     {features.map((feature) => (
                       <option key={feature.id} value={feature.name}>{feature.name}</option>
@@ -578,7 +629,7 @@ export function Tasks({
                 </label>
               ) : mode === 'level' ? (
                 <label className="tasks-field">
-                  <span>Level</span>
+                  <span>{t.level}</span>
                   <select value={selectedLevel} onChange={(event) => setSelectedLevel(event.target.value)}>
                     {levels.map((level) => <option key={level} value={level}>{level}</option>)}
                   </select>
@@ -587,7 +638,9 @@ export function Tasks({
                 <label className="tasks-field">
                   <span>{language === 'zh' ? '场景' : 'Scene'}</span>
                   <select value={selectedSut.scene} disabled>
-                    <option value={selectedSut.scene}>{sceneDisplayLabel(selectedSut.scene)}</option>
+                    <option value={selectedSut.scene}>
+                      {testTypeDisplayLabel(selectedSut.scene, language)}
+                    </option>
                   </select>
                 </label>
               )}
@@ -616,7 +669,8 @@ export function Tasks({
               <p className="tasks-inline-error" role="alert">
                 {getRequestErrorMessage(
                   featuresQuery.error ?? scriptQuery.error ?? versionsQuery.error,
-                  t.contextLoadFailed
+                  t.contextLoadFailed,
+                  language
                 )}
               </p>
             )}
@@ -640,10 +694,10 @@ export function Tasks({
               <table aria-label={t.scriptSnapshot}>
                 <thead>
                   <tr>
-                    <th>{language === 'zh' ? '脚本' : 'Script'}</th>
-                    <th>Feature</th>
-                    <th>{language === 'zh' ? '级别' : 'Level'}</th>
-                    <th>{language === 'zh' ? '路径' : 'Path'}</th>
+                    <th>{t.script}</th>
+                    <th>{t.feature}</th>
+                    <th>{t.level}</th>
+                    <th>{t.path}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -724,7 +778,7 @@ export function Tasks({
                   ? language === 'zh'
                     ? '目录在启动前发生变化。请应用最新目录并核对脚本选择。'
                     : 'The catalog changed before launch. Apply the latest catalog and review the script selection.'
-                  : getRequestErrorMessage(creation.error, t.taskCreateFailed)}
+                  : getRequestErrorMessage(creation.error, t.taskCreateFailed, language)}
               </p>
             )}
             <button

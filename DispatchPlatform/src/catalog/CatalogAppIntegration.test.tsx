@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, test, vi } from 'vitest';
@@ -84,6 +84,35 @@ function response(body: unknown, init: ResponseInit = {}) {
   }));
 }
 
+class MockEventSource {
+  static instances: MockEventSource[] = [];
+
+  onopen: ((event: Event) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+  private listeners = new Map<string, Set<EventListener>>();
+
+  addEventListener(type: string, listener: EventListener) {
+    const listeners = this.listeners.get(type) ?? new Set<EventListener>();
+    listeners.add(listener);
+    this.listeners.set(type, listeners);
+  }
+
+  removeEventListener(type: string, listener: EventListener) {
+    this.listeners.get(type)?.delete(listener);
+  }
+
+  close() {}
+
+  constructor(_url: string | URL, _init?: EventSourceInit) {
+    MockEventSource.instances.push(this);
+  }
+
+  emit(type: string, data: unknown) {
+    const event = new MessageEvent(type, { data: JSON.stringify(data) });
+    this.listeners.get(type)?.forEach((listener) => listener(event));
+  }
+}
+
 function renderCatalogApp(
   runtimeConfig: RuntimeConfig,
   initialPath = '/scripts'
@@ -101,6 +130,7 @@ function renderCatalogApp(
 }
 
 afterEach(() => {
+  MockEventSource.instances = [];
   window.localStorage.clear();
   document.documentElement.classList.remove('settings-reduced-motion', 'lang-zh', 'lang-en');
   vi.restoreAllMocks();
@@ -108,6 +138,89 @@ afterEach(() => {
 });
 
 describe('live catalog application integration', () => {
+  test('adds a newly uploaded Product on catalog SSE without exposing its scenarios globally', async () => {
+    const user = userEvent.setup();
+    const completeCatalog = fullCatalog('catalog-sse-r2');
+    const initialObjects = completeCatalog.objects.filter(
+      (object) => object.product !== '合一版本'
+    );
+    const initialCatalog: CatalogSnapshot = {
+      ...completeCatalog,
+      revision: 'catalog-sse-r1',
+      products: completeCatalog.products.filter((product) => product !== '合一版本'),
+      objects: initialObjects,
+      totals: {
+        products: 2,
+        objects: initialObjects.length,
+        features: initialObjects.length,
+        scripts: initialObjects.length
+      }
+    };
+    let currentCatalog = initialCatalog;
+    const firstObject = initialCatalog.objects[0];
+    vi.stubGlobal('EventSource', MockEventSource);
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = new URL(String(input), 'http://local.test');
+      if (url.pathname === '/runtime-api/catalog') {
+        return response(currentCatalog, {
+          headers: { ETag: `"${currentCatalog.revision}"` }
+        });
+      }
+      if (url.pathname === '/runtime-api/versions') {
+        return response({
+          success: true,
+          default_version: 'release1',
+          versions: [{
+            code: 'release1',
+            name: 'Release 1',
+            description: 'Stable test batch',
+            created_at: '2026-07-01T00:00:00Z',
+            is_default: true
+          }]
+        });
+      }
+      return Promise.reject(new Error(`Unexpected request: ${url.pathname}`));
+    });
+    const runtimeConfig = resolveRuntimeConfig({
+      apiBaseUrl: '/runtime-api',
+      defaultLanguage: 'en',
+      enableMockFallback: false,
+      sutTargets: [{
+        id: firstObject.id,
+        name: 'Catalog Object',
+        product: firstObject.product,
+        scene: firstObject.scene,
+        version: 'live',
+        apiBaseUrl: '/runtime-api',
+        status: 'healthy'
+      }]
+    });
+
+    renderCatalogApp(runtimeConfig);
+
+    const productTrigger = await screen.findByRole('button', {
+      name: 'Choose product: High-Code Java'
+    });
+    await user.click(productTrigger);
+    const picker = screen.getByRole('dialog', { name: 'Choose product' });
+    expect(within(picker).getAllByRole('option')).toHaveLength(2);
+    expect(within(picker).queryByText('Unified Version')).not.toBeInTheDocument();
+
+    currentCatalog = completeCatalog;
+    act(() => {
+      MockEventSource.instances[0].emit('catalog.changed', {
+        revision: completeCatalog.revision
+      });
+    });
+
+    expect(await within(picker).findByRole('option', {
+      name: 'Unified Version · 4 scripts'
+    })).toBeInTheDocument();
+    expect(within(picker).getAllByRole('option')).toHaveLength(3);
+    expect(within(picker).queryByText(/API|WEB|DFX|Scene/)).not.toBeInTheDocument();
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
   test('initializes the first Feature when Tasks mounts after the catalog is already cached', async () => {
     const user = userEvent.setup();
     const catalog = fullCatalog('catalog-preloaded-before-tasks');
@@ -162,7 +275,7 @@ describe('live catalog application integration', () => {
       .toBeEnabled());
   });
 
-  test('migrates a legacy Object id, renders all 12 Objects without fanout, and shares them with Observe and Settings', async () => {
+  test('migrates a legacy Object id, projects three Products without fanout, and keeps native Objects in Settings', async () => {
     const user = userEvent.setup();
     const catalog = fullCatalog();
     const legacyTarget = {
@@ -214,17 +327,18 @@ describe('live catalog application integration', () => {
     const headerControl = screen.getByTestId('object-control');
     const headerTrigger = within(headerControl).getByRole('button');
     await waitFor(() => expect(headerTrigger).toHaveAccessibleName(
-      'Choose Object: High-Code Java API'
+      'Choose product: High-Code Java'
     ));
     await user.click(headerTrigger);
-    const picker = screen.getByRole('dialog', { name: 'Choose Object' });
-    expect(within(picker).getAllByRole('option')).toHaveLength(12);
+    const picker = screen.getByRole('dialog', { name: 'Choose product' });
+    expect(within(picker).getAllByRole('option')).toHaveLength(3);
     expect(within(picker).getByRole('option', {
-      name: 'High-Code Java API · 1 script'
+      name: 'High-Code Java · 4 scripts'
     })).toHaveAttribute('aria-selected', 'true');
     expect(within(picker).getByRole('option', {
-      name: 'Unified Version scene · 1 script'
+      name: 'Unified Version · 4 scripts'
     })).toBeInTheDocument();
+    expect(within(picker).queryByText(/API|WEB|DFX|Scene/)).not.toBeInTheDocument();
     await user.keyboard('{Escape}');
     expect(JSON.parse(
       window.localStorage.getItem(CONSOLE_PREFERENCES_STORAGE_KEY) ?? '{}'
@@ -240,7 +354,7 @@ describe('live catalog application integration', () => {
 
     await waitFor(() => expect(
       screen.getAllByTestId('script-summary-value').map((item) => item.textContent)
-    ).toEqual(['12', '1', '1', '12']));
+    ).toEqual(['1', '1', '1', '0']));
     expect(screen.getByText('catalog_script_0_base')).toBeInTheDocument();
     expect(fetchSpy.mock.calls.some(([input]) => (
       /\/(?:features|scripts)$/.test(new URL(String(input), 'http://local.test').pathname)
@@ -263,7 +377,7 @@ describe('live catalog application integration', () => {
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => expect(headerTrigger).toHaveAccessibleName(
-      'Choose Object: High-Code Python DFX'
+      'Choose product: High-Code Python'
     ));
     expect(JSON.parse(
       window.localStorage.getItem(CONSOLE_PREFERENCES_STORAGE_KEY) ?? '{}'
@@ -274,7 +388,7 @@ describe('live catalog application integration', () => {
     });
   });
 
-  test('retains an ad-hoc selected Object as a read-only snapshot when the backend removes it', async () => {
+  test('falls back within the selected Product when a page-local Test Type is removed', async () => {
     const user = userEvent.setup();
     let currentCatalog = fullCatalog('catalog-before-removal');
     const savedDefault = currentCatalog.objects[0];
@@ -321,13 +435,37 @@ describe('live catalog application integration', () => {
     const headerControl = screen.getByTestId('object-control');
     const headerTrigger = within(headerControl).getByRole('button');
     await waitFor(() => expect(headerTrigger).toHaveAccessibleName(
-      'Choose Object: High-Code Java API'
+      'Choose product: High-Code Java'
     ));
     await user.click(headerTrigger);
     await user.click(screen.getByRole('option', {
-      name: 'High-Code Python DFX · 1 script'
+      name: 'High-Code Python · 4 scripts'
     }));
+    const testTypeTrigger = await screen.findByRole('button', {
+      name: /Select test type API/
+    });
+    await user.click(testTypeTrigger);
+    await user.click(within(screen.getByRole('dialog', { name: 'Select test type' })).getByRole(
+      'option',
+      { name: /DFX/ }
+    ));
     expect(await screen.findByText('catalog_script_6_base')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('link', { name: 'Tasks' }));
+    const tasksTypeTrigger = await screen.findByRole('button', {
+      name: /Select test type API/
+    });
+    await user.click(tasksTypeTrigger);
+    await user.click(within(screen.getByRole('dialog', { name: 'Select test type' })).getByRole(
+      'option',
+      { name: /DFX/ }
+    ));
+    expect(await screen.findByText('catalog_script_6_base')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('link', { name: 'Scripts' }));
+    expect(await screen.findByRole('button', {
+      name: /Select test type DFX/
+    })).toBeInTheDocument();
 
     const nextObjects = currentCatalog.objects.filter((object) => object.id !== removedObject.id);
     currentCatalog = {
@@ -344,19 +482,45 @@ describe('live catalog application integration', () => {
     };
     await user.click(screen.getByRole('button', { name: 'Refresh catalog' }));
 
-    expect(await screen.findByText(
-      'This test Object was removed from the latest catalog. The current list is retained as a read-only snapshot; select another Object.'
-    )).toBeInTheDocument();
-    expect(screen.getByRole('button', {
-      name: 'Choose Object: High-Code Python DFX · Removed'
-    })).toBeInTheDocument();
-    expect(screen.getByText('catalog_script_6_base')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', {
+      name: /Select test type API/
+    })).toBeInTheDocument());
+    expect(headerTrigger).toHaveAccessibleName('Choose product: High-Code Python');
+    expect(await screen.findByText('catalog_script_4_base')).toBeInTheDocument();
+    expect(screen.queryByText('catalog_script_6_base')).not.toBeInTheDocument();
+    expect(screen.queryByText(/removed from the latest catalog/i)).not.toBeInTheDocument();
     expect(JSON.parse(
       window.localStorage.getItem(CONSOLE_PREFERENCES_STORAGE_KEY) ?? '{}'
     )).toMatchObject({ defaultSutId: savedDefault.id });
+
+    await user.click(screen.getByRole('link', { name: 'Tasks' }));
+    expect(await screen.findByRole('button', {
+      name: /Select test type API/
+    })).toBeInTheDocument();
+    expect(await screen.findByText('catalog_script_4_base')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('link', { name: 'Scripts' }));
+    const restoredCatalog = fullCatalog('catalog-after-reappearance');
+    currentCatalog = {
+      ...restoredCatalog,
+      generated_at: '2026-07-23T08:03:00Z'
+    };
+    await user.click(screen.getByRole('button', { name: 'Refresh catalog' }));
+
+    await waitFor(() => expect(screen.getByRole('button', {
+      name: /Select test type API/
+    })).toBeInTheDocument());
+    expect(await screen.findByText('catalog_script_4_base')).toBeInTheDocument();
+    expect(screen.queryByText('catalog_script_6_base')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('link', { name: 'Tasks' }));
+    expect(await screen.findByRole('button', {
+      name: /Select test type API/
+    })).toBeInTheDocument();
+    expect(await screen.findByText('catalog_script_4_base')).toBeInTheDocument();
   });
 
-  test('keeps a saved Object removed before startup unavailable instead of substituting the first live Object', async () => {
+  test('migrates a saved removed Object to a valid Test Type in the same Product', async () => {
     const currentCatalog = fullCatalog('catalog-with-removed-default');
     const removedObject = currentCatalog.objects[6];
     const remainingObjects = currentCatalog.objects.filter(
@@ -412,14 +576,21 @@ describe('live catalog application integration', () => {
     renderCatalogApp(runtimeConfig, '/tasks');
 
     expect(await screen.findByRole('button', {
-      name: 'Choose Object: High-Code Python DFX · Removed'
+      name: 'Choose product: High-Code Python'
     })).toBeInTheDocument();
-    const removalMessage = await screen.findByText(
-      'The current test Object was removed. Select another Object.'
-    );
-    expect(removalMessage.closest('[role="alert"]')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Launch execution' })).toBeDisabled();
+    expect(await screen.findByRole('button', {
+      name: /Select test type API/
+    })).toBeInTheDocument();
+    expect(await screen.findByText('catalog_script_4_base')).toBeInTheDocument();
+    expect(screen.queryByText(/current test Object was removed/i)).not.toBeInTheDocument();
     expect(screen.queryByText('First live Object')).not.toBeInTheDocument();
+    await waitFor(() => expect(JSON.parse(
+      window.localStorage.getItem(CONSOLE_PREFERENCES_STORAGE_KEY) ?? '{}'
+    )).toMatchObject({
+      defaultSutId: 'catalog-object-4',
+      defaultSutProduct: '高码python',
+      defaultSutScene: 'API'
+    }));
   });
 
   test('migrates a pre-catalog ad-hoc bootstrap selection without persisting it as the default', async () => {
@@ -467,10 +638,10 @@ describe('live catalog application integration', () => {
     renderCatalogApp(runtimeConfig);
 
     await user.click(screen.getByRole('button', {
-      name: 'Choose Object: High-Code Java API'
+      name: 'Choose product: High-Code Java'
     }));
     await user.click(screen.getByRole('option', {
-      name: 'High-Code Python WEB'
+      name: 'High-Code Python'
     }));
     expect(window.localStorage.getItem(CONSOLE_PREFERENCES_STORAGE_KEY)).toBeNull();
 
@@ -483,8 +654,10 @@ describe('live catalog application integration', () => {
     }));
 
     expect(await screen.findByRole('button', {
-      name: 'Choose Object: High-Code Python WEB'
+      name: 'Choose product: High-Code Python'
     })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Select test type WEB/ }))
+      .toBeInTheDocument();
     expect(window.localStorage.getItem(CONSOLE_PREFERENCES_STORAGE_KEY)).toBeNull();
   });
 

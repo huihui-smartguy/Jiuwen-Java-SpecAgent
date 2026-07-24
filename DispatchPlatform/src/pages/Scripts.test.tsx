@@ -2,17 +2,38 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { existsSync, readFileSync } from 'node:fs';
+import { useState } from 'react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, test, vi } from 'vitest';
+import type { CatalogConnectionState } from '../catalog/CatalogProvider';
 import { resolveRuntimeConfig } from '../config/runtime';
 import { mockScripts } from '../data/mockData';
-import type { RuntimeConfig, Script, SutTarget } from '../types';
+import type { Language, RuntimeConfig, Script, SutTarget } from '../types';
 import { Scripts } from './Scripts';
 
 const mockRuntimeConfig = resolveRuntimeConfig({
   defaultLanguage: 'zh',
   enableMockFallback: true
 });
+
+function scriptTarget(
+  scene: string,
+  {
+    id = `scripts-java-${scene.toLocaleLowerCase()}`,
+    product = mockRuntimeConfig.sutTargets[0].product
+  }: {
+    id?: string;
+    product?: string;
+  } = {}
+): SutTarget {
+  return {
+    ...mockRuntimeConfig.sutTargets[0],
+    id,
+    name: `${product} ${scene}`,
+    product,
+    scene
+  };
+}
 
 const expectedMockRows = [
   ['test_ak006_list_api_keys', 'api/keys/list.py', 'API 密钥管理', 'L1', '通过', 'huihui', '今天 10:36'],
@@ -34,10 +55,20 @@ function LocationProbe() {
 
 function renderScripts({
   runtimeConfig = mockRuntimeConfig,
-  selectedSut = runtimeConfig.sutTargets[0]
+  selectedSut = runtimeConfig.sutTargets[0],
+  language = 'zh',
+  objects,
+  objectMetadata,
+  catalogState,
+  onObjectChange = vi.fn()
 }: {
   runtimeConfig?: RuntimeConfig;
   selectedSut?: SutTarget;
+  language?: Language;
+  objects?: readonly SutTarget[];
+  objectMetadata?: Readonly<Record<string, { scriptCount: number }>>;
+  catalogState?: CatalogConnectionState;
+  onObjectChange?: (id: string) => void;
 } = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } }
@@ -47,9 +78,16 @@ function renderScripts({
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={['/scripts']}>
         <Scripts
-          language="zh"
+          language={language}
           selectedSut={sut}
           runtimeConfig={runtimeConfig}
+          objects={objects ?? [
+            sut,
+            ...runtimeConfig.sutTargets.filter((target) => target.id !== sut.id)
+          ]}
+          objectMetadata={objectMetadata}
+          catalogState={catalogState}
+          onObjectChange={onObjectChange}
         />
         <LocationProbe />
       </MemoryRouter>
@@ -173,29 +211,29 @@ describe('approved Scripts frame', () => {
     renderScripts();
 
     expect(screen.getByRole('heading', { level: 1, name: '脚本资产' })).toBeInTheDocument();
-    expect(screen.getByText('按对象、Feature 与级别管理可执行脚本，保持范围清晰且可追溯。')).toBeInTheDocument();
+    expect(screen.getByText(
+      '按产品、测试类型、特性与级别管理可执行脚本，保持范围清晰且可追溯。'
+    )).toBeInTheDocument();
 
     const summary = screen.getByRole('region', { name: '脚本概览' });
     await waitFor(() => expect(
       within(summary).getAllByTestId('script-summary-value').map((value) => value.textContent)
-    ).toEqual(['286', '84', '126', '76']));
+    ).toEqual(['4', '0', '2', '0']));
     expect(within(summary).getAllByRole('article')).toHaveLength(4);
     expect(summary.querySelector('.scripts-summary-icon')).not.toBeInTheDocument();
+    expect(summary).toHaveTextContent('High-Code Java · 场景化');
+    expect(summary).toHaveTextContent('3 个特性');
 
     const filters = screen.getByRole('region', { name: '脚本筛选' });
-    expect(filters.querySelectorAll('input, select, button')).toHaveLength(4);
+    expect(filters.querySelectorAll('input, select, button')).toHaveLength(3);
     expect(within(filters).getByRole('searchbox', { name: '搜索脚本' })).toHaveAttribute(
       'placeholder',
       '搜索脚本、路径或标签'
     );
-    expect(within(filters).getByRole('textbox', { name: 'Object' })).toHaveAttribute('readonly');
-    expect(within(filters).getByRole('textbox', { name: 'Object' })).toHaveValue(
-      'Object · High-Code Java scene'
-    );
-    expect(within(filters).getByRole('combobox', { name: 'Level' })).toHaveValue('All');
-    expect(within(filters).getByRole('combobox', { name: 'Feature' })).toHaveValue('All');
+    expect(within(filters).getByRole('combobox', { name: '等级' })).toHaveValue('All');
+    expect(within(filters).getByRole('combobox', { name: '特性' })).toHaveValue('All');
     expect(within(filters).getByRole('option', { name: '全部级别' })).toBeInTheDocument();
-    expect(within(filters).getByRole('option', { name: '全部 Feature' })).toBeInTheDocument();
+    expect(within(filters).getByRole('option', { name: '全部特性' })).toBeInTheDocument();
     expect(within(filters).queryByRole('button')).not.toBeInTheDocument();
     expect(
       within(filters).getByRole('searchbox', { name: '搜索脚本' }).closest('label')?.querySelector('svg')
@@ -204,8 +242,8 @@ describe('approved Scripts frame', () => {
     const table = await screen.findByRole('table', { name: '脚本资产' });
     expect(within(table).getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
       '脚本',
-      'Feature',
-      '级别',
+      '特性',
+      '等级',
       '最近结果',
       '负责人',
       '更新时间'
@@ -305,7 +343,168 @@ describe('approved Scripts frame', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(document.querySelector('input[type="file"]')).not.toBeInTheDocument();
-    expect(screen.getAllByRole('button')).toEqual([importButton]);
+    expect(screen.getAllByRole('button')).toEqual([
+      screen.getByRole('button', { name: /选择测试类型/ }),
+      importButton
+    ]);
+  });
+
+  test('scopes the Test Type list to the current product and switches cards, filters, table, and queries', async () => {
+    const user = userEvent.setup();
+    const apiTarget = scriptTarget('API');
+    const webTarget = scriptTarget('WEB');
+    const otherProduct = scriptTarget('DFX', {
+      id: 'scripts-python-dfx',
+      product: '高码python'
+    });
+    const runtimeConfig = resolveRuntimeConfig({
+      defaultLanguage: 'zh',
+      enableMockFallback: false,
+      sutTargets: [apiTarget, webTarget, otherProduct]
+    });
+    const rowsByScene: Record<string, Script[]> = {
+      API: [{
+        id: 'api-script',
+        name: 'api_script',
+        filename: 'api_script.py',
+        extension: '.py',
+        product: apiTarget.product,
+        scene: 'API',
+        feature: 'API Feature',
+        level: 'L1',
+        size: 10,
+        path: 'api/api_script.py'
+      }],
+      WEB: [
+        {
+          id: 'web-script-one',
+          name: 'web_script_one',
+          filename: 'web_script_one.py',
+          extension: '.py',
+          product: webTarget.product,
+          scene: 'WEB',
+          feature: 'Web Flow',
+          level: 'L2',
+          size: 20,
+          path: 'web/web_script_one.py'
+        },
+        {
+          id: 'web-script-two',
+          name: 'web_script_two',
+          filename: 'web_script_two.py',
+          extension: '.py',
+          product: webTarget.product,
+          scene: 'WEB',
+          feature: 'Web Flow',
+          level: 'L3',
+          size: 30,
+          path: 'web/web_script_two.py'
+        }
+      ]
+    };
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = new URL(String(input), 'http://local.test');
+      const scene = url.searchParams.get('scene') ?? '';
+      const scopedRows = rowsByScene[scene] ?? [];
+      if (url.pathname.endsWith('/features')) {
+        const featureNames = Array.from(new Set(scopedRows.map((script) => script.feature)));
+        return json({
+          success: true,
+          product: url.searchParams.get('product'),
+          scene,
+          features: featureNames.map((name) => ({ id: name, name, type: 'L1' })),
+          total: featureNames.length
+        });
+      }
+      if (url.pathname.endsWith('/scripts')) {
+        const feature = url.searchParams.get('feature');
+        return json({
+          success: true,
+          scripts: scopedRows.filter((script) => script.feature === feature),
+          total: scopedRows.length,
+          filters: { product: url.searchParams.get('product'), scene, feature }
+        });
+      }
+      throw new Error(`unexpected request: ${url.toString()}`);
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    function SwitchingHarness() {
+      const [target, setTarget] = useState(apiTarget);
+      return (
+        <MemoryRouter initialEntries={['/scripts']}>
+          <Scripts
+            language="zh"
+            selectedSut={target}
+            runtimeConfig={runtimeConfig}
+            objects={runtimeConfig.sutTargets}
+            objectMetadata={{
+              [apiTarget.id]: { scriptCount: 1 },
+              [webTarget.id]: { scriptCount: 2 },
+              [otherProduct.id]: { scriptCount: 99 }
+            }}
+            catalogState="live"
+            onObjectChange={(id) => {
+              const next = runtimeConfig.sutTargets.find((candidate) => candidate.id === id);
+              if (next) {
+                setTarget(next);
+              }
+            }}
+          />
+        </MemoryRouter>
+      );
+    }
+
+    render(
+      <QueryClientProvider client={client}>
+        <SwitchingHarness />
+      </QueryClientProvider>
+    );
+
+    expect(await screen.findByText('api_script')).toBeInTheDocument();
+    await user.selectOptions(screen.getByRole('combobox', { name: '等级' }), 'L1');
+    await user.selectOptions(screen.getByRole('combobox', { name: '特性' }), 'API Feature');
+    await user.click(screen.getByRole('button', { name: /选择测试类型/ }));
+
+    const listbox = screen.getByRole('listbox', { name: '可用测试类型' });
+    expect(within(listbox).getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'API1 个脚本',
+      'WEB2 个脚本'
+    ]);
+    expect(within(listbox).queryByText('DFX')).not.toBeInTheDocument();
+    await user.click(within(listbox).getByRole('option', { name: 'WEB 2 个脚本' }));
+
+    expect(await screen.findByText('web_script_one')).toBeInTheDocument();
+    expect(screen.getByText('web_script_two')).toBeInTheDocument();
+    expect(screen.queryByText('api_script')).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: '等级' })).toHaveValue('All');
+    expect(screen.getByRole('combobox', { name: '特性' })).toHaveValue('All');
+    await waitFor(() => expect(
+      within(screen.getByRole('region', { name: '脚本概览' }))
+        .getAllByTestId('script-summary-value')
+        .map((value) => value.textContent)
+    ).toEqual(['2', '0', '0', '2']));
+    expect(fetchSpy.mock.calls.some(([input]) => {
+      const url = new URL(String(input), 'http://local.test');
+      return url.searchParams.get('product') === webTarget.product
+        && url.searchParams.get('scene') === 'WEB';
+    })).toBe(true);
+  });
+
+  test('keeps the Test Type action before catalog refresh in the responsive page action row', () => {
+    const scriptsSource = readFileSync('src/pages/Scripts.tsx', 'utf8');
+    const actionStart = scriptsSource.indexOf('className="scripts-page-actions"');
+    const actionEnd = scriptsSource.indexOf('</div>', actionStart);
+    const actionSource = scriptsSource.slice(actionStart, actionEnd);
+    const scriptsCss = readFileSync('src/styles/routes/scripts.css', 'utf8');
+
+    expect(actionStart).toBeGreaterThanOrEqual(0);
+    expect(actionSource.indexOf('<TestTypeControl')).toBeLessThan(
+      actionSource.indexOf('<CatalogSyncStatus')
+    );
+    expect(scriptsCss).toMatch(
+      /\.scripts-page-actions\s*\{[^}]*display:\s*flex;[^}]*gap:\s*12px;/
+    );
   });
 
   test('uses the selected Object API base and target for feature discovery and one exact feature request', async () => {
@@ -465,9 +664,9 @@ describe('approved Scripts frame', () => {
     await waitFor(() => expect(within(table).getAllByRole('row')).toHaveLength(5));
     expect(fetchSpy).toHaveBeenCalledTimes(1);
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Feature' }), 'API 密钥管理');
+    await user.selectOptions(screen.getByRole('combobox', { name: '特性' }), 'API 密钥管理');
     expect(within(table).getAllByRole('row')).toHaveLength(3);
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Level' }), 'L1');
+    await user.selectOptions(screen.getByRole('combobox', { name: '等级' }), 'L1');
     expect(within(table).getAllByRole('row')).toHaveLength(3);
     await user.type(screen.getByRole('searchbox', { name: '搜索脚本' }), 'create');
 
@@ -554,19 +753,19 @@ describe('approved Scripts frame', () => {
     });
 
     expect(await screen.findByText('alpha_script')).toBeInTheDocument();
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Level' }), 'L1');
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Feature' }), 'Alpha Feature');
+    await user.selectOptions(screen.getByRole('combobox', { name: '等级' }), 'L1');
+    await user.selectOptions(screen.getByRole('combobox', { name: '特性' }), 'Alpha Feature');
     expect(fetchSpy).toHaveBeenCalledTimes(2);
 
     rerenderSelectedSut(runtimeConfig.sutTargets[1]);
 
     expect(await screen.findByText('beta_script')).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Level' })).toHaveValue('All');
-    expect(screen.getByRole('combobox', { name: 'Feature' })).toHaveValue('All');
+    expect(screen.getByRole('combobox', { name: '等级' })).toHaveValue('All');
+    expect(screen.getByRole('combobox', { name: '特性' })).toHaveValue('All');
     expect(fetchSpy).toHaveBeenCalledTimes(4);
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Level' }), 'L3');
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Feature' }), 'Beta Feature');
+    await user.selectOptions(screen.getByRole('combobox', { name: '等级' }), 'L3');
+    await user.selectOptions(screen.getByRole('combobox', { name: '特性' }), 'Beta Feature');
     expect(fetchSpy).toHaveBeenCalledTimes(4);
     expect(fetchSpy.mock.calls.map(([input]) => (
       new URL(String(input), 'http://local.test').pathname
@@ -650,19 +849,19 @@ describe('approved Scripts frame', () => {
     const { rerenderSelectedSut } = renderScripts({ runtimeConfig, selectedSut: initialTarget });
 
     expect(await screen.findByText('initial_script')).toBeInTheDocument();
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Level' }), 'L1');
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Feature' }), 'Initial Feature');
+    await user.selectOptions(screen.getByRole('combobox', { name: '等级' }), 'L1');
+    await user.selectOptions(screen.getByRole('combobox', { name: '特性' }), 'Initial Feature');
     expect(fetchSpy).toHaveBeenCalledTimes(2);
 
     rerenderSelectedSut(updatedTarget);
 
     expect(await screen.findByText('updated_script')).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Level' })).toHaveValue('All');
-    expect(screen.getByRole('combobox', { name: 'Feature' })).toHaveValue('All');
+    expect(screen.getByRole('combobox', { name: '等级' })).toHaveValue('All');
+    expect(screen.getByRole('combobox', { name: '特性' })).toHaveValue('All');
     expect(fetchSpy).toHaveBeenCalledTimes(4);
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Level' }), 'L3');
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Feature' }), 'Updated Feature');
+    await user.selectOptions(screen.getByRole('combobox', { name: '等级' }), 'L3');
+    await user.selectOptions(screen.getByRole('combobox', { name: '特性' }), 'Updated Feature');
     expect(fetchSpy).toHaveBeenCalledTimes(4);
   });
 
@@ -729,18 +928,18 @@ describe('approved Scripts frame', () => {
     await waitFor(() => expect(
       within(summary).getAllByTestId('script-summary-value').map((value) => value.textContent)
     ).toEqual(['3', '1', '3', '1']));
-    expect(summary).toHaveTextContent('1 个测试对象');
-    expect(summary).toHaveTextContent('最近同步 —');
-    expect(summary).toHaveTextContent('3 个 Feature');
-    expect(summary).toHaveTextContent('1 个脚本');
+    expect(summary).toHaveTextContent('LiveProduct · API');
+    expect(summary).toHaveTextContent('最近更新 —');
+    expect(summary).toHaveTextContent('3 个特性');
+    expect(summary).toHaveTextContent('3 个脚本');
     for (const mockOnlyValue of [
       '286',
       '84',
       '126',
       '76',
       '第 4 个测试对象',
-      '最近同步 10:36',
-      '9 个 Feature',
+      '最近更新 10:36',
+      '9 个特性',
       '3 个端到端套件'
     ]) {
       expect(within(summary).queryByText(mockOnlyValue)).not.toBeInTheDocument();

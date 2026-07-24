@@ -253,7 +253,10 @@ export function ReportDetailPage({
           <div>
             <dt>{isChinese ? '场景' : 'Scene'}</dt>
             <dd>
-              {displayList(report.scope.scenes?.map(sceneDisplayLabel), allValues)}
+              {displayList(
+                report.scope.scenes?.map((scene) => sceneDisplayLabel(scene)),
+                allValues
+              )}
             </dd>
           </div>
           <div><dt>Feature</dt><dd>{displayList(features, allValues)}</dd></div>

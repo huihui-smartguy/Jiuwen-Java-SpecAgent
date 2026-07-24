@@ -20,7 +20,7 @@ const objects: SutTarget[] = [
     id: 'payments-web',
     name: 'Payments Web',
     product: 'Payments',
-    scene: 'Web',
+    scene: 'WEB',
     version: 'v1',
     apiBaseUrl: '/payments-web',
     status: 'healthy'
@@ -37,7 +37,7 @@ const objects: SutTarget[] = [
 ];
 
 function renderHeader(overrides: Partial<React.ComponentProps<typeof ConsoleHeader>> = {}) {
-  const onObjectChange = vi.fn();
+  const onProductChange = vi.fn();
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } }
   });
@@ -46,17 +46,16 @@ function renderHeader(overrides: Partial<React.ComponentProps<typeof ConsoleHead
       <MemoryRouter>
         <ConsoleHeader
           language="en"
-          selectedObject={objects[0]}
+          selectedProduct="Payments"
           objects={objects}
           drawerOpen={false}
-          objectFocusRequest={0}
           objectMetadata={{
             'payments-api': { scriptCount: 12 },
             'payments-web': { scriptCount: 4 },
             'accounts-api': { scriptCount: 1 }
           }}
           catalogState="live"
-          onObjectChange={onObjectChange}
+          onProductChange={onProductChange}
           onLanguageToggle={vi.fn()}
           onDrawerOpenChange={vi.fn()}
           {...overrides}
@@ -64,18 +63,61 @@ function renderHeader(overrides: Partial<React.ComponentProps<typeof ConsoleHead
       </MemoryRouter>
     </QueryClientProvider>
   );
-  return { onObjectChange };
+  return { onProductChange };
 }
 
-describe('ConsoleHeader Object picker', () => {
-  test('shows canonical product and scene labels while retaining native Object ids', async () => {
+describe('ConsoleHeader Product picker', () => {
+  test('shows one option per Product with aggregated script counts and no scenarios', async () => {
+    const user = userEvent.setup();
+    renderHeader();
+
+    const control = screen.getByTestId('object-control');
+    expect(control).toHaveTextContent('Product');
+    expect(control).toHaveTextContent('Payments');
+    expect(control).not.toHaveTextContent('API');
+    expect(control).not.toHaveTextContent('WEB');
+
+    await user.click(within(control).getByRole('button', {
+      name: 'Choose product: Payments'
+    }));
+
+    const picker = screen.getByRole('dialog', { name: 'Choose product' });
+    const options = within(picker).getAllByRole('option');
+    expect(options).toHaveLength(2);
+    expect(options.map((option) => option.textContent)).toEqual([
+      'Payments16 scripts',
+      'Accounts1 script'
+    ]);
+    expect(within(picker).queryByText('API')).not.toBeInTheDocument();
+    expect(within(picker).queryByText('WEB')).not.toBeInTheDocument();
+  });
+
+  test('maps canonical Product labels back to the native backend Product value', async () => {
     const user = userEvent.setup();
     const nativeObjects: SutTarget[] = [
+      {
+        id: 'native-java-api',
+        name: 'Native Java API',
+        product: '高码java',
+        scene: 'API',
+        version: 'live',
+        apiBaseUrl: '/api',
+        status: 'healthy'
+      },
+      {
+        id: 'native-java-web',
+        name: 'Native Java WEB',
+        product: '高码java',
+        scene: 'WEB',
+        version: 'live',
+        apiBaseUrl: '/api',
+        status: 'healthy'
+      },
       {
         id: 'native-python-dfx',
         name: 'Native Python DFX',
         product: '高码python',
-        scene: 'DFx',
+        scene: 'DFX',
         version: 'live',
         apiBaseUrl: '/api',
         status: 'healthy'
@@ -90,148 +132,94 @@ describe('ConsoleHeader Object picker', () => {
         status: 'healthy'
       }
     ];
-    renderHeader({
-      selectedObject: nativeObjects[0],
+    const { onProductChange } = renderHeader({
+      selectedProduct: '高码java',
       objects: nativeObjects,
       objectMetadata: {
+        'native-java-api': { scriptCount: 10 },
+        'native-java-web': { scriptCount: 5 },
         'native-python-dfx': { scriptCount: 3 },
         'native-unified-scene': { scriptCount: 5 }
       }
     });
 
-    const control = screen.getByTestId('object-control');
-    expect(within(control).queryByRole('combobox')).not.toBeInTheDocument();
-
-    await user.click(within(control).getByRole('button', {
-      name: 'Choose Object: High-Code Python DFX'
-    }));
-    const picker = screen.getByRole('dialog', { name: 'Choose Object' });
-    expect(within(picker).getByText('High-Code Python')).toBeInTheDocument();
-    expect(within(picker).getByText('Unified Version')).toBeInTheDocument();
-    expect(within(picker).getByRole('option', {
-      name: 'High-Code Python DFX · 3 scripts'
-    }))
-      .toBeInTheDocument();
-    expect(within(picker).getByRole('option', {
-      name: 'Unified Version scene · 5 scripts'
-    }))
-      .toBeInTheDocument();
-  });
-
-  test('exposes one accessible picker with grouped catalog metadata', async () => {
-    const user = userEvent.setup();
-    renderHeader();
-
-    const control = screen.getByTestId('object-control');
-    expect(within(control).getAllByRole('button')).toHaveLength(1);
-    expect(within(control).queryByRole('combobox')).not.toBeInTheDocument();
-
-    await user.click(within(control).getByRole('button', {
-      name: 'Choose Object: Payments API'
-    }));
-
-    const picker = screen.getByRole('dialog', { name: 'Choose Object' });
-    expect(within(picker).getByRole('status')).toHaveTextContent('Live');
-    expect(within(picker).getAllByRole('group').map((group) => (
-      within(group).getByText(/Payments|Accounts/).textContent
-    ))).toEqual(['Payments', 'Accounts']);
-    expect(within(picker).getByRole('option', {
-      name: 'Payments API · 12 scripts'
-    }))
-      .toHaveAttribute('aria-selected', 'true');
-    expect(within(picker).getByRole('option', {
-      name: 'Accounts API · 1 script'
-    }))
-      .toHaveAttribute('aria-selected', 'false');
-  });
-
-  test('shows the id disambiguator only for visually duplicate Object identities', async () => {
-    const user = userEvent.setup();
-    const duplicateObjects: SutTarget[] = [
-      {
-        ...objects[0],
-        id: 'payments-api-a'
-      },
-      {
-        ...objects[0],
-        id: 'payments-api-b'
-      },
-      objects[1]
-    ];
-    renderHeader({
-      selectedObject: duplicateObjects[0],
-      objects: duplicateObjects,
-      objectMetadata: undefined
-    });
-
     await user.click(screen.getByRole('button', {
-      name: 'Choose Object: Payments API'
+      name: 'Choose product: High-Code Java'
     }));
+    const picker = screen.getByRole('dialog', { name: 'Choose product' });
+    expect(within(picker).getAllByRole('option').map((option) => option.textContent))
+      .toEqual([
+        'High-Code Java15 scripts',
+        'High-Code Python3 scripts',
+        'Unified Version5 scripts'
+      ]);
 
-    const firstDuplicate = screen.getByRole('option', {
-      name: 'Payments API · payments-api-a'
-    });
-    const secondDuplicate = screen.getByRole('option', {
-      name: 'Payments API · payments-api-b'
-    });
-    expect(firstDuplicate).toHaveTextContent('API · payments-api-a');
-    expect(secondDuplicate).toHaveTextContent('API · payments-api-b');
-    expect(screen.getByRole('option', { name: 'Payments Web' }))
-      .not.toHaveTextContent('payments-web');
+    await user.click(within(picker).getByRole('option', {
+      name: 'Unified Version · 5 scripts'
+    }));
+    expect(onProductChange).toHaveBeenCalledWith('合一版本');
   });
 
-  test('announces a removed active Object from the sole accessible trigger', () => {
-    const removedObject: SutTarget = {
-      ...objects[0],
-      id: 'removed-payments-api'
-    };
-    renderHeader({ selectedObject: removedObject, objects: objects.slice(1) });
-
-    const control = screen.getByTestId('object-control');
-    expect(within(control).getByRole('button', {
-      name: 'Choose Object: Payments API · Removed'
-    })).toBeInTheDocument();
-    expect(within(control).queryByRole('combobox')).not.toBeInTheDocument();
-  });
-
-  test('searches products and scenes and selects with the keyboard', async () => {
+  test('searches only Product names and supports keyboard selection', async () => {
     const user = userEvent.setup();
-    const { onObjectChange } = renderHeader();
+    const { onProductChange } = renderHeader();
+    const trigger = screen.getByRole('button', { name: 'Choose product: Payments' });
 
-    const trigger = screen.getByRole('button', { name: 'Choose Object: Payments API' });
     await user.click(trigger);
-
-    const search = screen.getByRole('searchbox', { name: 'Search products or scenes' });
+    const search = screen.getByRole('searchbox', { name: 'Search products' });
     expect(search).toHaveFocus();
     await user.type(search, 'web');
+    expect(screen.queryByRole('option')).not.toBeInTheDocument();
+    expect(screen.getByText('No products match this search.')).toBeInTheDocument();
 
-    const picker = screen.getByRole('dialog', { name: 'Choose Object' });
-    expect(within(picker).getAllByRole('option')).toHaveLength(1);
-    expect(within(picker).getByRole('option', {
-      name: 'Payments Web · 4 scripts'
-    })).toBeInTheDocument();
-
+    await user.clear(search);
+    await user.type(search, 'accounts');
+    expect(screen.getAllByRole('option')).toHaveLength(1);
     await user.keyboard('{ArrowDown}{Enter}');
 
-    expect(onObjectChange).toHaveBeenCalledWith('payments-web');
-    expect(screen.queryByRole('dialog', { name: 'Choose Object' })).not.toBeInTheDocument();
+    expect(onProductChange).toHaveBeenCalledWith('Accounts');
+    expect(screen.queryByRole('dialog', { name: 'Choose product' })).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
   });
 
-  test('localizes picker copy and reports stale catalog state', async () => {
+  test('closes the non-modal Product picker when Tab moves focus outside it', async () => {
+    const user = userEvent.setup();
+    renderHeader();
+
+    await user.click(screen.getByRole('button', { name: 'Choose product: Payments' }));
+    expect(screen.getByRole('searchbox', { name: 'Search products' })).toHaveFocus();
+
+    await user.tab();
+    await user.tab();
+    await user.tab();
+
+    expect(screen.queryByRole('dialog', { name: 'Choose product' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Switch to Chinese' })).toHaveFocus();
+  });
+
+  test('announces a removed active Product from the sole accessible trigger', () => {
+    renderHeader({ selectedProduct: 'Removed Product' });
+
+    const control = screen.getByTestId('object-control');
+    expect(within(control).getByRole('button', {
+      name: 'Choose product: Removed Product · Removed'
+    })).toBeInTheDocument();
+    expect(within(control).queryByRole('combobox')).not.toBeInTheDocument();
+  });
+
+  test('localizes Product picker copy and reports stale catalog state', async () => {
     const user = userEvent.setup();
     renderHeader({ language: 'zh', catalogState: 'stale' });
 
-    await user.click(screen.getByRole('button', { name: '选择 Object: Payments API' }));
+    await user.click(screen.getByRole('button', { name: '选择产品: Payments' }));
 
-    const picker = screen.getByRole('dialog', { name: '选择 Object' });
-    expect(within(picker).getByRole('searchbox', { name: '搜索产品或场景' }))
+    const picker = screen.getByRole('dialog', { name: '选择产品' });
+    expect(within(picker).getByRole('searchbox', { name: '搜索产品' }))
       .toBeInTheDocument();
     expect(within(picker).getByRole('status')).toHaveTextContent('数据可能过期');
     expect(within(picker).getByRole('option', {
-      name: 'Payments API · 12 个脚本'
-    }))
-      .toBeInTheDocument();
+      name: 'Payments · 16 个脚本'
+    })).toBeInTheDocument();
   });
 
   test('keeps the mobile drawer open when Escape closes its nested picker', async () => {
@@ -241,15 +229,15 @@ describe('ConsoleHeader Object picker', () => {
 
     const drawer = screen.getByRole('dialog', { name: 'Navigation' });
     await user.click(within(drawer).getByRole('button', {
-      name: 'Choose Object: Payments API'
+      name: 'Choose product: Payments'
     }));
-    expect(within(drawer).getByRole('dialog', { name: 'Choose Object' }))
+    expect(within(drawer).getByRole('dialog', { name: 'Choose product' }))
       .toBeInTheDocument();
     onDrawerOpenChange.mockClear();
 
     await user.keyboard('{Escape}');
 
-    expect(within(drawer).queryByRole('dialog', { name: 'Choose Object' }))
+    expect(within(drawer).queryByRole('dialog', { name: 'Choose product' }))
       .not.toBeInTheDocument();
     expect(drawer).toBeInTheDocument();
     expect(onDrawerOpenChange).not.toHaveBeenCalled();

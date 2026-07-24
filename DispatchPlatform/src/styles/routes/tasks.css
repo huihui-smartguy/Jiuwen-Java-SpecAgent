@@ -10,6 +10,14 @@
   padding-bottom: 0;
 }
 
+.tasks-page-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
 .tasks-layout {
   display: grid;
   min-width: 0;
@@ -226,6 +234,13 @@
   line-height: 24px;
   overflow-wrap: anywhere;
   white-space: normal;
+}
+
+.tasks-object-summary small {
+  color: var(--color-text-secondary);
+  font-size: var(--type-label-size);
+  font-weight: 500;
+  line-height: var(--type-label-line);
 }
 
 .tasks-object-summary button {
@@ -667,6 +682,21 @@
 }
 
 @media (max-width: 980px) {
+  .tasks-page .page-header {
+    height: auto;
+    min-height: 118px;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 18px;
+    padding-block: 18px;
+  }
+
+  .tasks-page-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
   .tasks-steps,
   .tasks-object-summary,
   .tasks-mode-row,
@@ -704,6 +734,16 @@
     height: auto;
     min-height: 0;
     align-items: stretch;
+  }
+
+  .tasks-page-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .tasks-page-actions .catalog-sync {
+    width: 100%;
+    justify-content: space-between;
   }
 
   .tasks-left-column {
